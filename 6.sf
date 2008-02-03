@@ -669,26 +669,30 @@ int main(int argc, char **argv) {
        (cg-cexp? body)]
       [let-exp (ids rands body) #f] ; can't make let into C expr
       [fix-exp (ids lams body) #f] ; ditto
-      [app-exp (rator rands) ; recursive call
-       (andmap cg-cexp? rands)]
+      [app-exp (rator rands)
+       (and (var-exp? rator)  
+            (eq? (var-exp->id rator) self-id) 
+            (andmap cg-cexp? rands))]
       [primapp-exp (effect prim rands)
        (and (prim-cexp? prim) (andmap cg-cexp? rands))]))
 
-  (define (cg-contains-tail-call? exp)
-    (variant-case exp
-      [var-exp (id) #f]
-      [if-exp (test-exp then-exp else-exp)
-       (orapp cg-contains-tail-call? then-exp else-exp)]
-      [degenerate-let-exp (body)
-       (cg-contains-tail-call? body)]
-      [let-exp (ids rands body) 
-       (cg-contains-tail-call? body)]
-      [fix-exp (ids lams body)
-       (or (cg-contains-tail-call? body)
-         (ormap cg-contains-tail-call?
-           (map lambda-exp->body lams)))]
-      [app-exp (rator rands) #t]
-      [primapp-exp (effect prim rands) #f]))
+  (define (cg-contains-tail-call? exp id)
+    (let tc? ([exp exp])
+      (variant-case exp
+        [var-exp (id) 
+         #f]
+        [if-exp (test-exp then-exp else-exp) 
+         (orapp tc? then-exp else-exp)]
+        [degenerate-let-exp (body) 
+         (tc? body)]
+        [let-exp (ids rands body) 
+         (tc? body)]
+        [fix-exp (ids lams body)
+         (or (tc? body) (ormap tc? (map lambda-exp->body lams)))]
+        [app-exp (rator rands) 
+         (and (var-exp? rator) (eq? (var-exp->id rator) id))]
+        [primapp-exp (effect prim rands) 
+         #f])))
   
   (define (cg-cexp exp)
     (variant-case exp
@@ -724,7 +728,7 @@ int main(int argc, char **argv) {
                       (cons id ids) (cons rand exps))))))))
                       
     (define (cg-body exp tgt)
-      (if (and (cg-cexp? exp) (not (cg-contains-tail-call? exp)))
+      (if (and (cg-cexp? exp) (not (cg-contains-tail-call? exp self-id)))
           (list "\n    " tgt (c-format " obj_from_$arg" (cg-cexp exp)) ";")
           (variant-case exp
             [degenerate-let-exp (body) 
@@ -778,12 +782,17 @@ int main(int argc, char **argv) {
                  (cg-body body tgt)
                  (if done-label (list "\n    goto " done-label ";") '())
                  (map (lambda (id lam)
-                        (list
-                          (list "\n  " (id->label id) ":")
-                           ; since all lambdas are tail-called from body 
-                           ; we can use tgt of the fix expression
-                          (cg-body (lambda-exp->body lam) tgt)
-                          (if done-label (list "\n    goto " done-label ";") '()))) 
+                        ; check if id is referred to anywhere in fix-exp
+                        (if (cg-contains-tail-call? exp id)
+                            ; yes, generate code and label
+                            (list
+                              (list "\n  " (id->label id) ":")
+                               ; since all lambdas are tail-called from body 
+                               ; we can use tgt of the fix expression
+                              (cg-body (lambda-exp->body lam) tgt)
+                              (if done-label (list "\n    goto " done-label ";") '()))
+                            ; strangest thing - noone actually calls this one!
+                            (list "\n  /* dead code: " (id->symbol self-id) " */"))) 
                       ids lams)
                  (if done-label (list "\n  " done-label ": ;") '()) 
                  "\n  }"))]
@@ -831,7 +840,7 @@ int main(int argc, char **argv) {
               (map (lambda (id) (list ", obj " (cvar-id->c-name id)))
                  (cdr ids))))
        ")\n"
-       "{ " (if (cg-contains-tail-call? body) 
+       "{ " (if (cg-contains-tail-call? body self-id) 
                 (list "\n  " (id->label self-id) ":") 
                 '())
         (code-gen-body body "return")
