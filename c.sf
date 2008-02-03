@@ -1,0 +1,360 @@
+
+; #F, epilogue:  SFC main
+
+; Copyright (C) 2007 by Sergei Egorov, All Rights Reserved.
+;
+; This code is derived from the "90 minute Scheme to C compiler" presented at the
+; Montreal Scheme/Lisp User Group on October 20, 2004. The original code was
+; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
+
+(load "0.sf")
+(load "1.sf")
+(load "2.sf")
+(load "3.sf")
+(load "4.sf")
+(load "5.sf")
+(load "6.sf")
+(load "7.sf")
+
+
+;------------------------------------------------------------------------------
+
+; debugging flags
+
+(define (clear-memoizations)
+  (exp-vinfo #f)
+  (var-uses-in-exp #f #f)
+  (exp->free-vars #f))
+
+(define *silent* #t)
+(define *showlog* #f)
+
+(define (maybe-pp-source msg exp)
+  (if (not *silent*) 
+      (begin (display "-------------------------- ")
+             (display msg)
+             (display ":\n")
+             (pretty-print (source exp)))))
+
+(define (maybe-pp-text msg text)
+  (if (not *silent*) 
+      (begin (display "-------------------------- ")
+             (display msg)
+             (display ":\n")
+             (display-text text))))
+
+
+(define (maybe-log msg)
+  (if *showlog*
+      (let ([op (current-output-port)]) 
+        (display msg op)
+        (flush-output-port op))))
+
+
+;------------------------------------------------------------------------------
+
+; expression printer (debugging)
+
+(define (source exp)
+  (define (source-body exp) ;=> (s ...)
+    (variant-case exp
+      [degenerate-let-exp (body) (source-body body)]
+      [begin-exp (exp1 exp2) (cons (source exp1) (source-body exp2))]
+      [else (list (source exp))]))    
+  (variant-case exp
+    [void-exp ()
+     '%%void]
+    [var-exp (id)
+     (id->uname id)]
+    [varassign-exp (id exp)
+     (list 'set! (id->uname id) (source exp))]
+    [if-exp (test-exp then-exp else-exp)
+     (list 'if (source test-exp) (source then-exp) (source else-exp))]
+    [degenerate-let-exp (body)
+     (source body)]
+    [letrec-exp (ids rands body)
+     (list* 'letrec 
+       (map (lambda (id exp) (list (id->uname id) (source exp))) ids rands)
+       (source-body body))]
+    [letrec*-exp (ids rands body)
+     (list* 'letrec* 
+       (map (lambda (id exp) (list (id->uname id) (source exp))) ids rands)
+       (source-body body))]
+    [begin-exp (exp1 exp2)
+     (list* 'begin (source exp1) (source-body exp2))]
+    [let-exp (ids rands body)
+     (list* 'let 
+       (map (lambda (id exp) (list (id->uname id) (source exp))) ids rands)
+       (source-body body))]
+    [fix-exp (ids lams body)
+     (list* 'let '() 
+       (append
+         (map (lambda (id lam)
+                (variant-case lam
+                  [lambda-exp (ids body)
+                   (list* 'define 
+                     (map id->uname (cons id ids))
+                     (source-body body))]))
+               ids lams)
+         (source-body body)))]
+    [app-exp (rator rands)
+     (cons (source rator) (map source rands))]
+    [curry-exp (id ids rands)
+     (list* '%%curry (id->uname id) (map id->uname ids) (map source rands))]
+    [lambda-exp (ids body)
+     (list* 'lambda (map id->uname ids) (source-body body))]
+    [box-exp (exp)
+     (list '%%box (source exp))]
+    [boxref-exp (box)
+     (list '%%box-ref (source box))]
+    [boxset-exp (box exp)
+     (list '%%box-set! (source box) (source exp))]
+    [primapp-exp (effect prim rands)
+     (list*
+       (case effect
+         [(no-effect) '%prim] [(*-effect) '%prim*] 
+         [(?-effect) '%prim?] [(!-effect) '%prim!] 
+         [(?!-effect) '%prim?!] [(*?-effect) '%prim*?]
+         [(*!-effect) '%prim*!] [else '%prim*?!])
+       prim (map source rands))]
+    [letcc-exp (id body)
+     (list* 'letcc (id->uname id)
+       (source-body body))]
+    [withcc-exp (cont-exp exp)
+     (list 'withcc (source cont-exp) (source exp))]   
+    [else (c-error "unknown exp" exp)]))
+
+
+;------------------------------------------------------------------------------
+
+; file parser
+
+(define (parse-file filename) ;=> (specs incs defs exp)
+  (define mstore (null-mstore))
+  (define (module-name filename)
+    (c-mangle (path-strip-extension (path-strip-directory filename)) "module_"))
+  (define module-loads '())
+  (define module-visits '())
+  (define (module-add-load! str return) ;=> (return name xincs xdefs)
+    (define load-name (module-name str))
+    (if (member load-name module-visits)
+        (begin
+          (printf "  already visited: ~a~%" str)
+          (return #f '() '()))
+        (begin
+          (if *showlog* (printf "  visiting ~a~%" str))
+          (set! module-visits (cons load-name module-visits)) 
+          (let ([output-forms (file-expand-top-level-forms! str mstore)])
+            (let loop ([forms output-forms] [incs '()] [defs '()] [sdefs '()])
+              (if (null? forms)
+                  (return
+                    (if (null? sdefs)
+                        #f ; pure syntax, nothing to load in runtime
+                        (begin
+                           (set! module-loads (cons load-name module-loads)) 
+                           load-name))
+                    incs
+                    defs)
+                  (let ([s (car forms)] [forms (cdr forms)])
+                    (sexp-case s
+                      [(load <string>) ; nested load
+                       (module-add-load! (cadr s) ;=>
+                         (lambda (name xincs xdefs)
+                           (loop forms (append xincs incs) (append xdefs defs) sdefs)))]  
+                      [(define * *) (loop forms incs defs (cons s sdefs))]
+                      [(%include <symbol>)
+                       (loop forms (cons (list "#include " (cadr s) "\n") incs) defs sdefs)]
+                      [(%include <string>)
+                       (loop forms (cons (list "#include \"" (cadr s) "\"\n") incs) defs sdefs)]
+                      [(%definition <string>)
+                       (loop forms incs (cons (cadr s) defs) sdefs)]
+                      [else ; other forms are local to the module
+                       (loop forms incs defs sdefs)]))))))))
+  (call-with-input-file filename
+    (lambda (port)
+      (let loop ([specs '()] [incs '()] [defs '()] [forms '()])
+        (let ([s (read port)])
+          (if (eof-object? s)
+              (list
+                (cons 
+                  (list
+                    "/* " filename " */\n" 
+                    "#define MODULE " (module-name filename) "\n"
+                    "#define LOAD() " 
+                      (map (lambda (n) (list n "(); ")) module-loads)
+                    "\n")
+                  (reverse specs))
+                (reverse incs)
+                (reverse defs)
+                (parse-program
+                  (expand-top-level-forms! (reverse forms) mstore)))
+              (sexp-case s
+                [(%include <symbol>)
+                 (loop specs (cons (list "#include " (cadr s) "\n") incs) defs forms)]
+                [(%include <string>)
+                 (loop specs (cons (list "#include \"" (cadr s) "\"\n") incs) defs forms)]
+                [(%% . *)
+                 (if (pair? forms) 
+                   (c-error "%% section(s) should precede definitions and expressions")) 
+                 (loop (cons (cdr s) specs) incs defs forms)]
+                [(%definition <string>)
+                 (loop specs incs (cons (cadr s) defs) forms)]
+                [(%localdef <string>)
+                 (loop specs incs (cons (cadr s) defs) forms)]
+                [(load <string>)
+                 (if (pair? forms) 
+                   (c-error "load should precede definitions and expressions"))
+                 (module-add-load! (cadr s) ;=>
+                   (lambda (name xincs xdefs)
+                     (loop
+                       (if name (cons (list "extern void " name "(void); /* " (cadr s) 
+                                         " */\n") specs)
+                                specs) ; syntax-only load
+                       (append xincs incs)
+                       (append xdefs defs)
+                       forms)))]
+                [else (loop specs incs defs (cons s forms))])))))))
+
+
+;------------------------------------------------------------------------------
+
+; file compiler
+
+(define (compile-file filename)
+  (reset-timestamps)
+  (clear-memoizations)
+  (let* ([specs&incs&defs&exp (parse-file filename)]
+         [specs (car specs&incs&defs&exp)] 
+         [incs (cadr specs&incs&defs&exp)] 
+         [defs (caddr specs&incs&defs&exp)] 
+         [exp (cadddr specs&incs&defs&exp)])
+    (maybe-pp-source "EXP" exp)
+    (maybe-log "  fl")
+    (let ([exp (fix-letrecs exp)])
+      (maybe-pp-source "EXP AFTER LETREC FIXING" exp)
+      (clear-memoizations)
+      (maybe-log " ra")
+      (let ([exp (remove-assignments exp)])
+        (maybe-pp-source "EXP AFTER BOXING" exp)
+        (clear-memoizations)
+        (maybe-log " ag")
+        (let ([exp&sfl (analyze-globals exp)])
+          (maybe-pp-source "EXP ANALYSIS OF GLOBALS" (car exp&sfl))
+          (clear-memoizations)
+          (maybe-log " scg")
+          (let ([sfcs (stack-functions-code-generate (cdr exp&sfl))])
+            (maybe-log " cf")
+            (let ([exp (constant-fold (car exp&sfl))])
+              (maybe-pp-source "EXP AFTER CONSTANT-FOLDING" exp)
+              (clear-memoizations)
+              (maybe-log " b1")
+              (let ([exp (beta-substitute exp #f #f)])
+                (maybe-pp-source "EXP AFTER BETA-SUBSTITUTION" exp)
+                (clear-memoizations)
+                (maybe-log " cps")
+                (let ([exp (cps-convert exp)])
+                  (maybe-pp-source "EXP AFTER CPS-CONVERSION" exp)
+                  (clear-memoizations)
+                  (maybe-log " b2")
+                  (let ([exp (beta-substitute exp #t #f)])
+                    (maybe-pp-source "EXP AFTER POST-CPS BETA" exp)
+                    (clear-memoizations)
+                    (maybe-log " ll")
+                    (let ([exp (lambda-lift exp)])
+                      (maybe-pp-source "EXP AFTER LAMBDA LIFTING" exp)
+                      (clear-memoizations)
+                      (maybe-log " b3")
+                      (let ([exp (beta-substitute exp #t #t)])
+                        (maybe-pp-source "EXP AFTER LABEL CONVERSION" exp)
+                        (clear-memoizations)
+                        (maybe-log " uv")
+                        (let ([exp (unbox-values exp)])
+                          (maybe-pp-source "EXP AFTER VALUE UNBOXING" exp)
+                          (clear-memoizations)
+                          (maybe-log " cg")
+                          (let ([code (code-generate exp)])
+                            (maybe-pp-text "C CODE" (cadr code))
+                            (maybe-log " wr\n")
+                            (let ([fn (string-append (path-strip-extension filename) ".c")])
+                              (delete-file fn)
+                              (with-output-to-file fn
+                                (lambda ()
+                                  (display-module specs incs defs sfcs code)))
+                              fn)))))))))))))))
+  
+
+;------------------------------------------------------------------------------
+
+; module printer
+
+(define (display-module specs incs defs sfcs module-code)
+  (define (add-nl s) (list s "\n"))
+  (define (combine-output main? liveregs globals roots cases code)
+    (display-text specs)
+    (display-text "\n/* standard includes */\n")
+    (display-text code-standard-includes)
+    (if (pair? incs) 
+      (begin 
+        (display-text "/* extra includes */\n")
+        (display-text incs)))
+    (display-text "\n/* standard definitions */\n")
+    (display-text code-standard-definitions)
+    (if (pair? defs) 
+      (begin 
+        (display-text "\n/* extra definitions */\n")
+        (display-text (map add-nl defs))))
+    (display-text "\n/* cx globals */\n")
+    (display-text globals)
+    (if (pair? sfcs)
+      (begin 
+        (display-text "/* helper functions */\n")
+        (display-text (map add-nl sfcs))))
+    (display-text "/* gc roots */\n")
+    (display-text roots)
+    (display-text "/* entry points */\n")
+    (display-text cases)
+    (display-text "\n/* host procedure */\n")
+    (display-text liveregs)
+    (display-text code-host-prologue)
+    (display-text code)
+    (display-text code-host-epilogue)
+    (display-text "\n/* module load */")
+    (display-text code-module)
+    (if main? 
+      (begin
+        (display-text "\n/* basic runtime */")
+        (display-text code-runtime)
+        (display-text "\n/* os entry point */")
+        (display-text code-main))))
+  (combine-output 
+    (car module-code)
+    (cadr module-code)
+    (caddr module-code)
+    (cadddr module-code)
+    (list-ref module-code 4)
+    (list-ref module-code 5)))
+
+
+;------------------------------------------------------------------------------
+
+; main
+
+(define (main argv)
+  (define (about)
+    (printf "sfc build 180~%Usage: sfc [-v] file ...~%"))
+  (define args 
+    (cdr (argv->list argv)))
+  (if (null? args)
+      (about)
+      (for-each 
+        (lambda (fn)
+          (cond
+            [(string=? fn "-v") (set! *showlog* #t)]
+            [(string=? fn "-d") (set! *silent* #f)]
+            [(string=? fn "--help") (about)]
+            [(not (file-exists? fn)) (printf "cannot open input file: ~a~%" fn)]
+            [else 
+             (if *showlog* (printf "compiling ~a~%" fn))
+             (let ([ofn (compile-file fn)])
+               (if *showlog* (printf "~a~%" ofn)))]))
+        args)))

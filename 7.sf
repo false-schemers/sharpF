@@ -1,0 +1,765 @@
+
+; #F, part 7:  SFC main code generator
+
+; Copyright (C) 2007 by Sergei Egorov, All Rights Reserved.
+;
+; This code is derived from the "90 minute Scheme to C compiler" presented at the
+; Montreal Scheme/Lisp User Group on October 20, 2004. The original code was
+; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
+
+(load "0.sf")
+(load "3.sf")
+(load "6.sf")
+
+;------------------------------------------------------------------------------
+
+; utilities
+
+(define (rassq x al)
+  (cond [(null? al) #f]
+        [(eq? x (cdar al)) (car al)]
+        [else (rassq x (cdr al))])) 
+
+(define (merge-by! less? lst1 lst2) 
+  (cond [(atom? lst1) lst2] [(atom? lst2) lst1]
+        [(less? (car lst2) (car lst1))
+         (set-cdr! lst2 (merge-by! less? lst1 (cdr lst2))) lst2]
+        [else (set-cdr! lst1 (merge-by! less? (cdr lst1) lst2)) lst1]))
+
+(define (split-by! lst)
+  (if (atom? lst) lst
+      (let loop ([hd lst] [tl (cdr lst)])
+        (if (or (null? tl) (null? (cdr tl)))
+            (let ([x (cdr hd)]) (set-cdr! hd '()) x)
+            (loop (cdr hd) (cddr tl))))))
+
+(define (sort-by! less? lst) 
+  (cond [(null? lst) '()] [(null? (cdr lst)) lst]
+        [else (let ([lst2 (split-by! lst)])
+                (merge-by! less? (sort-by! less? lst) (sort-by! less? lst2)))]))
+
+(define (sort-by less? lst) 
+  (sort-by! less? (list-copy lst)))
+
+(define (merge-by less? lst1 lst2)
+  (merge-by! less? (list-copy lst1) (list-copy lst2)))
+
+
+;------------------------------------------------------------------------------
+
+; bgc expression is a pattern begin/gvarassign/curry
+; (define-variant bgc-exp (id lbid ids exp2)), virtual
+
+(define (bgc-exp id lbid ids exp2) 
+  (begin-exp (gvarassign-exp id (curry-exp lbid ids '())) exp2))  
+
+(define (bgc-exp? exp)
+  (variant-case exp
+    [begin-exp (exp1 exp2)
+     (variant-case exp1
+       [gvarassign-exp (id exp)
+        (variant-case exp
+          [curry-exp (id ids rands)
+           (null? rands)]
+          [else #f])] 
+       [else #f])]
+    [else #f]))
+
+(define (bgc-exp->id exp) 
+  (gvarassign-exp->id (begin-exp->exp1 exp)))
+
+(define (bgc-exp->lbid exp) 
+  (curry-exp->id (gvarassign-exp->exp (begin-exp->exp1 exp))))
+
+(define (bgc-exp->ids exp) 
+  (curry-exp->ids (gvarassign-exp->exp (begin-exp->exp1 exp))))
+
+(define (bgc-exp->exp2 exp) 
+  (begin-exp->exp2 exp))
+
+
+;------------------------------------------------------------------------------
+
+; Code generator
+
+(define (code-generate input-fix-exp)
+
+  (define nl "\n    ")
+  (define if-nl "\n  ")
+  (define (nl/regs-comment renv)
+    (or '() ; comment out for now...
+    (list* nl "/* live regs: "
+      (reduce-left
+         (lambda (id lst) 
+            (cons (if (number? id) 
+                      (list "." id " ") 
+                      (list (id->uname id) " ")) 
+                  lst))
+        (list "*/")  
+        renv))))
+
+  (define max-live 0)
+  (define (alloc-reg id renv)
+    (set! max-live (max (+ 1 (length renv)) max-live))
+    (cons id renv))
+    
+  (define (setlive/comment n)
+    ;(list " SETLIVE(" n ");")
+    '())
+  (define (nl/setlive/comment n)
+    ;(list nl "SETLIVE(" n ");")
+    '())
+  
+  (define global-vars 
+    (let ([ids (exp->free-vars input-fix-exp)])
+      ; sort ids to simplify debugging 
+      (define (id-rank id)
+        (string-append 
+            (if (global-id-private-constant? id) "z" "a")
+            (if (var-assigned-in-exp? id input-fix-exp) "z" "a")
+            (symbol->string (id->symbol id))))
+      (define (global-id<? id1 id2)
+        (string<? (id-rank id1) (id-rank id2)))
+      (sort-by global-id<? ids)))
+
+
+  ; global-constant-labels is defined below
+  ; gclabelapp expression is a pattern for global-constant-labels applications
+
+  (define (gclabelapp-exp? exp)
+    (and (app-exp? exp) 
+      (var-exp? (app-exp->rator exp))
+      (rassq (var-exp->id (app-exp->rator exp)) global-constant-labels)))
+
+  (define (gclabelapp-exp->id exp) 
+    (var-exp->id (app-exp->rator exp)))
+
+  (define (gclabelapp-exp->rands exp) 
+    (app-exp->rands exp))
+  
+  
+  
+  (define (code-gen-to-nextreg exp register-env)
+
+    (define (void-tgt) #f) 
+    (define (reg-tgt renv) (length renv))
+    (define (var-tgt id renv) (cons id renv))
+      
+    (define (cg-tgt-rval tgt)
+      (cond [(not tgt) "void"]
+            [(integer? tgt) 
+             (c-format "obj(r[$a])" tgt)]
+            [(pair? tgt)
+             (let ([id (car tgt)] [renv (cdr tgt)])
+               (cond
+                 [(global-id? id)
+                  (string-append "obj(" (gvar-id->c-name id) ")")]
+                 [(cvar-id? id)
+                  (c-format "$a($a, $a)" 
+                    (id->ctype id) (length renv) (cvar-id->c-name id))]
+                 [else
+                  (let ([i (- (length renv) (posq id renv) 1)])
+                    (c-format "obj(r[$a])" i))]))]
+            [else 
+             (c-error "invalid rval cg target" tgt)]))
+
+    (define (cg-tgt-lval tgt)
+      (cond [(not tgt) "void_from_"]
+            [(integer? tgt) 
+             (c-format "r[$a] = obj_from_" tgt)]
+            [(pair? tgt)
+             (let ([id (car tgt)] [renv (cdr tgt)])
+               (cond
+                 [(global-id? id)
+                  (string-append (gvar-id->c-name id) " = obj_from_")]
+                 [(cvar-id? id)
+                  (c-format "$a = $a_from_" 
+                    (cvar-id->c-name id) (id->ctype id))]
+                 [else
+                  (let ([i (- (length renv) (posq id renv) 1)])
+                    (c-format "r[$a] = obj_from_" i))]))]
+            [else 
+             (c-error "invalid lval cg target" tgt)]))
+
+
+    (define (cg-prim-args exps renv cont)
+      (if (null? exps)
+          (cont "" '() renv)
+          (let ([rc (nl/regs-comment renv)])
+            (if (cg-gcsafe-cexp? (car exps))
+              (let ([atext (cg-cexp (car exps) renv)])
+                (cg-prim-args
+                   (cdr exps)
+                   renv
+                   (lambda (code atexts renv)
+                     (cont (list rc code) 
+                       (cons atext atexts) renv))))
+              (let ([tgt (reg-tgt renv)] [new-renv (alloc-reg 0 renv)]) ; todo: unbox??
+                (let ([acode (cg-to tgt (car exps) renv)]
+                      [atext (cg-tgt-rval tgt)])
+                  (cg-prim-args
+                     (cdr exps)
+                     new-renv
+                     (lambda (code atexts renv)
+                       (cont (list rc acode code) 
+                         (cons atext atexts) renv)))))))))
+
+    (define (cvar-id->c-name id)
+      (c-mangle (c-undecorate-alvar (id->symbol id))
+        (string-append "v" (number->string (id->ts id))  "_")))
+
+    (define (gvar-id->c-name id)
+      (c-mangle (symbol->string (id->symbol id)) "cx_"))
+    
+    (define (cg-let-list exps vars renv cont)
+      (cond [(null? exps) (cont "" renv)]
+            [(cvar-id? (car vars))
+             (let ([id (car vars)])
+               (let ([acode (cg-to (var-tgt id renv) (car exps) renv)]
+                     [cvid (cvar-id->c-name id)])
+                 (if (and (pair? acode)
+                       (equal? (car acode) nl) (pair? (cdr acode)) (string? (cadr acode)) 
+                       (string-starts-with? (cadr acode) (string-append cvid " = ")))
+                   (list
+                     nl "{ const " (id->ctype id) "_t " (cadr acode)
+                      (cg-let-list (cdr exps) (cdr vars) renv cont)
+                      " } ")
+                   (list 
+                     nl "{ " (id->ctype id) "_t " (cvar-id->c-name id) ";"
+                     (cg-let-list (cdr exps) (cdr vars) 
+                        renv
+                        (lambda (code renv)
+                          (cont (list acode code) renv)))
+                     " }"))))]
+            [else
+             (let ([rc (nl/regs-comment renv)] 
+                   [acode (cg-to (reg-tgt renv) (car exps) renv)])
+               (cg-let-list (cdr exps) (cdr vars)
+                 (alloc-reg (car vars) renv)
+                 (lambda (code renv)
+                   (cont (list rc acode code) renv))))]))
+
+    (define (cg-depends-on? exp spoiled-ids)
+      (define (dep? exp)
+        (variant-case exp
+          [var-exp (id) (memq id spoiled-ids)]
+          [gvarassign-exp (id exp) (dep? exp)]
+          [if-exp (test-exp then-exp else-exp)
+           (orapp dep? test-exp then-exp else-exp)]
+          [let-exp (ids rands body)
+           (or (ormap dep? rands) (dep? body))]
+          [curry-exp (id ids rands)
+           (ormap dep? rands)]
+          [labelapp-exp (id rands)
+           (ormap dep? rands)]
+          [app-exp (rator rands)
+           (or (dep? rator) (ormap dep? rands))]
+          [primapp-exp (effect prim rands)
+           (ormap dep? rands)]))
+      (dep? exp))
+    
+    (define (cg-fast-goto? renv rands)
+      ; check if rands depend on first (length rands) regs
+      (let loop ([rands rands] [regs (reverse renv)] [spoiled '()])
+        (cond [(null? rands) #t]
+              [(null? regs) #f] ; may step on let-bound reg
+              [(number? (car regs)) #f] ; may step on temporary
+              [(or (null? spoiled) (not (cg-depends-on? (car rands) spoiled)))
+               (loop (cdr rands) (cdr regs) (cons (car regs) spoiled))]
+              [else #f]))) 
+
+    (define (cg-complex-to tgt exp renv)
+      (variant-case exp
+        [bgc-exp (id lbid ids exp2)
+         (let ([cn (lookup-curry-case-no lbid)])
+           (list
+             (nl/regs-comment renv)
+             nl "{ " "static obj c[] = { obj_from_case(" cn ") }; "
+             (gvar-id->c-name id) " = (obj)c; }"  ; /* (id->uname id) */
+           (cg-to tgt exp2 renv)))]
+        [gvarassign-exp (id exp)
+         (list 
+           (nl/regs-comment renv)
+           (cg-to (var-tgt id renv) exp renv)
+           (cg-to tgt (void-exp) renv))] 
+        [if-exp (test-exp then-exp else-exp)
+         (list 
+           (if (cg-cexp? test-exp) ;todo: use test target?
+               (list if-nl 
+                 (cleanup-c-code! 
+                   (c-format "if (bool_from_$arg) {" (cg-cexp test-exp renv))))
+               (let ([code (cg-to (reg-tgt renv) test-exp renv)] 
+                     [tmp-renv (alloc-reg 0 renv)])
+                 (list code
+                    (nl/regs-comment renv)
+                    (nl/setlive/comment (length renv))
+                    if-nl "if (bool_from_obj(r[" (length renv) "])) {")))
+           (cg-to tgt then-exp renv)
+           if-nl "} else {"
+           (cg-to tgt else-exp renv)
+           if-nl "}")]
+        [degenerate-let-exp (body)
+         (cg-to tgt body renv)]
+        [begin-exp (exp1 exp2)
+         (list
+           (nl/regs-comment renv)
+           (cg-to (void-tgt) exp1 renv)
+           (cg-to tgt exp2 renv))]
+        [let-exp (ids rands body)
+         (cg-let-list rands ids renv
+           (lambda (code new-renv)
+             (list code (cg-to tgt body new-renv))))]))
+
+    (define (cg-application? exp)
+      (cond [(let-exp? exp) #f]
+            [(curry-exp? exp) #t]
+            [(labelapp-exp? exp) #t]
+            [(app-exp? exp) #t]
+            [(primapp-exp? exp) #t]
+            [else #f]))
+
+    (define (cg-primapp-to tgt exp renv)
+      (variant-case exp
+        [primapp-exp (effect prim rands)
+         (set! max-live (max (+ (length renv) (length rands)) max-live))
+         (cg-prim-args rands renv
+           (lambda (code args new-renv)
+             (let ([ltext (length new-renv)] [rtext (cg-tgt-lval tgt)])
+               (list code (nl/regs-comment new-renv) nl
+                 (cleanup-c-code! 
+                   ; bug fix in 160m
+                   ; was just (c-format-prim* ltext rtext prim args)
+                   (if (prim-cexp? prim) ; C expression?
+                       (c-format (string-append rtext "$arg;") 
+                         (c-format-primexp* ltext prim args)) 
+                       (c-format-prim* ltext rtext prim args)))))))]))
+
+    (define (cg-application-to tgt exp renv)
+      (variant-case exp
+        [primapp-exp (effect prim rands)
+         (cg-primapp-to tgt exp renv)]
+        [curry-exp (id ids rands)
+         ; let's make primitive on the fly
+         (let ([cn (lookup-curry-case-no id)])
+           (let ([prim (string-append
+                 "hreserve(hbsz($argc+1), $live); /* $live live regs */\n"
+             "    ${*--hp = obj_from_$arg;\n"
+             "    $}*--hp = obj_from_case(" (number->string cn) ");\n"
+             "    $return obj(hendblk($argc+1));")])
+             (cg-primapp-to tgt 
+               (primapp-exp (*-effect) prim (reverse rands))
+               renv)))]
+        [labelapp-exp (id rands)
+         ; let's make primitives on the fly
+         (if (cg-fast-goto? renv rands)
+             (let ([lname (lookup-label id #t)])
+               (let ([prim (string-append
+                     "${r[$arg#] = obj_from_$arg;\n"
+                 "    $}goto " lname ";")])
+                 (cg-primapp-to tgt 
+                   (primapp-exp (*?!-effect) prim rands)
+                   renv)))
+             (let ([lname (lookup-label id #t)])
+               (let ([prim (string-append
+                     "${r[$live+$arg#] = obj_from_$arg;\n"
+                 "    $}r += $live; /* shift reg wnd */\n"
+                 "    rreserve(MAX_LIVEREGS);\n"
+                 "    goto " lname ";")])
+                 (cg-primapp-to tgt 
+                   (primapp-exp (*?!-effect) prim rands)
+                   renv))))]
+        [gclabelapp-exp (id rands)
+         ; let's make primitives on the fly
+         (if (cg-fast-goto? renv rands)
+             (let ([lname (make-gclabel id)])
+               (let ([prim (string-append
+                     "${r[$arg#] = obj_from_$arg;\n"
+                 "    $}goto " lname ";")])
+                 (cg-primapp-to tgt 
+                   (primapp-exp (*?!-effect) prim rands)
+                   renv)))
+             (let ([lname (make-gclabel id)])
+               (let ([prim (string-append
+                     "${r[$live+$arg#] = obj_from_$arg;\n"
+                 "    $}r += $live; /* shift reg wnd */\n"
+                 "    rreserve(MAX_LIVEREGS);\n"
+                 "    goto " lname ";")])
+                 (cg-primapp-to tgt 
+                   (primapp-exp (*?!-effect) prim rands)
+                   renv))))]
+        [app-exp (rator rands)
+         ; let's make primitives on the fly
+         (if (cg-fast-goto? renv (cons rator rands))
+           (let ([prim (string-append
+                 "r[0] = obj_from_$arg;\n"
+             "    pc = objptr_from_obj(r[0])[0];\n"
+             "    ${r[$arg#] = obj_from_$arg;\n"
+             "    $}rreserve(MAX_LIVEREGS);\n"
+             "    assert(rc = $arg#);\n"
+             "    goto jump;")])
+             (cg-primapp-to tgt 
+               (primapp-exp (*?!-effect) prim (cons rator rands))
+               renv))
+           (let ([prim (string-append
+                 "r[$live+0] = obj_from_$arg;\n"
+             "    pc = objptr_from_obj(r[$live+0])[0];\n"
+             "    ${r[$live+$arg#] = obj_from_$arg;\n"
+             "    $}r += $live; /* shift reg wnd */\n"
+             "    rreserve(MAX_LIVEREGS);\n"
+             "    assert(rc = $arg#);\n"
+             "    goto jump;")])
+             (cg-primapp-to tgt 
+               (primapp-exp (*?!-effect) prim (cons rator rands))
+               renv)))]))       
+
+    (define cg-returns? 
+      (memoizate-exp-attribute
+        (lambda (exp)
+          (variant-case exp
+            [var-exp (id) #t]
+            [gvarassign-exp (id exp) #t]
+            [if-exp (test-exp then-exp else-exp)
+             (or (cg-returns? then-exp) (cg-returns? else-exp))]
+            [let-exp (ids rands body)
+             (cg-returns? body)]
+            [curry-exp (id ids rands) #t]
+            [halt-exp (exp) #f] ;unusual primapp
+            [primapp-exp (effect prim rands) #t]
+            [else #f]))))
+
+    (define cg-gcsafe-cexp?
+      (memoizate-exp-attribute
+        (lambda (exp)
+          (variant-case exp
+            [var-exp (id) #t]
+            [gvarassign-exp (id exp) #f] ; why not? r/w ordering?
+            [if-exp (test-exp then-exp else-exp)
+             (andapp cg-gcsafe-cexp? test-exp then-exp else-exp)]
+            [let-exp (ids rands body) #f] ; can't make let into C expr
+            [curry-exp (id ids rands) #f] ; not gc-safe
+            [labelapp-exp (id rands) #f]
+            [app-exp (rator rands) #f]
+            [primapp-exp (effect prim rands)
+             (and (prim-cexp? prim) (gc-safe-effect? effect) 
+               (andmap cg-gcsafe-cexp? rands))]))))
+
+    (define cg-cexp?
+      (memoizate-exp-attribute
+        (lambda (exp)
+          (variant-case exp
+            [var-exp (id) #t]
+            [gvarassign-exp (id exp) #f] ; why not? r/w ordering?
+            [if-exp (test-exp then-exp else-exp)
+             (andapp cg-cexp? test-exp then-exp else-exp)]
+            [let-exp (ids rands body) #f] ; can't make let into C expr
+            [curry-exp (id ids rands) #f] ; not gc-safe
+            [labelapp-exp (id rands) #f]
+            [app-exp (rator rands) #f]
+            [primapp-exp (effect prim rands)
+             (and (prim-cexp? prim) (andmap cg-cexp? rands))]))))
+
+    (define (cg-cexp exp renv)
+      (variant-case exp
+        [var-exp (id)
+         (if (label-id? id) (c-error "escaping label???" id))
+         (cg-tgt-rval (var-tgt id renv))]
+        ; no gvarassign-exp
+        [if-exp (test-exp then-exp else-exp)
+         ; do not box the results unless really needed to !!!
+         (let ([test-code (cg-cexp test-exp renv)]
+               [then-code (cg-cexp then-exp renv)]
+               [else-code (cg-cexp else-exp renv)])
+           (let ([then-ctype (primexp-ctype then-code)]
+                 [else-ctype (primexp-ctype else-code)])
+              (let ([if-ctype (if (and then-ctype else-ctype 
+                                       (string=? then-ctype else-ctype)) 
+                                  then-ctype 
+                                  "obj")])
+                (cond
+                  [(and (string=? if-ctype "bool") (string=? else-code "bool(0)"))
+                   (c-format 
+                     (string-append if-ctype "(bool_from_$arg && " 
+                                    if-ctype "_from_$arg)") 
+                     test-code then-code)]
+                  [(and (string=? if-ctype "bool") (string=? test-code then-code))
+                   (c-format 
+                     (string-append if-ctype "(bool_from_$arg || " 
+                                    if-ctype "_from_$arg)") 
+                     test-code else-code)]
+                  [else
+                   (c-format 
+                     (string-append if-ctype "(bool_from_$arg ? " 
+                                    if-ctype "_from_$arg : "
+                                    if-ctype "_from_$arg)") 
+                     test-code then-code else-code)]))))]
+        ; no let-exp
+        ; no curry-exp
+        ; no labelapp-exp
+        ; no app-exp
+        [primapp-exp (effect prim rands) ; expression  
+         (c-format-primexp* (length renv) prim 
+           (map (lambda (rand) (cg-cexp rand renv)) 
+             rands))]))
+
+    (define (cg-cexp-to tgt exp renv)
+      (let ([code (cleanup-c-code! 
+                    (c-format 
+                      (string-append (cg-tgt-lval tgt) "$arg;") 
+                      (cg-cexp exp renv)))])
+        (cond ; more cleanup in b164
+          [(equal? code "(void)(0);") '()]
+          [else (list nl code)])))
+
+    (define (cg-to tgt exp renv)
+      (cond [(cg-cexp? exp) (cg-cexp-to tgt exp renv)]
+            [(cg-application? exp) (cg-application-to tgt exp renv)]
+            [else (cg-complex-to tgt exp renv)]))
+
+    (cg-to (reg-tgt register-env) exp register-env))
+
+  (define label-alist '())  ; ((id . "label") ...)
+
+  (define (assign-labels! ids)
+    (define (id->l id)
+      (let ([l (c-mangle (c-undecorate-alvar (id->symbol id)) "s_")])
+        (if (ormap (lambda (id&l) (string=? l (cdr id&l))) label-alist)
+            (string-append l "_v" (number->string (id->ts id)))
+            l)))
+    (let loop ([ids ids])
+      (if (null? ids) #t
+        (begin
+          (set! label-alist 
+            (cons (cons (car ids) (id->l (car ids))) 
+              label-alist)) 
+          (loop (cdr ids)))))
+    (set! label-alist (reverse label-alist)))
+  
+  (define used-labels '()) ; (id ...)
+  
+  (define (lookup-label id ref?) ; => label name
+    (if ref? (set! used-labels (adjoinq id used-labels)))
+    (cond [(assq id label-alist) => cdr]
+          [else (c-error "can't find a label for" id)]))
+
+  (define static-roots '()) ; ((id . lbid) ...)
+  (define global-labels '()) ; ((lbid . id) ...)
+  (define global-constant-labels '()) ; ((lbid . id) ...)
+
+  (define (add-static-global-label! id lbid)
+    (set! static-roots (cons (cons id lbid) static-roots))
+    (set! global-labels (cons (cons lbid id) global-labels))
+    (if (global-id-constant? id)
+      (set! global-constant-labels (cons (cons lbid id) global-constant-labels))))
+
+  (define used-global-labels '()) ; (id ...)
+
+  (define (add-global-label-use! id)
+    (set! used-global-labels (adjoinq id used-global-labels)))
+      
+  (define (make-gclabel id) 
+    (c-mangle (symbol->string (id->symbol id)) "gs_"))
+
+  (define curry-alist '())  ; ((id ids . rands) ...)
+
+  (define (add-curry! id ids rands)
+    (cond [(assq id curry-alist) =>
+           (lambda (id&ids&rands)
+             (if (not (= (length ids) (length (cadr id&ids&rands))))
+               (c-error "curry ids mismatch??" id ids id&ids&rands))
+             (if (not (= (length rands) (length (cddr id&ids&rands))))  
+               (c-error "curry args mismatch??" id ids id&ids&rands)))]
+          [else (set! curry-alist (cons (list* id ids rands) curry-alist))]))
+
+  (define goto-alist '())  ; ((id . rands) ...)
+
+  (define (add-goto! id rands)
+    (lookup-label id #t) ;b164 fix: register id as goto target early! 
+    (cond [(assq id goto-alist) =>
+           (lambda (id&rands)
+             (if (not (= (length rands) (length (cdr id&rands))))  
+               (c-error "goto args mismatch??" id id&rands)))]
+          [else (set! goto-alist (cons (cons id rands) goto-alist))]))
+
+  (define (collect-curries! lams body)
+    (define (cc exp)
+      (variant-case exp
+        [bgc-exp (id lbid ids exp2)
+         (add-curry! lbid ids '())
+         (add-static-global-label! id lbid)
+         (cc exp2)]
+        [var-exp (id) 'ok]
+        [gvarassign-exp (id exp)
+         (cc exp)]
+        [if-exp (test-exp then-exp else-exp)
+         (cc test-exp) (cc then-exp) (cc else-exp)]
+        [let-exp (ids rands body)
+         (for-each cc rands) (cc body)]
+        [curry-exp (id ids rands)
+         (add-curry! id ids rands) 
+         (for-each cc rands)]
+        [labelapp-exp (id rands)
+         (add-goto! id rands)
+         (for-each cc rands)]
+        [app-exp (rator rands)
+         (if (and (var-exp? rator) (global-id-constant? (var-exp->id rator))) 
+             (add-global-label-use! (var-exp->id rator)))
+         (cc rator) (for-each cc rands)]
+        [primapp-exp (effect prim rands)
+         (for-each cc rands)]))
+    (for-each 
+      (lambda (lam) (cc (lambda-exp->body lam)))
+      lams)
+    (cc body))  
+
+  (define (sort-curries-by-fix-order! ids)
+    (define (c-before? c1 c2)
+      (< (posq (car c1) ids) (posq (car c2) ids))) 
+    (set! curry-alist 
+      (sort-by! c-before? curry-alist)))
+  
+  (define curry-case-no-start 1) ; 0 reserved for entry
+  
+  (define (lookup-curry-case-no id)
+    (let loop ([alst curry-alist] [i curry-case-no-start])
+      (cond [(null? alst) (c-error "no curry for" id)]
+            [(eq? (caar alst) id) i]
+            [else (loop (cdr alst) (+ i 1))])))    
+  
+  (define (compile-body exp)
+    (list 
+      "case " 0 ": /* load module */"
+      (code-gen-to-nextreg exp '())
+      "\n\n"))
+    
+  (define (compile-curry-case id)
+    (define (cmove ids rands)
+      (define nlive (+ (length ids) 1))
+      (define ncopy (length rands))
+      (define (cm ito ifrom)
+        (list "\n    r[1+" (- ito 1) "] = p[" ifrom "];"))
+      (if (> ncopy 0)
+        (list
+          "    { obj* p = objptr_from_obj(r[0]);"
+          (map cm
+            (iota nlive (+ nlive ncopy))
+            (iota 1 (+ 1 ncopy)))
+          " }\n")
+        '())) 
+    (define (ccode i id&ids&rands)
+      (list
+        (list "case " i ":")
+        " /* "
+        (cond [(assq id global-labels) => 
+               (lambda (p) (id->symbol (cdr p)))]  ; Fixme: symbol may contain '*/'!
+              [else "clo"])
+        " "
+        (map (lambda (id) (list (c-undecorate-alvar (id->symbol id)) " "))
+          (cadr id&ids&rands))
+        "*/\n"
+        "    assert(rc == " (+ 1 (length (cadr id&ids&rands))) ");\n"
+        (cmove (cadr id&ids&rands) (cddr id&ids&rands))
+        "    r += 1; /* shift reg. wnd */\n"))
+    (let loop ([alst curry-alist] [i curry-case-no-start])
+      (cond [(null? alst) '()] ; no curry case for this id
+            [(eq? (caar alst) id) (ccode i (car alst))]
+            [else (loop (cdr alst) (+ i 1))])))
+            
+  (define (compile-lam lam)
+    (code-gen-to-nextreg (lambda-exp->body lam) 
+      (reverse (lambda-exp->ids lam))))
+            
+  (define (compile-label id lam)
+    (let* ([p (assq id global-constant-labels)]
+           [ltxt (if (and p (memq (cdr p) used-global-labels))
+                     (list (make-gclabel (cdr p)) ": ")
+                     '())]
+           [ltxt (if (memq id used-labels)
+                     (list ltxt (if (null? ltxt) '() "\n")  
+                           (lookup-label id #f) ": ")
+                     ltxt)])
+      (list
+        (compile-curry-case id)
+        (if (null? ltxt) "    " ltxt)
+        "/* " 
+        (map (lambda (id) (list (c-undecorate-alvar (id->symbol id)) " "))
+          (lambda-exp->ids lam))  
+        "*/"
+        (compile-lam lam)
+        "\n\n")))
+      
+  (define (compile-labels ids lams body)
+    (assign-labels! ids)
+    (collect-curries! lams body)
+    (sort-curries-by-fix-order! ids)
+    (let ([bc (compile-body body)]) ; 160m: do body first!
+      (let loop ([ids ids] [lams lams] [code '()])
+        (if (null? ids)
+            (list bc (reverse code))
+            (let ([c (compile-label (car ids) (car lams))])
+              (loop (cdr ids) (cdr lams) (cons c code)))))))
+
+  (define (compile-globals)
+    (define (cglob id)
+      (define name (symbol->string (id->symbol id)))
+      (if (var-assigned-in-exp? id input-fix-exp)
+          (if (global-id-private-constant? id)
+              (c-format "static obj $a; /* constant $a */\n" (c-mangle name "cx_") (id->symbol id))
+              (c-format "obj $a; /* $a */\n" (c-mangle name "cx_") (id->symbol id)))
+          (c-format "extern obj $a; /* $a */\n" (c-mangle name "cx_") (id->symbol id))))
+    (list (map cglob global-vars) "\n"))
+    
+  (define (main-module?)
+    (ormap (lambda (id) 
+             (and (eq? (id->symbol id) 'main)
+                  (var-assigned-in-exp? id input-fix-exp)))
+           global-vars))
+
+  (define (compile-roots)
+    (define (cglob id)
+      (c-format "  &$a,\n" 
+        (c-mangle (symbol->string (id->symbol id)) "cx_")))
+    (define live-roots
+      (keep (lambda (id) 
+              (and (not (assq id static-roots)) 
+                   (var-assigned-in-exp? id input-fix-exp))) 
+            global-vars))
+    (if (null? live-roots)
+        (list "static cxroot_t root = { 0, NULL, NULL };\n\n")    
+        (list "static obj *globv[] = {\n" 
+              (map cglob live-roots) 
+              "};\n\n"
+               "static cxroot_t root = {\n"
+               "  sizeof(globv)/sizeof(obj *), globv, NULL\n"
+               "};\n\n")))
+  
+  (define (compile-cases)
+    (define ncases (+ curry-case-no-start (length curry-alist)))
+    (list "static obj host(obj);\n"
+          "static obj cases["  ncases "] = {"
+          (let loop ([i 0] [code '()])
+            (cond [(= i ncases) (reverse code)]
+                  [(zero? (remainder i 5))
+                   (loop (+ i 1) (cons "\n  (obj)host," code))]
+                  [else
+                   (loop (+ i 1) (cons "  (obj)host," code))]))
+          "\n};\n"))
+          
+  ; => (main? liveregs globals roots cases code)
+  (variant-case input-fix-exp
+    [fix-exp (ids lams body)
+     ; compile-labels should be done first
+     (let ([code (compile-labels ids lams body)])
+       ; the remaining parts can be done in any order
+       (let ([globals (compile-globals)])
+         (let ([roots (compile-roots)])
+           (let ([cases (compile-cases)])
+             (list
+               (main-module?)
+               (list
+                 ; add 2 to max-live: one for topmost "output" reg
+                 ; (not in reg-layout), another for extra arg in trampolines
+                 "#define MAX_LIVEREGS " (+ 2 max-live) "\n")
+               globals
+               roots
+               cases
+               code)))))]))

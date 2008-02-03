@@ -1,0 +1,905 @@
+
+; #F, part 4:  SFC pre-CPS passes
+
+; Copyright (C) 2007 by Sergei Egorov, All Rights Reserved.
+;
+; This code is derived from the "90 minute Scheme to C compiler" presented at the
+; Montreal Scheme/Lisp User Group on October 20, 2004. The original code was
+; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
+
+(load "0.sf")
+(load "3.sf")
+
+;------------------------------------------------------------------------------
+
+; varassign* expression is a pattern for special let/set!/... combination
+; used in expansions of standard-conformant letrec expressions
+; (define-variant varassign*-exp (ids rands)), virtual
+
+(define (varassign*-exp ids rands)
+  (let ([tmp-ids (map (lambda (id) (lexical-id (id->symbol id))) ids)])
+    (let-exp tmp-ids rands
+      (let recur ([ids ids] [tmp-ids tmp-ids])
+        (if (null? ids)
+            (void-exp)
+            (begin-exp
+              (varassign-exp (car ids) (var-exp (car tmp-ids))) 
+              (recur (cdr ids) (cdr tmp-ids))))))))
+
+(define (varassign*-exp? exp)
+  (variant-case exp
+    [let-exp (ids rands body)
+     (let assigns? ([tmp-ids ids] [body body])
+       (or (and (null? tmp-ids) (void-exp? body))
+           (variant-case body
+             [begin-exp (exp1 exp2)
+              (and (variant-case exp1
+                     [varassign-exp (id exp)
+                      (and (var-exp? exp)
+                        (eq? (var-exp->id exp) (car tmp-ids))
+                        (not (memq id ids)))]
+                     [else #f])
+                   (assigns? (cdr tmp-ids) exp2))]
+             [else #f])))]
+    [else #f]))
+
+(define (varassign*-exp->ids exp)
+  (let assignees ([body (let-exp->body exp)])
+    (if (void-exp? body)
+        '()
+        (cons 
+          (varassign-exp->id (begin-exp->exp1 body)) 
+          (assignees (begin-exp->exp2 body)))))) 
+
+(define-inline (varassign*-exp->rands exp)
+  (let-exp->rands exp))
+
+
+;------------------------------------------------------------------------------
+
+; letrec expression is a pattern for special let/set!/... combination
+; (define-variant letrec-exp (ids rands body)), virtual
+
+(define (letrec-exp ids rands body)
+  (let-exp ids (map (lambda (exp) (void-exp)) rands)
+    (begin-exp (varassign*-exp ids rands) body)))
+    
+(define (letrec-exp? exp)
+  (variant-case exp
+    [let-exp (ids rands body)
+     (and (pair? ids) 
+          (andmap void-exp? rands)
+          (begin-exp? body)
+          (let ([exp1 (begin-exp->exp1 body)])
+            (and (varassign*-exp? exp1)
+                 (equal? ids (varassign*-exp->ids exp1)))))]
+    [else #f]))
+
+(define-inline (letrec-exp->ids exp)
+  (let-exp->ids exp))
+
+(define-inline (letrec-exp->rands exp)
+  (varassign*-exp->rands (begin-exp->exp1 (let-exp->body exp))))
+
+(define-inline (letrec-exp->body exp)
+  (begin-exp->exp2 (let-exp->body exp)))
+
+
+;------------------------------------------------------------------------------
+
+; letrec* expression is a pattern for special let/set!/... combination
+; (define-variant letrec*-exp (ids rands body)), virtual
+
+(define (letrec*-exp ids rands body)
+  (let-exp ids (map (lambda (exp) (void-exp)) rands)
+    (let recur ([ids ids] [rands rands])
+      (if (null? rands)
+          body
+          (begin-exp
+            (varassign-exp (car ids) (car rands)) 
+            (recur (cdr ids) (cdr rands)))))))
+
+(define (letrec*-exp? exp)
+  (variant-case exp
+    [let-exp (ids rands body)
+     (and (pair? ids) 
+          (andmap void-exp? rands)
+          (let inits? ([ids ids] [body body])
+            (or (null? ids)
+                (variant-case body
+                  [begin-exp (exp1 exp2)
+                   (and (variant-case exp1
+                          [varassign-exp (id exp)
+                           (eq? id (car ids))]
+                          [else #f])
+                        (inits? (cdr ids) exp2))]
+                  [else #f]))))]
+    [else #f]))
+
+(define-inline (letrec*-exp->ids exp)
+  (let-exp->ids exp))
+
+(define (letrec*-exp->rands exp)
+  (let inits ([ids (let-exp->ids exp)] [body (let-exp->body exp)])
+    (if (null? ids)
+        '()
+        (cons 
+          (varassign-exp->exp (begin-exp->exp1 body)) 
+          (inits (cdr ids) (begin-exp->exp2 body)))))) 
+
+(define (letrec*-exp->body exp)
+  (let skip-inits ([ids (let-exp->ids exp)] [body (let-exp->body exp)])
+    (if (null? ids)
+        body
+        (skip-inits (cdr ids) (begin-exp->exp2 body)))))
+
+
+;------------------------------------------------------------------------------
+
+; Transformation of letrec and letrec* into fix-exp
+
+; See @article{
+;  key = "Wad:05"
+;  author = "Oscar Waddell and Dipanwita Sarkar and R. Kent Dybvig"
+;  title = "Fixing Letrec: A Faithful Yet Efficient Implementation of Scheme's 
+;  Recursive Binding Construct"
+;  journal = "Higher-Order and Symbolic Computation"
+;  volume = "18"
+;  number = "3-4"
+;  year = "2005"
+;  url = "http://www.cs.indiana.edu/~dyb/pubs/fixing-letrec.pdf"
+; }
+
+(define (fix-letrecs exp)
+
+  (define (fl-simple? exp) ; having no way to access its continuation
+    (variant-case exp
+      [var-exp (id) #t]
+      [if-exp (test-exp then-exp else-exp)
+       (andapp fl-simple? test-exp then-exp else-exp)]
+      [primapp-exp (effect prim rands)
+       (and (ref-transparent-effect? effect)
+         (andmap fl-simple? rands))]
+      [lambda-exp (ids body) #t]
+      [let-exp (ids rands body)
+       (and (andmap fl-simple? rands) (fl-simple? body))]
+      [withcc-exp (cont-exp exp)
+       (andapp fl-simple? cont-exp exp)]
+      [else #f]))
+
+  (define-variant bnd (kind id exp))
+  (define (u-bnd id exp) (bnd 'u id exp))     ; unreferenced
+  (define (u-bnd? b) (eq? 'u (bnd->kind b)))
+  (define (s-bnd id exp) (bnd 's id exp))     ; simple
+  (define (s-bnd? b) (eq? 's (bnd->kind b)))
+  (define (l-bnd id exp) (bnd 'l id exp))     ; lambda
+  (define (l-bnd? b) (eq? 'l (bnd->kind b)))
+  (define (c-bnd id exp) (bnd 'c id exp))     ; complex
+  (define (c-bnd? b) (eq? 'c (bnd->kind b)))
+
+  (define (classify-bindings ids rands body)
+    (define rr&b-vi ; ((id . var-use) ...)
+      (reduce-right (lambda (exp vi) (append (exp-vinfo exp) vi))
+        (exp-vinfo body) rands))
+    (define (classify id exp)
+      (define id-vu* 
+        (map cdr (keep (lambda (id&vu) (eq? (car id&vu) id)) rr&b-vi)))
+      (cond 
+        [(null? id-vu*) 
+         (u-bnd id exp)] ; unreferenced
+        [(ormap var-use->assignment-to? id-vu*)
+         (c-bnd id exp)] ; complex 
+        [(and (fl-simple? exp)
+           (let ([vi (exp-vinfo exp)])
+             (andmap (lambda (id) (not (assq id vi))) ids)))    
+         (s-bnd id exp)] ; simple
+        [(lambda-exp? exp)
+         (l-bnd id exp)] ; lambda
+        [else (c-bnd id exp)])) ; remaining are complex 
+    (map classify ids rands))
+  
+  (define (fix exp)
+    (variant-case exp
+      [var-exp (id) exp]
+      [varassign-exp (id exp)
+       (varassign-exp id (fix exp))]
+      [if-exp (test-exp then-exp else-exp)
+       (if-exp (fix test-exp) (fix then-exp) (fix else-exp))]
+      [degenerate-let-exp (body)
+       (fix body)]
+      [letrec-exp (ids rands body)
+       (let ([bnd* (classify-bindings ids rands body)])
+         (let ([ub* (keep u-bnd? bnd*)] [sb* (keep s-bnd? bnd*)]
+               [lb* (keep l-bnd? bnd*)] [cb* (keep c-bnd? bnd*)])
+           (let-exp
+             (append 
+               (map bnd->id sb*)
+               (map bnd->id cb*))
+             (append 
+               (map (compose fix bnd->exp) sb*) 
+               (map (lambda (b) (void-exp)) cb*))
+             (refix 
+               (map bnd->id lb*) 
+               (map (compose fix bnd->exp) lb*)
+               (reduce-right/right-seed
+                 begin-exp
+                 (if (null? cb*)
+                     (fix body)
+                     (begin-exp
+                       (varassign*-exp 
+                         (map bnd->id cb*)
+                         (map (compose fix bnd->exp) cb*))
+                       (fix body)))
+                 (map (compose fix bnd->exp) ub*))))))] 
+      [letrec*-exp (ids rands body)
+       (let ([bnd* (classify-bindings ids rands body)])
+         (let ([sb* (keep s-bnd? bnd*)] [cb* (keep c-bnd? bnd*)]
+               [lb* (keep l-bnd? bnd*)])
+           (let-exp
+             (append 
+               (map bnd->id sb*)
+               (map bnd->id cb*))
+             (append 
+               (map (compose fix bnd->exp) sb*) 
+               (map (lambda (b) (void-exp)) cb*))
+             (refix 
+               (map bnd->id lb*) 
+               (map (compose fix bnd->exp) lb*)
+               (let recur ([cub* (keep (lambda (b) (or (c-bnd? b) (u-bnd? b))) bnd*)])
+                 (if (null? cub*)
+                     (fix body)
+                     (let ([b (car cub*)])
+                       (begin-exp
+                         (if (c-bnd? b)
+                             (varassign-exp (bnd->id b) (fix (bnd->exp b)))
+                             (fix (bnd->exp b))) 
+                         (recur (cdr cub*))))))))))]
+      [primapp-exp (effect prim rands)
+       (primapp-exp effect prim (map fix rands))]
+      [app-exp (rator rands)
+       (app-exp (fix rator) (map fix rands))]
+      [lambda-exp (ids body)
+       (lambda-exp ids (fix body))]
+      [letcc-exp (id body)
+       (letcc-exp id (fix body))]
+      [withcc-exp (cont-exp exp)
+       (withcc-exp (fix cont-exp) (fix exp))]))
+    
+  (define (reclassify-lambda-bindings ids lams)
+    (define (reclassify id lam)
+      (let ([vi (exp-vinfo lam)])
+        (if (andmap (lambda (id) (not (assq id vi))) ids)
+            (s-bnd id lam) ; new simple
+            (l-bnd id lam)))) ; remains a lambda 
+    (map reclassify ids lams))
+
+  (define (refix ids lams body)
+    (let ([bnd* (reclassify-lambda-bindings ids lams)])
+      (let ([sb* (keep s-bnd? bnd*)] [lb* (keep l-bnd? bnd*)])
+        (if (null? sb*) ; remaining lambdas are recursive
+            (if (null? lb*) body (fix-exp ids lams body)) ; don't partition for now
+            (let-exp (map bnd->id sb*) (map bnd->exp sb*)
+              (refix (map bnd->id lb*) (map bnd->exp lb*) body))))))
+
+  (fix exp))
+
+
+;------------------------------------------------------------------------------
+
+; box expression is a pattern for read/write storage cell allocation
+; (define-variant box-exp (exp)), virtual
+
+(define the-box-prim
+   "hreserve(hbsz(1), $live); /* $live live regs */
+    *--hp = obj_from_$arg;
+    $return obj(hendblk(1));")
+
+(define (box-exp exp)
+  (primapp-exp (*-effect)
+    the-box-prim (list exp))) 
+
+(define (box-exp? exp) 
+  (and (primapp-exp? exp) 
+       (eq? (primapp-exp->prim exp) the-box-prim)))
+
+(define-inline (box-exp->exp exp)
+  (car (primapp-exp->rands exp)))
+
+
+;------------------------------------------------------------------------------
+
+; boxref expression is a pattern for read/write storage cell reference
+; (define-variant boxref-exp (box)), virtual
+
+(define the-boxref-prim
+  "obj(objptr_from_$arg[0])")
+
+(define (boxref-exp box)
+  (primapp-exp (?-effect) 
+     the-boxref-prim (list box)))
+
+(define (boxref-exp? exp) 
+  (and (primapp-exp? exp) 
+       (eq? (primapp-exp->prim exp) the-boxref-prim)))
+
+(define-inline (boxref-exp->box exp)
+  (car (primapp-exp->rands exp)))
+
+
+;------------------------------------------------------------------------------
+
+; boxset expression is a pattern for read/write storage cell mutation
+; (define-variant boxset-exp (box exp)), virtual
+
+(define the-boxset-prim
+  "obj(objptr_from_$arg[0] = obj_from_$arg)")
+
+(define (boxset-exp box exp)
+  (primapp-exp (!-effect) 
+     the-boxset-prim (list box exp)))
+
+(define (boxset-exp? exp) 
+  (and (primapp-exp? exp) 
+       (eq? (primapp-exp->prim exp) the-boxset-prim)))
+
+(define-inline (boxset-exp->box exp)
+  (car (primapp-exp->rands exp)))
+
+(define-inline (boxset-exp->exp exp)
+  (cadr (primapp-exp->rands exp)))
+
+
+;------------------------------------------------------------------------------
+
+; Assignment elimination
+
+(define (remove-assignments exp)
+
+  (define (box-subst exp substs)
+  
+    (define (box exp)
+      (variant-case exp
+        [gvarassign-exp (id exp) ; globals remain assignable
+         (gvarassign-exp id (box exp))] 
+        [var-exp (id)
+         (cond [(assq id substs) => 
+                (lambda (id&box) (boxref-exp (cdr id&box)))]
+               [else exp])]
+        [varassign-exp (id exp)
+         (cond [(assq id substs) => 
+                (lambda (id&box) 
+                  (boxset-exp (cdr id&box) (box exp)))]
+               [else (c-error "boxing error???")])]
+        [if-exp (test-exp then-exp else-exp)
+         (if-exp (box test-exp) (box then-exp) (box else-exp))]
+        [degenerate-let-exp (body)
+         (box body)]
+        [primapp-exp (effect prim rands)
+         (primapp-exp effect prim (map box rands))]
+        [app-exp (rator rands)
+         (app-exp (box rator) (map box rands))]
+        [fix-exp (ids lams body) ; leave as-is for now
+         (fix-exp ids (map box lams) (box body))]
+        [lambda-exp (ids body)
+         (let loop ([in-ids ids] [let-ids '()]
+                    [let-rands '()] [substs substs])
+           (if (null? in-ids)
+               (lambda-exp ids
+                 (let-exp (reverse let-ids) (reverse let-rands)
+                   (box-subst body substs)))
+               (let ([id (car in-ids)])
+                 (if (var-assigned-in-exp? id body)
+                     (let ([box-id (lexical-id (symbol (id->symbol id) "-box"))])
+                       (loop (cdr in-ids) (cons box-id let-ids) 
+                         (cons (box-exp (var-exp id)) let-rands)
+                           (cons (cons id (var-exp box-id)) substs)))
+                     (loop (cdr in-ids) let-ids let-rands substs)))))]
+        [letcc-exp (id body)
+         (if (var-assigned-in-exp? id body)
+             (let ([box-id (lexical-id (symbol (id->symbol id) "-box"))])
+               (letcc-exp id
+                 (let-exp (list box-id) (list (box-exp (var-exp id)))
+                   (box-subst body (cons (cons id (var-exp box-id)) substs)))))
+             (letcc-exp id (box body)))]
+        [withcc-exp (cont-exp exp)
+         (withcc-exp (box cont-exp) (box exp))]))
+    
+    (box exp)) 
+     
+  (box-subst exp '()))
+
+
+
+;------------------------------------------------------------------------------
+
+; Analysis of globals
+
+(define (analyze-globals exp)
+
+  ; may become inlineable after substs 
+  (define (ag-simple? exp)
+    (variant-case exp
+      [degenerate-let-exp (body) 
+       (ag-simple? body)]
+      [var-exp (id) #t]
+      [primapp-exp (effect prim rands)
+       (andmap ag-simple? rands)]
+      [app-exp (rator rands)
+       (and (ag-simple? rator) (andmap ag-simple? rands))]
+      [lambda-exp (ids body)
+       (ag-simple? body)]
+      [else #f]))
+
+  (define (ag-constant? exp)
+    (variant-case exp
+      [primapp-exp (effect prim rands)
+       (and (ref-transparent-effect? effect)
+            (andmap ag-constant? rands))]
+      [else #t]))
+
+  (define (ag-lookup exp substs)
+    (cond [(not (var-exp? exp)) exp]
+          [(null? substs) exp]
+          [(eq? (var-exp->id exp) (caar substs))
+           (ag-lookup (cdar substs) (cdr substs))]
+          [else (ag-lookup exp (cdr substs))]))
+
+  (define (ag-inlineable-app-rands? rands substs lambda-ids)
+    (let* ([lu-rands (map (lambda (exp) (ag-lookup exp substs)) rands)]
+           [nc-rands (keep (complement ag-constant?) lu-rands)])
+      ; the rest should be constants or in lambda-ids (no duplicates!)
+      (andmap var-exp? nc-rands)
+      (let loop ([aids (map var-exp->id nc-rands)])
+        (or (null? aids)
+            (let ([aid (car aids)] [aids (cdr aids)])
+              (and (memq aid lambda-ids) (not (memq aid aids))
+                (loop aids)))))))
+
+  (define (ag-inlineable? exp)
+    (variant-case exp
+      [degenerate-let-exp (body) 
+       (ag-inlineable? body)]
+      [primapp-exp (effect prim rands)
+       (and (ref-transparent-effect? effect) (null? rands))]
+      [lambda-exp (ids body)
+       (let inlineable? ([body body] [substs '()])
+         (variant-case body
+           [degenerate-let-exp (body) 
+            (inlineable? body substs)]
+           [let-exp (ids rands body)
+            (inlineable? body (map cons ids rands))] 
+           [primapp-exp (effect prim rands)
+            (ag-inlineable-app-rands? rands substs ids)]
+           [else #f]))]
+      [else #f]))
+
+  ; is this a function we can compile into a C function?
+  ; note: this check is conservative - can be improved by doing beta-substitution first 
+  (define (ag-stack-function? exp self-id substs)
+    (define (subst-locals ids substs)
+      (if (null? ids) substs
+        (subst-locals (cdr ids)
+          (cons (list (car ids) (car ids)) substs))))
+    (variant-case exp
+      [degenerate-let-exp (body) 
+       (ag-stack-function? body self-id substs)]
+      [lambda-exp (ids body)
+       (let stack-fn? ([exp body] [substs (subst-locals ids substs)] [labels '()] [tail? #t])
+         (define (sfn/nt? exp)
+           (stack-fn? exp substs labels #f))
+         (let sfn? ([exp exp])
+           (variant-case exp
+             [var-exp (id) ; in arg position
+              (cond [(assq id substs) => 
+                     (lambda (id&c) ; (id id) or (id cid exp)
+                       (or (null? (cddr id&c)) ; local
+                           (let ([exp (caddr id&c)])
+                             (or (and (var-exp? exp) ; real rename?
+                                      (eq? id (var-exp->id exp)))
+                                 (sfn? exp)))))]
+                    [else #f])]
+             [if-exp (test-exp then-exp else-exp)
+              (and (sfn/nt? test-exp) (andapp sfn? then-exp else-exp))]
+             [let-exp (ids rands body)
+              ; conservative check - no beta-subst is done yet 
+              (and (andmap sfn/nt? rands)
+                   (stack-fn? body (subst-locals ids substs) labels tail?))]
+             [primapp-exp (effect prim rands)
+              (and (gc-safe-effect? effect)
+                   (andmap sfn/nt? rands))]
+             [loop-exp (id lam rands) ; application of self-recursive fix-exp
+              ; move application into the body of the loop and re-test
+              (sfn? (fix-exp (list id) (list lam) (app-exp (var-exp id) rands)))]
+             [fix-exp (ids lams body)
+              (let ([labels (append ids labels)])
+                (and (stack-fn? body substs labels tail?)
+                     (andmap
+                       (lambda (lam)
+                         (stack-fn? (lambda-exp->body lam)
+                           (subst-locals (lambda-exp->ids lam) substs)
+                           labels #t)) ; can only be tail-called 
+                       lams)))] 
+             [app-exp (rator rands)
+              (and (var-exp? rator)
+                   (let ([id (var-exp->id rator)])
+                     (cond [(eq? id self-id) ; recursive call is OK
+                            (andmap sfn/nt? rands)]
+                           [(and tail? (memq id labels)) ; gotos to labels are OK
+                            (andmap sfn/nt? rands)] 
+                           [(assq id substs) =>
+                            (lambda (id&c) ; (id id) or (id cid exp)
+                              (and (not (null? (cddr id&c))) ; not local
+                                (let ([id (car id&c)] [exp (caddr id&c)])
+                                  (and (or (not (var-exp? exp)) ; real rename?
+                                           (not (eq? id (var-exp->id exp))))
+                                    (sfn? (app-exp exp rands))))))]
+                           [else #f])))]
+             [else #f])))]
+      [else #f]))    
+
+  (define (ag-subst exp substs)
+    (define (gsub exp)
+      (variant-case exp
+        [gvarassign-exp (id exp)
+         (cond [(assq id substs) => 
+                (lambda (id&cid&exp&aexp?)
+                  (if (null? (cdddr id&cid&exp&aexp?)) 
+                      (gvarassign-exp (cadr id&cid&exp&aexp?) (gsub exp))
+                      (cadddr id&cid&exp&aexp?)))] 
+               [else (gvarassign-exp id (gsub exp))])]
+        [var-exp (id)
+         (cond [(assq id substs) => caddr]
+               [else exp])]
+        [if-exp (test-exp then-exp else-exp)
+         (if-exp (gsub test-exp) (gsub then-exp) (gsub else-exp))]
+        [degenerate-let-exp (body)
+         (gsub body)]
+        [primapp-exp (effect prim rands)
+         (primapp-exp effect prim (map gsub rands))]
+        [app-exp (rator rands)
+         (app-exp (gsub rator) (map gsub rands))]
+        [fix-exp (ids lams body)
+         (fix-exp ids (map gsub lams) (gsub body))]
+        [lambda-exp (ids body)
+         (lambda-exp ids (gsub body))]
+        [letcc-exp (id body)
+         (letcc-exp id (gsub body))]
+        [withcc-exp (cont-exp exp)
+         (withcc-exp (gsub cont-exp) (gsub exp))]))
+    (gsub exp))
+    
+  (define (global-substs top-exp)
+    (define (gls exp substs)
+      (variant-case exp
+        [var-exp (id) substs]
+        [gvarassign-exp (id exp)
+         (if (global-id-private-constant? id)
+             (cons (list id id exp) ; do not rename
+               (gls exp substs))
+             (let ([ac (var-assignment-count id top-exp)])
+               (if (= ac 1) ; assigned exactly once in init (here)
+                   (let ([cid (global-id-constant (id->symbol id))])
+                     (cons (list id cid exp)
+                       (gls exp substs)))
+                   (gls exp substs))))]
+        [varassign-exp (id exp) (gls exp substs)]
+        [if-exp (test-exp then-exp else-exp)
+         (gls test-exp substs)] ; only test is unconditional
+        [let-exp (ids rands body)
+         (reduce-left gls substs (cons body rands))]
+        [primapp-exp (effect prim rands)
+         (reduce-left gls substs rands)] 
+        [app-exp (rator rands)
+         (reduce-left gls substs (cons rator rands))]
+        [fix-exp (ids lams body) (gls body substs)]
+        [lambda-exp (ids body) substs]
+        [letcc-exp (id body) (gls body substs)]
+        [withcc-exp (cont-exp exp)
+         (reduce-left gls substs (list cont-exp exp))]))
+    (gls top-exp '()))
+                  
+  (define stack-function-candidates '()) ; ((id . lambda-exp) ...)
+  
+  (define (finalize-substs substs)
+    (define (finalize id&cid&exp substs)
+      (let ([id (car id&cid&exp)] [cid (cadr id&cid&exp)] [exp (caddr id&cid&exp)])
+        (cond
+          [(rec-exp? exp)
+           (let ([lam (ag-subst (rec-exp->lam exp) 
+                        (list (list (rec-exp->id exp) cid (var-exp cid))))])
+             (let ([subst (finalize (list id cid lam) substs)])
+               (if (null? (cdddr subst)) ; not a stack fun
+                   (list id cid (var-exp cid)) ; won't be simple anyway
+                   subst)))] ; moved into a stack function
+          [(and (ag-simple? exp)
+             (let ([exp (ag-subst exp substs)])
+               (and (ag-inlineable? exp)
+                 (if (global-id-private-constant? cid)
+                     (list id cid exp (void-exp)) ; fully inlined
+                     (list id cid exp)))))] ; keep global assignment
+          [(ag-stack-function? exp id substs)
+           (let* ([exp (ag-subst exp substs)] [ids (lambda-exp->ids exp)])
+             (set! stack-function-candidates
+               (cons (cons id exp) stack-function-candidates))
+             (let* ([astr (let loop ([ids ids])
+                            (if (pair? ids)
+                                (if (pair? (cdr ids))
+                                    (string-append "obj_from_$arg, " (loop (cdr ids)))
+                                    "obj_from_$arg")
+                                ""))]
+                    [prim (string-append 
+                            "obj(" (c-mangle (symbol->string (id->symbol id)) "cxs_") 
+                            "(" astr "))")]
+                    [lam (lambda-exp ids 
+                           (primapp-exp (?!-effect) ; todo: calc real effect from exp
+                             prim (map var-exp ids)))])
+               (list id cid lam 
+                 (if (global-id-private-constant? cid)
+                     (void-exp) ; fully inlined
+                     (gvarassign-exp cid lam)))))]
+          [else 
+           (list id cid (var-exp cid))])))
+    (reduce-left
+      (lambda (id&cid&exp substs)
+        (cons (finalize id&cid&exp substs) substs))
+      '() substs))
+     
+  (let ([exp (ag-subst exp (finalize-substs (global-substs exp)))])
+    (cons exp (reverse stack-function-candidates))))
+
+
+;------------------------------------------------------------------------------
+
+; Constant folding
+
+(define (constant-fold exp)
+      
+  (define (fold-typecheck-ctype exp env h-exp e-exp) ; => exp or #f
+    (variant-case exp
+      [let-exp (ids rands body)
+       (fold-typecheck-ctype body
+         (append (map (lambda (id rand) (cons id (exp-ctype rand env))) 
+           ids rands) env) 
+         h-exp e-exp)]
+      [primapp-exp (effect prim rands)
+       (and (= (length rands) 1)
+         (let ([check-ctype (typecheck-prim-ctype prim)]
+               [rand-ctype (exp-ctype (car rands) env)])
+           (and check-ctype (not (member check-ctype '("obj" "void")))
+                rand-ctype (not (member rand-ctype '("obj" "void")))
+             (if (string=? check-ctype rand-ctype)
+                 h-exp e-exp))))]
+      [else #f]))
+  
+  (define (fold-typeassert-ctype exp env) ; => env or #f
+    (variant-case exp
+      [primapp-exp (effect prim rands)
+       (and (= (length rands) 1) (var-exp? (car rands))
+         (let ([assert-ctype (typeassert-prim-ctype prim)]
+               [var-ctype (exp-ctype (car rands) env)])
+           (and assert-ctype (not (member assert-ctype '("obj" "void")))
+                (or (not var-ctype) (member var-ctype '("obj" "void")))
+                (cons (cons (var-exp->id (car rands)) assert-ctype) env))))]
+      [else #f]))
+
+
+  (define (const-fold exp env)
+  
+    (define (cf exp)
+      (variant-case exp
+        [var-exp (id) exp]
+        [gvarassign-exp (id exp)
+         (gvarassign-exp id (cf exp))]
+        [if-exp (test-exp then-exp else-exp)
+         (let ([t-exp (cf test-exp)] [h-exp (cf then-exp)] [e-exp (cf else-exp)])
+           (cond [(fold-typecheck-ctype t-exp env h-exp e-exp) =>
+                  (lambda (exp) (begin-exp t-exp exp))]
+                 [else (if-exp t-exp h-exp e-exp)]))]
+        [degenerate-let-exp (body)
+         (cf body)]
+        [begin-exp (exp1 exp2)
+         (let ([f-exp (cf exp1)])
+           (cond [(fold-typeassert-ctype f-exp env) =>
+                  (lambda (env2) (begin-exp f-exp (const-fold exp2 env2)))]
+                 [else (begin-exp f-exp (cf exp2))]))]
+        [let-exp (ids rands body)
+         (let ([frands (map cf rands)])
+           (let-exp ids frands 
+             (const-fold body 
+               (append 
+                 (map (lambda (id frand) 
+                        (cons id (exp-ctype frand env))) 
+                      ids frands)
+                 env))))]
+        [primapp-exp (effect prim rands)
+         (primapp-exp effect prim (map cf rands))]
+        [app-exp (rator rands)
+         (let ([new-exp (app-exp (cf rator) (map cf rands))])
+           (if (let-exp? new-exp) (cf new-exp) new-exp))]
+        [fix-exp (ids lams body)
+         (fix-exp ids (map cf lams) (cf body))]
+        [lambda-exp (ids body)
+         (lambda-exp ids (cf body))]
+        [letcc-exp (id body)
+         (letcc-exp id (cf body))]
+        [withcc-exp (cont-exp exp)
+         (withcc-exp (cf cont-exp) (cf exp))]))
+    
+    (cf exp)) 
+     
+  (const-fold exp '()))
+
+
+;------------------------------------------------------------------------------
+
+; Beta substitution
+
+(define (beta-substitute exp   hold-cps-invariants? hold-lifting-invariants?)
+
+  (define (bs-zero-cost-ref-transparent? exp)
+    ; we assume that assigned local vars are in the past,
+    ; but globals should be treated with care here and below
+    (variant-case exp
+      [var-exp (id) 
+       (or (not (global-id? id)) (global-id-constant? id))]
+      [primapp-exp (effect prim rands)
+       (and (ref-transparent-effect? effect) 
+            (null? rands) 
+            (prim-cexp? prim))]
+      [else #f]))
+  
+  (define (bs-ref-transparent? exp)  ; keep all transparents cps-simple!
+    (variant-case exp
+      [var-exp (id)
+       (or (not (global-id? id)) (global-id-constant? id))]
+      [if-exp (test-exp then-exp else-exp)
+       (andapp bs-ref-transparent? test-exp then-exp else-exp)]
+      [primapp-exp (effect prim rands)
+       (and (ref-transparent-effect? effect) 
+         (andmap bs-ref-transparent? rands))]
+      [lambda-exp (ids body) #t]
+      [let-exp (ids rands body)
+       (and (andmap bs-ref-transparent? rands) 
+         (bs-ref-transparent? body))]
+      [else #f]))
+
+  (define (bs-removable-if-dead? exp)
+    (variant-case exp
+      [var-exp (id) #t]
+      [if-exp (test-exp then-exp else-exp)
+       (andapp bs-removable-if-dead? test-exp then-exp else-exp)]
+      [primapp-exp (effect prim rands)
+       (and (removable-if-dead-effect? effect) 
+         (andmap bs-removable-if-dead? rands))]
+      [lambda-exp (ids body) #t]
+      [let-exp (ids rands body)
+       (and (andmap bs-removable-if-dead? rands) 
+         (bs-removable-if-dead? body))]
+      [letcc-exp (id body) ; does not exist after cps
+       (bs-removable-if-dead? body)]
+      [withcc-exp (cont-exp exp)  ; does not exist after cps
+       (andapp bs-removable-if-dead? cont-exp exp)]
+      [else #f]))
+    
+  (define (bs-arg-of-application? id body)     ; not used after cps
+    (define (id-one-of? exp)
+      (and (var-exp? exp) (eq? id (var-exp->id exp))))
+    (variant-case body
+      [primapp-exp (effect prim rands)
+       (and (andmap bs-ref-transparent? rands) 
+            (ormap id-one-of? rands))]
+      [app-exp (rator rands) 
+       (and (bs-ref-transparent? rator) (andmap bs-ref-transparent? rands)
+            (or (id-one-of? rator) (ormap id-one-of? rands)))]
+      [else #f]))
+  
+  (define (bs-cheap-ref-transparent? exp)      ; not used after cps
+    (variant-case exp
+      [primapp-exp (effect prim rands)
+       (and (ref-transparent-effect? effect)
+            (<= (length rands) 2)
+            (andmap bs-zero-cost-ref-transparent? rands))]
+      [else #f]))
+  
+  (define (bs-cheap-lambda? exp)               ; not used after cps
+    (variant-case exp
+      [lambda-exp (ids body) 
+       (variant-case body
+         [primapp-exp (effect prim rands)
+          (andmap bs-zero-cost-ref-transparent? rands)] 
+         [app-exp (rator rands)
+          (and (bs-zero-cost-ref-transparent? rator)
+            (andmap bs-zero-cost-ref-transparent? rands))]
+         [else #f])] 
+      [else #f]))
+
+  (define (beta-subst exp substs)
+  
+    (define (bs-head exp)
+      (variant-case exp
+        [var-exp (id)
+         (cond 
+           [(assq id substs) => 
+            (lambda (id&exp&opthexp)
+              (if (null? (cddr id&exp&opthexp))
+                  (cadr id&exp&opthexp)
+                  (caddr id&exp&opthexp)))] 
+           [else exp])]
+        [else
+         (bs exp)]))
+    
+    (define (bs exp)
+      (variant-case exp
+        [var-exp (id)
+         (cond [(assq id substs) => cadr] [else exp])]
+        [gvarassign-exp (id exp)
+         (gvarassign-exp id (bs exp))]
+        [if-exp (test-exp then-exp else-exp)
+         (if-exp (bs test-exp) (bs then-exp) (bs else-exp))]
+        [degenerate-let-exp (body)
+         (bs body)]
+        [let-exp (ids rands body)
+         (let loop ([in-ids ids] [in-rands (map bs rands)] 
+                    [out-ids '()] [out-rands '()] [substs substs])
+           (define (loop-pass id rand)
+             (loop (cdr in-ids) (cdr in-rands)
+                   (cons id out-ids) (cons rand out-rands) substs))
+           (define (loop-skip new-substs)
+             (loop (cdr in-ids) (cdr in-rands) 
+                   out-ids out-rands new-substs))
+           (define (loop-partial-subst id rand new-substs)
+             (loop (cdr in-ids) (cdr in-rands)
+                   (cons id out-ids) (cons rand out-rands) 
+                   new-substs))
+           (if (null? in-ids)
+               (if (null? out-ids)
+                   (beta-subst body substs)
+                   (let-exp out-ids out-rands (beta-subst body substs)))
+               (let ([id (car in-ids)] [rand (car in-rands)])
+                 (let ([refc (var-reference-count id body)])
+                   (cond [(= 0 refc) 
+                          (if (bs-removable-if-dead? rand)
+                              (loop-skip substs)
+                              (loop-pass id rand))]
+                         [(= 1 refc) 
+                          (if (or (bs-ref-transparent? rand)
+                                  (and (not hold-cps-invariants?)
+                                       (bs-arg-of-application? id body)))
+                              (loop-skip (cons (list id rand) substs))
+                              (loop-pass id rand))]
+                         [(and (= 2 refc) ; cf. and, or
+                               (not hold-cps-invariants?)
+                               (bs-cheap-ref-transparent? rand))
+                          (loop-skip (cons (list id rand) substs))]
+                         [(and ; multi-subst some simple lambdas 
+                            (if hold-lifting-invariants?
+                                (curry-exp? rand)
+                                (bs-cheap-lambda? rand)))
+                          (if (var-only-applied-in-exp? id body)
+                              ; normal full subst
+                              (loop-skip (cons (list id rand) substs))
+                              ; subst in head positions only
+                              (loop-partial-subst id rand 
+                                (cons (list id (var-exp id) rand) substs)))]
+                         [else ; small things can be replicated
+                          (if (bs-zero-cost-ref-transparent? rand)
+                              (loop-skip (cons (list id rand) substs))
+                              (loop-pass id rand))])))))]
+        [primapp-exp (effect prim rands)
+         (primapp-exp effect prim (map bs rands))]
+        [app-exp (rator rands)
+         (let ([new-exp (app-exp (bs-head rator) (map bs rands))])
+           (if (let-exp? new-exp) (bs new-exp) new-exp))]
+        [fix-exp (ids lams body) ; leave as-is for now
+         (fix-exp ids (map bs lams) (bs body))]
+        [lambda-exp (ids body)
+         (lambda-exp ids (bs body))]
+        [letcc-exp (id body)                ; not used after cps
+         (letcc-exp id (bs body))]
+        [withcc-exp (cont-exp exp)          ; not used after cps
+         (withcc-exp (bs cont-exp) (bs exp))]))
+    
+    (bs exp)) 
+     
+  (beta-subst exp '()))
+

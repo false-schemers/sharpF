@@ -1,0 +1,360 @@
+
+; #F, part 5:  SFC post-CPS passes
+
+; Copyright (C) 2007 by Sergei Egorov, All Rights Reserved.
+;
+; This code is derived from the "90 minute Scheme to C compiler" presented at the
+; Montreal Scheme/Lisp User Group on October 20, 2004. The original code was
+; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
+
+(load "0.sf")
+(load "3.sf")
+
+
+;------------------------------------------------------------------------------
+
+; CPS conversion
+
+; See Ch.8 of @book{
+;  author = "Daniel P. Friedman and Christopher T. Haynes and Mitchell Wand"
+;  title = "Essentials of programming languages (2nd ed.)"
+;  year = "2001"
+;  isbn = "0-262-06217-8"
+;  publisher = "The MIT Press"
+; }
+
+(define (cps-convert exp)
+
+  (define (cps-complex exp kexp)
+    (variant-case exp
+      [gvarassign-exp (id exp)
+       (cps-one exp
+         (lambda (val)
+           (app-exp kexp 
+             (list (noreturn-exp) (gvarassign-exp id val)))))]
+      [if-exp (test-exp then-exp else-exp)
+       (let ([xform
+              (lambda (kexp)
+                (cps-one test-exp
+                  (lambda (test)
+                    (if-exp test
+                       (cps then-exp kexp)
+                       (cps else-exp kexp)))))])
+         (if (var-exp? kexp) ; prevent combinatorial explosion
+             (xform kexp)
+             (let ([k (lexical-id 'k)])
+               (let-exp (list k) (list kexp) (xform (var-exp k))))))]
+      [primapp-exp (effect prim rands)
+       (cps-list rands
+         (lambda (args)
+           (app-exp kexp 
+             (list (noreturn-exp) (primapp-exp effect prim args)))))]
+      [fix-exp (ids lams body)
+       (fix-exp ids (map cps-simple lams)
+         (cps body kexp))]
+      [degenerate-let-exp (body)
+       (cps body kexp)]
+      [begin-exp (exp1 exp2)
+       (cps exp1 
+         (lambda-exp (list (lexical-id 'ek) (lexical-id '_)) 
+           (cps exp2 kexp)))]
+      [let-exp (ids rands body)
+       (cps-list rands
+         (lambda (vals)
+           (let-exp ids vals (cps body kexp))))]
+      [app-exp (rator rands)
+       (cps-list (cons rator rands)
+         (lambda (fn+args)
+           (app-exp (car fn+args) (cons kexp (cdr fn+args)))))]
+      [letcc-exp (id body)
+       (let-exp (list id) (list kexp)
+         (cps body (var-exp id)))]
+      [withcc-exp (cont-exp exp)
+       (cps-one cont-exp
+         (lambda (kexp) (cps exp kexp)))]))
+
+  (define (cps-simple? exp)
+    (variant-case exp
+      [var-exp (id) #t]
+      [gvarassign-exp (id exp)
+       (cps-simple? exp)]
+      [if-exp (test-exp then-exp else-exp)
+       (andapp cps-simple? test-exp then-exp else-exp)]
+      [primapp-exp (effect prim rands)
+       (andmap cps-simple? rands)]
+      [lambda-exp (ids body) #t]
+      [fix-exp (ids lams body)
+       (cps-simple? body)]
+      [degenerate-let-exp (body)
+       (cps-simple? body)]
+      [begin-exp (exp1 exp2)
+       (and (cps-simple? exp1) (cps-simple? exp2))]
+      [let-exp (ids rands body)
+       (and (andmap cps-simple? rands) (cps-simple? body))]
+      [app-exp (rator rands) #f]
+      [letcc-exp (id body) #f]
+      [withcc-exp (cont-exp exp) #f]))
+  
+  (define (cps-simple exp)
+    (variant-case exp
+      [var-exp (id) exp]
+      [gvarassign-exp (id exp)
+       (gvarassign-exp id (cps-simple exp))]
+      [if-exp (test-exp then-exp else-exp)
+       (if-exp (cps-simple test-exp) 
+               (cps-simple then-exp) 
+               (cps-simple else-exp))]
+      [primapp-exp (effect prim rands)
+       (let loop ([rands rands] [ids '()] [vals '()] [exps '()])
+         (if (null? rands)
+             (let-exp ids vals
+               (primapp-exp effect prim (reverse exps)))
+             (let ([rand (cps-simple (car rands))])
+               (if (var-exp? rand) ; or literal?
+                   (loop (cdr rands) ids vals (cons rand exps))
+                   (let ([tmp (lexical-id 'tmp)])   
+                     (loop (cdr rands) (cons tmp ids) (cons rand vals) 
+                       (cons (var-exp tmp) exps)))))))]
+      [lambda-exp (ids body)
+       (let ([k (lexical-id 'k)])
+         (lambda-exp (cons k ids) (cps body (var-exp k))))]
+      [fix-exp (ids lams body)
+       (fix-exp ids (map cps-simple lams) (cps-simple body))]
+      [degenerate-let-exp (body)
+       (cps-simple body)]
+      [begin-exp (exp1 exp2)
+       (begin-exp (cps-simple exp1) (cps-simple exp2))]
+      [let-exp (ids rands body)
+       (let-exp ids (map cps-simple rands) (cps-simple body))]))
+
+  (define (cps exp kexp)
+    (if (cps-simple? exp)
+        (app-exp kexp (list (noreturn-exp) (cps-simple exp)))
+        (cps-complex exp kexp)))
+
+  (define (cps-list exps inner)
+    (cond 
+      [(null? exps) (inner '())]
+      [(cps-simple? (car exps))
+       (cps-list (cdr exps) ;=>
+         (lambda (new-exps)
+           (inner (cons (cps-simple (car exps)) new-exps))))]
+      [else
+       (let ([r (lexical-id 'r)])
+         (cps (car exps)
+              (lambda-exp (list (lexical-id 'ek) r)
+                (cps-list (cdr exps)
+                  (lambda (new-exps)
+                    (inner (cons (var-exp r) new-exps)))))))]))
+
+  (define (cps-one exp inner)
+    (if (cps-simple? exp)
+        (inner (cps-simple exp))
+        (let ([r (lexical-id 'r)])
+          (cps exp
+            (lambda-exp (list (lexical-id 'ek) r)
+              (inner (var-exp r)))))))
+
+  (define (noreturn-exp)
+    (primapp-exp (no-effect) "ktrap()" '()))
+  
+  (cps exp
+    (let ([r (lexical-id 'r)])
+      (lambda-exp (list (lexical-id 'ek) r)
+        (halt-exp (var-exp r))))))
+
+
+;------------------------------------------------------------------------------
+
+; Lambda lifting
+
+; See @inproceedings{
+;   key = "Cli:94"
+;   author = "William D. Clinger and Lars Thomas Hansen"
+;   title = "Lambda, the ultimate label, or a simple optimizing compiler for
+;   Scheme"
+;   booktitle = "Proceedings of the 1994 ACM conference on LISP and Functional 
+;   Programming"
+;   year = "1994"
+;   pages = "128-139"
+;   url = "http://www.acm.org/pubs/citations/proceedings/lfp/182409/p128-clinger/"
+; }
+; and @article{
+;   key = "danvy-schultz:tcs2000"
+;   author = "Olivier Danvy and Ulrik Pagh Schultz"
+;   title = "Lambda-Dropping: Transforming Recursive Equations into Programs
+;   with Block Structure"
+;   journal = "Theoretical Computer Science"
+;   volume = "Volume 248/1-2"
+;   month = "November"
+;   year = "2000"
+;   url = "http://www.daimi.au.dk/~ups/papers/tcs00.ps.gz"
+;   url = "http://www.daimi.au.dk/~ups/papers/tcs00.pdf"
+; }
+
+(define (lambda-lift exp)
+
+  (define top-ids '())
+  (define top-lams '())
+
+  (define (extra-vars id* lam*) ; => vars*
+    (define (called-lam-indices lamfvs)
+      (map (lambda (id) (posq id id*)) 
+        (intersectionq lamfvs id*)))
+    (define (lam-free-outs lamfvs)
+      (setdiffq lamfvs id*))
+    (define (make-step-fn lamcalls lamfovs)
+      (lambda (av) ; av -> a
+        (reduce-left (lambda (i a) (unionq a (vector-ref av i))) 
+          lamfovs lamcalls)))
+    (let ([lamfvs* (map exp->free-lexvars lam*)] [n (length id*)])
+      (let ([lamcalls* (map called-lam-indices lamfvs*)]
+            [lamfovs* (map lam-free-outs lamfvs*)])
+        (let ([av (make-vector n '())]
+              [fv (list->vector (map make-step-fn lamcalls* lamfovs*))])
+          (vector->list ; => vars* 
+            (let loop ([i 0] [wrap? #f])
+              (if (= i n) (if wrap? (loop 0 #f) av)
+                  (let ([next-a ((vector-ref fv i) av)] [prev-a (vector-ref av i)])
+                    (if (seteq? next-a prev-a) (loop (+ i 1) wrap?)
+                        (begin (vector-set! av i next-a) (loop (+ i 1) #t)))))))))))
+
+  (define (curry-lam lam xvars tid) 
+    (curry-exp tid ; no xvars? don't eta-reduce!
+      (map rename-id (lambda-exp->ids lam)) 
+      (map var-exp xvars)))
+
+  (define (lift-lam lam xvars id* lam* xvars* tid*)
+    (variant-case lam
+      [lambda-exp (ids body)
+       (lambda-exp (append ids xvars)
+         (let-exp id* (map curry-lam lam* xvars* tid*)
+           (lift body)))]))
+
+  (define (lift-lams id* lam* body)
+    (let ([tid* (map (lambda (id) (label-id (id->symbol id))) id*)]
+          [xvars* (extra-vars id* lam*)])
+      (define (float-lam lam xvars tid)
+        (let ([tlam (lift-lam lam xvars id* lam* xvars* tid*)])
+          (set! top-ids (cons tid top-ids))
+          (set! top-lams (cons tlam top-lams))))
+      (for-each float-lam lam* xvars* tid*) 
+      (let-exp id* (map curry-lam lam* xvars* tid*)
+        (lift body)))) 
+  
+  (define (lift exp)
+    (variant-case exp
+      [var-exp (id) exp]
+      [gvarassign-exp (id exp)
+       (gvarassign-exp id (lift exp))]
+      [if-exp (test-exp then-exp else-exp)
+       (if-exp (lift test-exp) (lift then-exp) (lift else-exp))]
+      [primapp-exp (effect prim rands)
+       (primapp-exp effect prim (map lift rands))]
+      [let-exp (ids rands body)
+       (let-exp ids (map lift rands) (lift body))]
+      [app-exp (rator rands)
+       (app-exp (lift rator) (map lift rands))]
+      [lambda-exp (ids body)
+       (let ([l (lexical-id 'l)])
+         (lift-lams (list l) (list exp) (var-exp l)))]
+      [fix-exp (ids lams body)
+       (lift-lams ids lams body)]))
+      
+  (let ([top-body (lift exp)])
+    (fix-exp top-ids top-lams
+      top-body)))
+
+
+;------------------------------------------------------------------------------
+
+; Values unboxing
+
+(define (unbox-values exp)
+
+  (define (unbox-ctype-test test-exp then-exp k ek)
+    (or (and (primapp-exp? test-exp)
+          (let ([rands (primapp-exp->rands test-exp)])
+            (and (= (length rands) 1)
+              (let ([rand (car rands)])
+                (and (var-exp? rand)
+                  (let ([id (var-exp->id rand)])
+                    (let ([ctype (var-unboxed-ctype-in-exp id then-exp)])
+                      (and ctype (not (member ctype '("obj" "void")))
+                        (> (var-reference-count id then-exp) 1)
+                        (equal? ctype (typecheck-prim-ctype (primapp-exp->prim test-exp))) 
+                        (k id ctype)))))))))
+        (ek)))
+
+  (define (var-unboxed-ctype id body rand)
+    (let ([b-ctype (var-unboxed-ctype-in-exp id body)])
+      (and b-ctype (not (member b-ctype '("obj" "void")))
+        (let ([r-ctype (exp-ctype rand '())]) ; look for obvious cases
+          (and r-ctype (not (member r-ctype '("obj" "void"))) 
+            (string=? b-ctype r-ctype)
+            r-ctype)))))
+
+
+  (define (unbox-vals exp substs)
+  
+    (define (uv exp)
+      (variant-case exp
+        [var-exp (id)
+         (cond [(assq id substs) => cdr] [else exp])]
+        [gvarassign-exp (id exp)
+         (gvarassign-exp id (uv exp))]
+        [if-exp (test-exp then-exp else-exp)
+         (unbox-ctype-test test-exp then-exp ;=>>
+           (lambda (id ctype)
+             (if-exp 
+               (uv test-exp) 
+               (let ([cid (cvar-id (id->symbol id) ctype)])
+                 (let-exp (list cid) (list (var-exp id)) 
+                   (unbox-vals then-exp 
+                     (cons (cons id (var-exp cid)) substs))))
+               (uv else-exp)))
+           (lambda ()
+             (if-exp (uv test-exp) (uv then-exp) (uv else-exp))))]
+        [degenerate-let-exp (body)
+         (uv body)]
+        [let-exp (ids rands body)
+         (let loop ([in-ids ids] [in-rands (map uv rands)] 
+                    [out-ids '()] [out-rands '()] [substs substs])
+           (if (null? in-ids)
+               (let-exp out-ids out-rands (unbox-vals body substs))
+               (let ([id (car in-ids)] [rand (car in-rands)])
+                 (cond [(var-unboxed-ctype id body rand) =>
+                        (lambda (ctype)
+                          (let ([cid (cvar-id (id->symbol id) ctype)])
+                            (loop (cdr in-ids) (cdr in-rands) 
+                                  (cons cid out-ids) (cons rand out-rands)
+                                  (cons (cons id (var-exp cid)) substs))))]
+                       [else (loop (cdr in-ids) (cdr in-rands)
+                                   (cons id out-ids) (cons rand out-rands) substs)]))))]
+        [primapp-exp (effect prim rands)
+         (primapp-exp effect prim (map uv rands))]
+        [app-exp (rator rands)
+         (app-exp (uv rator) (map uv rands))]
+        [fix-exp (ids lams body)
+         (fix-exp ids (map uv lams) (uv body))]
+        [lambda-exp (ids body)
+         (let loop ([in-ids ids] [out-ids '()] [out-rands '()] [substs substs])
+           (if (null? in-ids)
+               (if (null? out-ids)
+                   (lambda-exp ids (uv body))
+                   (lambda-exp ids 
+                     (let-exp out-ids out-rands (unbox-vals body substs))))
+               (let ([id (car in-ids)])
+                 (cond [(and (> (var-reference-count id body) 1)
+                          (var-unboxed-ctype-in-exp id body)) =>
+                        (lambda (ctype)
+                          (let ([cid (cvar-id (id->symbol id) ctype)])
+                            (loop (cdr in-ids) (cons cid out-ids) 
+                                  (cons (var-exp id) out-rands)
+                                  (cons (cons id (var-exp cid)) substs))))]
+                       [else (loop (cdr in-ids) out-ids out-rands substs)]))))]))
+    
+    (uv exp)) 
+     
+  (unbox-vals exp '()))
+

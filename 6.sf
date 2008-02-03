@@ -1,0 +1,847 @@
+
+; #F, part 6:  SFC C code formatter and code generator for stack functions
+
+; Copyright (C) 2007 by Sergei Egorov, All Rights Reserved.
+;
+; This code is derived from the "90 minute Scheme to C compiler" presented at the
+; Montreal Scheme/Lisp User Group on October 20, 2004. The original code was
+; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
+
+(load "0.sf")
+(load "3.sf")
+
+
+;------------------------------------------------------------------------------
+
+; common string functions
+
+(define (string-starts-with? str sstr)
+  (let ([sl (string-length str)] [ssl (string-length sstr)])
+    (and (<= ssl sl)
+      (let loop ([i 0])
+        (or (>= i ssl)
+            (and (char=? (string-ref str i) (string-ref sstr i))
+                 (loop (+ i 1))))))))
+                 
+(define (string-ends-with? str sstr)
+  (let ([sl (string-length str)] [ssl (string-length sstr)])
+    (and (<= ssl sl)
+      (let loop ([i 0])
+        (or (>= i ssl)
+            (and (char=? (string-ref str (- sl i 1)) (string-ref sstr (- ssl i 1)))
+                 (loop (+ i 1))))))))
+
+(define (string-contains-at? str pos sstr)
+  (let ([sl (string-length str)] [ssl (string-length sstr)])
+    (and (<= ssl (- sl pos))
+      (let loop ([i 0])
+        (or (>= i ssl)
+            (and (char=? (string-ref str (+ pos i)) (string-ref sstr i))
+                 (loop (+ i 1))))))))
+
+(define (string-contains? str sstr)
+  (let ([sl (string-length str)] [ssl (string-length sstr)])
+    (and (<= ssl sl)
+      (let loop ([pos 0])
+        (and (<= ssl (- sl pos))
+          (or (string-contains-at? str pos sstr)
+              (loop (+ pos 1))))))))
+
+(define (substring-before str sstr)
+  (let ([sl (string-length str)] [ssl (string-length sstr)])
+    (and (<= ssl sl)
+      (let loop ([pos 0])
+        (and (<= ssl (- sl pos))
+          (if (string-contains-at? str pos sstr)
+              (substring str 0 pos)
+              (loop (+ pos 1))))))))
+
+(define (substring-after str sstr)
+  (let ([sl (string-length str)] [ssl (string-length sstr)])
+    (and (<= ssl sl)
+      (let loop ([pos 0])
+        (and (<= ssl (- sl pos))
+          (if (string-contains-at? str pos sstr)
+              (substring str (+ pos ssl) sl)
+              (loop (+ pos 1))))))))
+
+(define (substring-before-suffix str sstr)
+  (if (string-ends-with? str sstr)
+      (substring str 0 (- (string-length str) (string-length sstr)))
+      #f))
+
+(define (substring-after-prefix str sstr)
+  (if (string-starts-with? str sstr)
+      (substring str (string-length sstr) (string-length str))
+      #f))
+    
+(define (string-member? c str)
+  (let lookup ([pos 0] [end (string-length str)])
+    (and (< pos end)
+         (or (char=? c (string-ref str pos))
+             (lookup (+ 1 pos) end))))) 
+
+(define (string-member-ci? c str)
+  (let lookup ([pos 0] [end (string-length str)])
+    (and (< pos end)
+         (or (char-ci=? c (string-ref str pos))
+             (lookup (+ 1 pos) end)))))
+           
+(define (string-span str cs)
+  (let loop ([pos 0] [end (string-length str)])
+    (cond [(>= pos end) pos]
+          [(string-member? (string-ref str pos) cs)
+           (loop (+ 1 pos) end)]
+          [else pos])))
+
+(define (string-span-ci str cs)
+  (let loop ([pos 0] [end (string-length str)])
+    (cond [(>= pos end) pos]
+          [(string-member-ci? (string-ref str pos) cs)
+           (loop (+ 1 pos) end)]
+          [else pos])))
+
+(define (substring-after-span str cs)
+  (let ([n (string-span str cs)])
+    (if (zero? n)
+        str
+        (substring str n (string-length str))))) 
+
+(define (string-reverse str)
+  (list->string (reverse (string->list str))))
+
+(define (string-upcase str)
+  (list->string (map char-upcase (string->list str))))
+  
+
+;------------------------------------------------------------------------------
+
+; code generator string functions
+
+(define (primexp-ctype prim) ;=> "ctype" or #f
+  (let ([s (substring-before prim "(")])
+    (and s 
+      (= (string-length s) 
+         (string-span-ci s "abcdefghijklmnopqrstuvwxyz0123456789_"))
+      s)))
+
+(define (prim-ctype prim) ;=> "ctype" or #f
+  (let* ([s (substring-after prim "$return")]
+         [s (and s (substring-after-span s " "))])
+     (or (and s (primexp-ctype s))
+         (primexp-ctype prim))))
+
+(define (prim-cexp? prim)
+  (and (not (string-contains? prim "$return"))
+       (primexp-ctype prim)))
+
+(define (typecheck-prim-ctype prim) ;=> "ctype" or #f
+  (let* ([s (substring-after prim "bool(is_")]
+         [s (and s (substring-before-suffix s "_$arg)"))])
+     (and s
+      (= (string-length s) 
+         (string-span-ci s "abcdefghijklmnopqrstuvwxyz0123456789_"))
+      s)))
+
+(define (typeassert-prim-ctype prim) ;=> "ctype" or #f
+  (let* ([s (substring-after prim "void(assert(is_")]
+         [s (and s (substring-before-suffix s "_$arg))"))])
+     (and s
+      (= (string-length s) 
+         (string-span-ci s "abcdefghijklmnopqrstuvwxyz0123456789_"))
+      s)))
+
+(define (c-format-prim-text* ltext rtext fmt all-args)
+  (define (expect-arg args)
+    (if (null? args) (c-error "missing argument in format")))
+  (define (match-name lst chars)
+    (let loop ([lst lst] [chars chars])
+      (cond [(and (null? chars) (null? lst)) lst]
+            [(and (pair? lst) (not (char? (car lst)))) #f] 
+            [(and (null? chars) (pair? lst) (char-alphabetic? (car lst))) #f]
+            [(and (null? chars) (pair? lst) (char-numeric? (car lst))) #f]
+            [(null? chars) lst]
+            [(null? lst) #f]
+            [(char=? (car lst) (car chars))
+             (loop (cdr lst) (cdr chars))]
+            [else #f]))) 
+  (define (loop flist args buf k)
+    (cond [(null? flist) (k '() args (reverse buf))]
+          [(not (char=? (car flist) #\$))
+           (loop (cdr flist) args (cons (car flist) buf) k)]
+          [(null? (cdr flist)) (c-error "missing format directive" fmt)]
+          [(match-name (cdr flist) '(#\a #\r #\g #\c)) =>
+           (lambda (flist1)
+             (loop flist1 args (cons (length all-args) buf) k))]
+          [(match-name (cdr flist) '(#\a #\r #\g #\# #\- #\1)) => ; readability hack
+           (lambda (flist1)
+             (loop flist1 args 
+               (cons (- (length all-args) (length args) 1) buf) k))]
+          [(match-name (cdr flist) '(#\a #\r #\g #\# #\+ #\1)) => ; readability hack
+           (lambda (flist1)
+             (loop flist1 args 
+               (cons (- (length all-args) (length args) -1) buf) k))]
+          [(match-name (cdr flist) '(#\a #\r #\g #\#)) =>
+           (lambda (flist1)
+             (loop flist1 args 
+               (cons (- (length all-args) (length args)) buf) k))]
+          [(match-name (cdr flist) '(#\a #\r #\g)) =>
+           (lambda (flist1) 
+             (expect-arg args)
+             (let* ([ctype (and (string? (car args)) (primexp-ctype (car args)))]
+                    [tchars (and ctype (reverse (string->list (string-append ctype "_from_"))))]
+                    [vchars (and ctype (reverse (string->list "void_from_")))]
+                    [tbuf (and tchars (match-name buf tchars))] 
+                    [vbuf (and vchars (match-name buf vchars))]
+                    [sbuf (or tbuf vbuf)] 
+                    [sarg (and sbuf (substring-after (car args) (string-append ctype "(")))]
+                    [ssarg (and sarg (substring-after-prefix (substring-after-span sarg "01234567890") ", "))])
+               (if (and sbuf (or ssarg sarg)) ; make the code more readable
+                   (loop flist1 (cdr args) 
+                     (cons (or ssarg sarg) (cons (if vbuf "(void)(" #\() sbuf)) k)
+                   (loop flist1 (cdr args) (cons (car args) buf) k))))]
+          [(match-name (cdr flist) '(#\a)) =>
+           (lambda (flist1) 
+             (expect-arg args)
+             (loop flist1 (cdr args) (cons (car args) buf) k))]
+          [(match-name (cdr flist) '(#\l #\i #\v #\e)) =>
+           (lambda (flist1) (loop flist1 args (cons ltext buf) k))]
+          [(match-name (cdr flist) '(#\r #\e #\t #\u #\r #\n)) =>
+           (lambda (flist1)
+             (let skipws ([flist1 flist1])
+               (if (or (null? flist1) (not (char-whitespace? (car flist1))))
+                   (let* ([fstr (list->string flist1)] [ctype (primexp-ctype fstr)]
+                          [tchars (and ctype (reverse (string->list (string-append ctype "_from_"))))]
+                          [vchars (and ctype (reverse (string->list "void_from_")))]
+                          [rtb (and ctype (string? rtext) (reverse (string->list rtext)))]
+                          [trtb (and rtb tchars (match-name rtb tchars))] 
+                          [vrtb (and rtb vchars (match-name rtb vchars))]
+                          [srtb (or trtb vrtb)] 
+                          [sarg (and srtb (substring-after fstr (string-append ctype "(")))]
+                          [ssarg (and sarg (substring-after-prefix (substring-after-span sarg "01234567890") ", "))])   
+                     (if (and srtb (or ssarg sarg)) ; make the code more readable
+                         (loop (string->list (or ssarg sarg)) args 
+                           (cons (if vrtb "(void)(" #\() (cons (reverse srtb) buf)) k)     
+                         (loop flist1 args (cons rtext buf) k)))
+                   (skipws (cdr flist1)))))]
+          [(char=? (cadr flist) #\$)
+           (loop (cddr flist) args (cons "$" buf) k)]
+          [(char=? (cadr flist) #\})
+           (k (cddr flist) args (reverse buf))]
+          [(char=? (cadr flist) #\{) 
+           (if (null? args)
+             (loop (cddr flist) '(? ? ? ? ? ? ? ? ? ?) '()
+               (lambda (flist2 args2 text)
+                 (loop flist2 '() buf k)))
+             (loop (cddr flist) args '()
+               (lambda (flist2 args2 text)
+                 (if (eq? args args2)
+                   (c-error "infinite loop in format")) 
+                 (loop flist args2 (cons text buf) k))))]
+          [else (c-error "unrecognized format directive " (list->string flist))]))
+  (loop (string->list fmt) all-args '()
+    (lambda (flist2 args2 text)        
+      (if (pair? args2) (c-error "unused arguments in format" args2))
+      text)))    
+
+(define-syntax c-format-prim-text 
+  (syntax-rules () [(_ l r f a ...) (c-format-prim-text* l r f (list a ...))]))
+
+(define (c-stringify-text text)
+  (define (flatten text)
+    (cond [(null? text) text]
+          [(string? text) (list text)]
+          [(integer? text) (list (number->string text))]
+          [(char? text) (list (string text))]
+          [(symbol? text) (list (symbol->string text))]
+          [(and (list? text) (andmap char? text)) (list (list->string text))]
+          [(pair? text) (append (flatten (car text)) (flatten (cdr text)))]
+          [else (c-error "can't flatten???" text)]))
+  (string-append* (flatten text)))
+  
+(define (c-format-prim* ltext rtext fmt all-args)
+  (c-stringify-text
+    (c-format-prim-text* ltext rtext fmt all-args)))
+
+(define-syntax c-format-prim 
+  (syntax-rules () [(_ l r f a ...) (c-format-prim* l r f (list a ...))]))
+
+(define (c-format-primexp* ltext fmt all-args)
+  (c-format-prim* ltext "<no result info>" fmt all-args))
+
+(define-syntax c-format-primexp 
+  (syntax-rules () [(_ l f a ...) (c-format-primexp* l f (list a ...))]))
+
+(define (c-format* fmt all-args)
+  (c-format-prim* "### no live info ###" "### no result info ###" fmt all-args))
+
+(define-syntax c-format 
+  (syntax-rules () [(_ f a ...) (c-format* f (list a ...))]))
+
+(define (c-mangle str pfx)
+  (define (validate s) ; make sure it's admissible as C identifier
+    (string-append pfx s)) ; ToDo: make an effort here
+  (let loop ([lst (string->list str)] [text '()])
+    (cond [(null? lst) 
+           (validate (c-stringify-text (reverse text)))]
+          [(or (char-alphabetic? (car lst)) (char-numeric? (car lst)))
+           (loop (cdr lst) (cons (car lst) text))]
+          [else
+           (let* ([s (number->string (char->integer (car lst)) 16)]
+                  [s (if (< (string-length s) 2) (string-append "0" s) s)])
+             (loop (cdr lst) (cons (list "_" (string-upcase s)) text)))])))
+
+(define (c-argref-ctype fmt n) ;=> "ctype" or #f 
+  (let loop ([s fmt] [n n])
+    (let ([bd (substring-before s "$")] [ad (substring-after s "$")])
+      (cond [(or (not bd) (not ad)) #f]
+            [(string-starts-with? ad "}") #f]
+            [(string-starts-with? ad "{") (loop ad 0)]
+            [(string-starts-with? ad "argc") (loop ad n)]
+            [(string-starts-with? ad "arg#") (loop ad n)]
+            [(not (string-starts-with? ad "arg")) (loop ad n)]
+            [(> n 0) (loop ad (- n 1))]
+            [(not (string-ends-with? bd "_from_")) #f]
+            [else (let ([s (string-reverse (substring bd 0 (- (string-length bd) 6)))])
+                    (string-reverse 
+                       (substring s 0 (string-span-ci s "abcdefghijklmnopqrstuvwxyz0123456789_"))))]))))
+            
+(define (c-undecorate-alvar sym)
+  (let ([str (symbol->string sym)])
+    (if (string-starts-with? str "_")
+        (let ([sstr (substring-after str "_")])
+          (or (substring-before sstr "_") sstr))
+        str)))
+
+(define (display-text o)
+   (cond [(null? o) ""]
+         [(pair? o) (display-text (car o)) (display-text (cdr o))]
+         [(vector? o) (display-text (vector->list o))]
+         [else (display o)]))
+
+(define (path-strip-directory filename)
+  (let loop ([l (reverse (string->list filename))] [r '()])
+    (cond [(null? l) (list->string r)]
+          [(memv (car l) '(#\\ #\/ #\:)) (list->string r)]
+          [else (loop (cdr l) (cons (car l) r))])))
+
+(define (path-strip-extension filename)
+  (let ([l (reverse (string->list filename))])
+    (let ([r (memv #\. l)])
+      (if r (list->string (reverse (cdr r))) filename))))
+
+(define (cleanup-c-code! str)
+  ; destructive version -- modifies str in-place
+  (let ([len (string-length str)])
+    (let loop ([i 0])
+      (if (>= i len) 
+          str
+          (let ([c (string-ref str i)])
+            (cond
+              [(char=? c #\") str]
+              [(and (< (+ i 8) len)
+                 (char=? c #\=)
+                 (char=? (string-ref str (+ i 1)) #\space)
+                 (char=? (string-ref str (+ i 2)) #\()
+                 (char=? (string-ref str (+ i 3)) #\r)
+                 (char=? (string-ref str (+ i 4)) #\[)
+                 (char-numeric? (string-ref str (+ i 5)))
+                 (char=? (string-ref str (+ i 6)) #\])
+                 (char=? (string-ref str (+ i 7)) #\))
+                 (char=? (string-ref str (+ i 8)) #\;))
+               (string-set! str (+ i 2) #\r)
+               (string-set! str (+ i 3) #\[)
+               (string-set! str (+ i 4) (string-ref str (+ i 5)))
+               (string-set! str (+ i 5) #\])
+               (string-set! str (+ i 6) #\;)
+               (string-set! str (+ i 7) #\space)
+               (string-set! str (+ i 8) #\space)
+               (loop (+ i 9))]
+              [(and (< (+ i 13) len)
+                 (char=? c #\r)
+                 (char=? (string-ref str (+ i 1)) #\[)
+                 (char-numeric? (string-ref str (+ i 2)))
+                 (char=? (string-ref str (+ i 3)) #\])
+                 (char=? (string-ref str (+ i 4)) #\space)
+                 (char=? (string-ref str (+ i 5)) #\=)
+                 (char=? (string-ref str (+ i 6)) #\space)
+                 (char=? (string-ref str (+ i 7)) #\()
+                 (char=? (string-ref str (+ i 8)) #\r)
+                 (char=? (string-ref str (+ i 9)) #\[)
+                 (char=? (string-ref str (+ i 10)) (string-ref str (+ i 2)))
+                 (char=? (string-ref str (+ i 11)) #\])
+                 (char=? (string-ref str (+ i 12)) #\))
+                 (char=? (string-ref str (+ i 13)) #\;))
+               (string-set! str i #\/)
+               (string-set! str (+ i 1) #\*)
+               (string-set! str (+ i 2) #\space)
+               (string-set! str (+ i 3) #\r)
+               (string-set! str (+ i 4) #\[)
+               (string-set! str (+ i 5) (string-ref str (+ i 10)))
+               (string-set! str (+ i 6) #\])
+               (string-set! str (+ i 7) #\space)
+               (string-set! str (+ i 8) #\*)
+               (string-set! str (+ i 9) #\/)
+               (string-set! str (+ i 10) #\space)
+               (string-set! str (+ i 11) #\space)
+               (string-set! str (+ i 12) #\space)
+               (string-set! str (+ i 13) #\space)
+               (loop (+ i 14))]
+              [else (loop (+ i 1))]))))))
+
+
+;------------------------------------------------------------------------------
+
+; code fragments
+
+
+(define code-standard-includes 
+"#include <stdio.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <assert.h>
+")
+
+(define code-standard-definitions 
+"#define REGS_SIZE 5000
+
+typedef ptrdiff_t obj;        /* pointers are this size, lower bit zero */
+typedef ptrdiff_t cxoint_t;   /* same thing, used as integer */
+typedef struct {              /* type descriptor */
+  const char *tname;          /* name (debug) */
+  void (*free)(void*);        /* deallocator */
+} cxtype_t;
+
+#define notobjptr(o)          (((char*)(o) - (char*)cxg_heap) & cxg_hmask)
+#define isobjptr(o)           (!notobjptr(o))
+#define notaptr(o)            ((o) & 1)
+#define isaptr(o)             (!notaptr(o))
+
+#define obj_from_obj(o)       (o)
+#define obj_from_objptr(p)    ((obj)(p))
+#define obj_from_size(n)      (((cxoint_t)(n) << 1) | 1)
+
+#define objptr_from_objptr(p) (p)
+#define objptr_from_obj(o)    ((obj*)(o))
+
+#define size_from_obj(o)      ((int)((o) >> 1))
+
+#define obj_from_case(n)      obj_from_objptr(cases+(n))
+#define case_from_obj(o)      (objptr_from_obj(o)-cases)
+#define obj_from_ktrap()      obj_from_size(0x5D56F806)
+#define obj_from_void(v)      ((void)(v), obj_from_size(0x6F56DF77))
+
+#define bool_from_obj(o)      (o)
+#define bool_from_bool(b)     (b)
+#define bool_from_size(s)     (s)
+
+#define void_from_void(v)     (void)(v)
+#define void_from_obj(o)      (void)(o)
+
+#define rreserve(m)           if (r > cxg_regs + REGS_SIZE - 2*(m)) r = cxm_rgc(r, r+(m))
+#define hpushptr(p, pt, l)    (hreserve(2, l), *--hp = (obj)(p), *--hp = (obj)(pt), (obj)(hp+1))   
+#define hbsz(s)               ((s) + 1) /* 1 extra word to store block size */
+#define hreserve(n, l)        ((hp < cxg_heap + (n)) ? hp = cxm_hgc(r, r+(l), hp, n) : hp)
+#define hendblk(n)            (*--hp = obj_from_size(n), (obj)(hp+1))
+#define hblklen(p)            size_from_obj(((obj*)(p))[-1])
+#define hblkref(p, i)         (((obj*)(p))[i])
+
+typedef obj (*cxhost_t)(obj);
+typedef struct cxroot_tag {
+  int globc; obj **globv;
+  struct cxroot_tag *next;
+} cxroot_t;
+
+extern obj *cxg_heap;
+extern obj *cxg_hp;
+extern cxoint_t cxg_hmask;
+extern cxroot_t *cxg_rootp;
+extern obj *cxm_rgc(obj *regs, obj *regp);
+extern obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs);
+extern obj cxg_regs[REGS_SIZE];
+extern void *cxm_cknull(void *p, char *msg);
+#ifndef NDEBUG
+extern int cxg_rc;
+#endif
+")
+
+(define code-host-prologue 
+"static obj host(obj pc)
+{
+  register obj *r = cxg_regs;
+  register obj *hp = cxg_hp;
+#ifndef NDEBUG
+  register int rc = cxg_rc;
+#endif
+  jump: 
+  switch (case_from_obj(pc)) {
+
+")
+
+(define code-host-epilogue 
+"default: /* inter-host call */
+    cxg_hp = hp;
+    cxm_rgc(r, r + MAX_LIVEREGS);
+#ifndef NDEBUG
+    cxg_rc = rc;
+#endif
+    return pc;
+  }
+}
+")
+
+(define code-module "
+void MODULE(void)
+{
+  obj pc;
+  if (!root.next) {
+    root.next = cxg_rootp;
+    cxg_rootp = &root;
+    LOAD();
+    pc = obj_from_case(0);
+    assert((cxg_rc = 0, 1));
+    while (pc) pc = (*(cxhost_t*)pc)(pc); 
+    assert(cxg_rc == 2);
+  }
+}
+")
+
+(define code-runtime "
+#define HEAP_SIZE 131072 /* 2^17 */
+
+obj *cxg_heap = NULL;
+cxoint_t cxg_hmask = 0;
+obj *cxg_hp = NULL;
+cxroot_t *cxg_rootp = NULL;
+obj cxg_regs[REGS_SIZE];
+#ifndef NDEBUG
+int cxg_rc = 0;
+#endif
+
+static obj *heap2 = NULL;
+static size_t hsize = 0; 
+static cxoint_t hmask2 = 0;
+static int gccount = 0, bumpcount = 0;
+
+#define notfwdptr(o) (((char*)(o) - (char*)heap2) & hmask2)
+
+static void toheap2(obj* p)
+{
+  obj o = *p, *op, fo, *fop;
+  if (notobjptr(o)) return;
+  fo = (op = objptr_from_obj(o))[-1]; assert(fo);
+  if (notaptr(fo)) {
+    fop = op + size_from_obj(fo); while (fop >= op) *--cxg_hp = *--fop;
+    *p = *fop = obj_from_objptr(cxg_hp+1);
+  } else if (notfwdptr(fo)) {
+    *--cxg_hp = *op--; *--cxg_hp = *op;
+    *p = *op = obj_from_objptr(cxg_hp+1);
+  } else *p = fo;
+}
+
+static void finalize(obj *hp, obj *end)
+{
+  while (hp < end) {
+    obj fo = *hp++; assert(fo);
+    if (notaptr(fo)) hp += size_from_obj(fo);
+    else if (notfwdptr(fo)) ((cxtype_t*)fo)->free((void*)*hp++);
+    else if (notaptr(fo = objptr_from_obj(fo)[-1])) hp += size_from_obj(fo);
+    else ++hp;
+  } assert(hp == end);
+}
+
+static size_t relocate(obj *regs, obj *regp, obj *end2, obj *end1) 
+{
+  obj *p, *hp1 = cxg_hp; cxroot_t *pr; 
+  cxg_hp = end2; if (!cxg_heap) return 0;
+  for (p = regs; p < regp; ++p) toheap2(p);
+  for (pr = cxg_rootp; pr; pr = pr->next) {
+    obj **pp = pr->globv; int c = pr->globc;
+    while (c-- > 0) toheap2(*pp++);
+  }
+  for (p = end2; p > cxg_hp; --p) toheap2(p-1);
+  if (end1) finalize(hp1, end1);
+  return end2 - cxg_hp;
+}
+
+obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs) 
+{
+  obj *p = cxg_heap; cxg_hp = hp; ++gccount;
+  if (hsize < (needs += relocate(regs, regp, heap2 + hsize, p + hsize))) {
+    size_t s = HEAP_SIZE; while (s < needs) s *= 2;
+    hmask2 = 1 | ~(s*sizeof(obj)-1);
+    if (!(p = realloc(cxg_heap, s*sizeof(obj)))) { perror(\"alloc[h]\"); exit(2); }
+    cxg_heap = heap2; heap2 = p; relocate(regs, regp, heap2 + s, 0);
+    if (!(p = realloc(cxg_heap, s*sizeof(obj)))) { perror(\"alloc[h]\"); exit(2); }
+    hsize = s; cxg_hmask = hmask2; ++bumpcount;
+  }
+  cxg_heap = heap2; heap2 = p;
+  return cxg_hp;
+}
+
+obj *cxm_rgc(obj *regs, obj *regp) 
+{
+  obj *p = cxg_regs;
+  assert(regp <= cxg_regs + REGS_SIZE);
+  while (regs < regp) *p++ = *regs++;
+  return cxg_regs;
+}
+
+void *cxm_cknull(void *p, char *msg)
+{
+  if (!p) { 
+    perror(msg); exit(2); 
+  }
+  return p;
+}
+")
+
+(define code-main "
+int main(int argc, char **argv) {
+  int res; obj pc;
+  obj retcl[1] = { 0 }; 
+  MODULE();
+  cxg_regs[0] = cx_main;
+  cxg_regs[1] = (obj)retcl;
+  cxg_regs[2] = (obj)argv;
+  assert(cxg_rc = 3);
+  pc = objptr_from_obj(cx_main)[0];
+  while (pc) pc = (*(cxhost_t*)pc)(pc); 
+  assert(cxg_rc == 3);
+  res = (cxg_regs[2] != 0); 
+  /* fprintf(stderr, \"%d collections, %d reallocs\\n\", gccount, bumpcount); */
+  return res; 
+}
+")
+
+
+;------------------------------------------------------------------------------
+
+; Code generation for stack functions
+
+(define (stack-function-code-generate self-id input-exp)
+
+  (define (gvar-id->c-name id)
+    (c-mangle (symbol->string (id->symbol id)) "cxs_"))
+
+  (define (gcvar-id->c-name id)
+    (c-mangle (symbol->string (id->symbol id)) "cx_"))
+
+  (define (cvar-id->c-name id)
+    (c-mangle (c-undecorate-alvar (id->symbol id))
+      (string-append "v" (number->string (id->ts id))  "_")))
+
+  (define (var-id->c-name id)
+    (if (global-id? id)
+        (gcvar-id->c-name id)
+        (cvar-id->c-name id)))
+
+  (define (gen-label-c-name)
+    (string-append "l" (number->string (timestamp))))
+        
+  (define label-alist '())  ; ((id "label" rand-id ...) ...)
+
+  (define (id->label id)
+    (cond [(assq id label-alist) => cadr]
+          [else (c-error "id->label: id not registered" id)]))
+
+  (define (id->rand-ids id)
+    (cond [(assq id label-alist) => cddr]
+          [else (c-error "id->rand-ids: id not registered" id)]))
+
+  (define (register-label! id ids)
+    (define (id->l id)
+      (let ([l (c-mangle (c-undecorate-alvar (id->symbol id)) "s_")])
+        (if (ormap (lambda (id&l) (string=? l (cadr id&l))) label-alist)
+            (string-append l "_v" (number->string (id->ts id)))
+            l)))
+    (let ([l (id->l id)]) 
+      (set! label-alist 
+        (cons (cons id (cons l ids)) 
+          label-alist))))
+
+  (define (cg-cexp? exp)
+    (variant-case exp
+      [var-exp (id) #t]
+      [if-exp (test-exp then-exp else-exp)
+       (andapp cg-cexp? test-exp then-exp else-exp)]
+      [degenerate-let-exp (body)
+       (cg-cexp? body)]
+      [let-exp (ids rands body) #f] ; can't make let into C expr
+      [fix-exp (ids lams body) #f] ; ditto
+      [app-exp (rator rands) ; recursive call
+       (andmap cg-cexp? rands)]
+      [primapp-exp (effect prim rands)
+       (and (prim-cexp? prim) (andmap cg-cexp? rands))]))
+
+  (define (cg-contains-tail-call? exp)
+    (variant-case exp
+      [var-exp (id) #f]
+      [if-exp (test-exp then-exp else-exp)
+       (orapp cg-contains-tail-call? then-exp else-exp)]
+      [degenerate-let-exp (body)
+       (cg-contains-tail-call? body)]
+      [let-exp (ids rands body) 
+       (cg-contains-tail-call? body)]
+      [fix-exp (ids lams body)
+       (or (cg-contains-tail-call? body)
+         (ormap cg-contains-tail-call?
+           (map lambda-exp->body lams)))]
+      [app-exp (rator rands) #t]
+      [primapp-exp (effect prim rands) #f]))
+  
+  (define (cg-cexp exp)
+    (variant-case exp
+      [var-exp (id)
+       (string-append "obj(" (string-append (var-id->c-name id) ")"))]
+      [if-exp (test-exp then-exp else-exp)
+       (c-format "obj(bool_from_$arg ? obj_from_$arg : obj_from_$arg)"
+          (cg-cexp test-exp) (cg-cexp then-exp) (cg-cexp else-exp))]
+      [degenerate-let-exp (body) 
+       (cg-cexp body)]
+      [app-exp (rator rands) ; recursive call
+       (list "obj(" (gvar-id->c-name (var-exp->id rator)) "("
+         (let ([l (map (lambda (exp) 
+                    (list ", " (c-format "obj_from_$arg" (cg-cexp exp)))) 
+                    rands)])
+           (if (null? l) l (cons (cadar l) (cdr l)))) "))")] 
+      [primapp-exp (effect prim rands)
+       (c-format-primexp* "<no cx regs here!>" prim 
+         (map cg-cexp rands))]))
+
+
+  (define (code-gen-body exp tgt)
+
+    (define (cg-let wrap-all? rands tgt make-body)
+      (let loop ([rands rands] [out-rands '()] [ids '()] [exps '()])
+        (if (null? rands)
+            (cg-body (let-exp ids exps (make-body (reverse out-rands))) tgt)
+            (let ([rand (car rands)] [rands (cdr rands)])
+              (if (and (not wrap-all?) (cg-cexp? rand))
+                  (loop rands (cons rand out-rands) ids exps)
+                  (let ([id (lexical-id 'tmp)])
+                    (loop rands (cons (var-exp id) out-rands) 
+                      (cons id ids) (cons rand exps))))))))
+                      
+    (define (cg-body exp tgt)
+      (if (and (cg-cexp? exp) (not (cg-contains-tail-call? exp)))
+          (list "\n    " tgt (c-format " obj_from_$arg" (cg-cexp exp)) ";")
+          (variant-case exp
+            [degenerate-let-exp (body) 
+             (cg-body body tgt)]
+            [if-exp (test-exp then-exp else-exp)
+             (if (cg-cexp? test-exp)
+                 (list (c-format "\n  if (bool_from_$arg) {" (cg-cexp test-exp))
+                       (cg-body then-exp tgt)
+                       "\n  } else {"  
+                       (cg-body else-exp tgt)  
+                       "\n  }")
+                 (let ([test-id (lexical-id 'tmp)])
+                   (cg-body 
+                     (let-exp (list test-id) (list test-exp)
+                       (if-exp (var-exp test-id) then-exp else-exp)) tgt)))]
+            [begin-exp (exp1 exp2)
+             (list (cg-body exp1 "(void)")
+                   (cg-body exp2 tgt))]
+            [let-exp (ids rands body)
+             (list "\n  { /* let */"
+               (map (lambda (id exp)
+                      (let ([name (cvar-id->c-name id)])
+                        (if (cg-cexp? exp)
+                            (list "\n    obj " name 
+                              (c-format " = obj_from_$arg;" (cg-cexp exp)))
+                            (list "\n    obj " name ";"))))  
+                    ids rands)
+               (map (lambda (id exp)
+                      (let ([name (cvar-id->c-name id)])
+                        (if (cg-cexp? exp)
+                            '()
+                            (cg-body exp (string-append name " =")))))  
+                    ids rands)
+               (cg-body body tgt)
+               "\n  }")]
+            [loop-exp (id lam rands) ; application of self-recursive fix-exp
+             ; move application into the body of the loop and compile as fix-exp
+             (cg-body (fix-exp (list id) (list lam) (app-exp (var-exp id) rands)) tgt)]
+            [fix-exp (ids lams body)
+             (let ([done-label (if (string=? tgt "return") #f (gen-label-c-name))])
+               (for-each 
+                 (lambda (id lam) 
+                   (register-label! id (lambda-exp->ids lam))) 
+                 ids lams)
+               (list "\n  { /* letrec */"
+                 (map (lambda (lam)
+                        (map (lambda (id)
+                               (list "\n    obj " (cvar-id->c-name id) ";"))
+                             (lambda-exp->ids lam)))
+                      lams)
+                 (cg-body body tgt)
+                 (if done-label (list "\n    goto " done-label ";") '())
+                 (map (lambda (id lam)
+                        (list
+                          (list "\n  " (id->label id) ":")
+                           ; since all lambdas are tail-called from body 
+                           ; we can use tgt of the fix expression
+                          (cg-body (lambda-exp->body lam) tgt)
+                          (if done-label (list "\n    goto " done-label ";") '()))) 
+                      ids lams)
+                 (if done-label (list "\n  " done-label ": ;") '()) 
+                 "\n  }"))]
+            [primapp-exp (effect prim rands)
+             (if (andmap cg-cexp? rands)
+                 (if (prim-cexp? prim)
+                     (list "\n    " tgt " " 
+                       (c-format-prim* "<no live reg info>" "<no result info>"
+                         prim (map cg-cexp rands)) ";")
+                     (list "\n    " 
+                       (c-format-prim* "<no live reg info>" 
+                         (string-append tgt " obj_from_")
+                         prim (map cg-cexp rands)) ";"))
+                 (cg-let #f rands tgt 
+                   (lambda (rands) (primapp-exp effect prim rands))))]
+            [app-exp (rator rands) ; recursive call
+             (let* ([rator-id (var-exp->id rator)] 
+                    [rand-ids (id->rand-ids rator-id)])
+               (if (and (andmap var-exp? rands)
+                     (null? (intersectionq (map var-exp->id rands) rand-ids)))
+                   (cond [(string=? tgt "return")
+                          (list "\n    /* tail call */"
+                            (map (lambda (rand-id rand)
+                                   (list "\n    " (cvar-id->c-name rand-id)
+                                         (c-format " = obj_from_$arg;" (cg-cexp rand))))
+                                 rand-ids rands)
+                            "\n    goto " (id->label rator-id) ";")]
+                         [else
+                          (list "\n    " tgt 
+                            (c-format " obj_from_$arg;" (cg-cexp exp)))])
+                   (cg-let #t rands tgt 
+                     (lambda (rands) (app-exp rator rands)))))])))
+    
+    (cg-body exp tgt))
+
+  (variant-case input-exp
+    [degenerate-let-exp (body) 
+     (stack-function-code-generate self-id body)]
+    [lambda-exp (ids body)
+     (register-label! self-id ids)
+     (list "/* " (id->symbol self-id) " */\n"
+       "static obj " (gvar-id->c-name self-id) "("
+       (if (null? ids) "void"
+           (list "obj " (cvar-id->c-name (car ids))
+              (map (lambda (id) (list ", obj " (cvar-id->c-name id)))
+                 (cdr ids))))
+       ")\n"
+       "{ " (if (cg-contains-tail-call? body) 
+                (list "\n  " (id->label self-id) ":") 
+                '())
+        (code-gen-body body "return")
+       "\n}\n")]
+    [else 
+     (c-error "unsuitable exp for stack-function-code-generate: " input-exp)]))
+
+(define (stack-functions-code-generate id&exp-list)
+  (map (lambda (id&exp) 
+         (stack-function-code-generate 
+           (car id&exp) 
+           (beta-substitute (cdr id&exp) #f #f)))
+    id&exp-list))
