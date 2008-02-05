@@ -7,8 +7,8 @@
 ; Montreal Scheme/Lisp User Group on October 20, 2004. The original code was
 ; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
 
-(load "0.sf")
-(load "3.sf")
+#fload "0.sf"
+#fload "3.sf"
 
 
 ;------------------------------------------------------------------------------

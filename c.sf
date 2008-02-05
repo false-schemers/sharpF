@@ -7,14 +7,14 @@
 ; Montreal Scheme/Lisp User Group on October 20, 2004. The original code was
 ; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
 
-(load "0.sf")
-(load "1.sf")
-(load "2.sf")
-(load "3.sf")
-(load "4.sf")
-(load "5.sf")
-(load "6.sf")
-(load "7.sf")
+#fload "0.sf"
+#fload "1.sf"
+#fload "2.sf"
+#fload "3.sf"
+#fload "4.sf"
+#fload "5.sf"
+#fload "6.sf"
+#fload "7.sf"
 
 
 ;------------------------------------------------------------------------------

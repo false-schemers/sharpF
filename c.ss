@@ -78,36 +78,13 @@
     [(_ (id . args) . body) (define (id . args) . body)] 
     [(_ id val) (define id val)]))
     
-    
-; redefine load to skip .sf dependencies when loaded into Chez
-
-(define main-load "c.sf")
-(define do-not-load '("0.sf"))
-(define sub-load-once '("1.sf" "2.sf" "3.sf" "4.sf" "5.sf" "6.sf" "7.sf"))
-
-(set! load
-  (let ([scheme-load load] [loaded '()])
-    (lambda (fname)
-      (cond [(member fname do-not-load)
-             (printf "; sfc module ~s not needed in bootstrap~%" fname)]
-            [(equal? fname main-load)
-             (set! loaded '())
-             (printf "; loading main sfc module ~s~%" fname)
-             (scheme-load fname)
-             (printf "; now you may run~%;  ~s~%; to generate .c files~%"
-               '(sfc "-v" "0.sf" "1.sf" "2.sf" "3.sf" "4.sf" "5.sf" "6.sf" "7.sf" "c.sf"))]
-            [(member fname sub-load-once)
-             (if (member fname loaded)
-                 (printf "; sfc module ~s already loaded~%" fname)
-                 (begin
-                   (printf "; loading sfc module ~s~%" fname)
-                   (set! loaded (cons fname loaded))
-                   (scheme-load fname)))]             
-            [else (scheme-load fname)]))))
 
 (define (argv->list argv) argv)
 
 (define (sfc . args)
   (main (cons "sfc-bootstrap" args)))
 
-(load "c.sf")
+(for-each load '("1.sf" "2.sf" "3.sf" "4.sf" "5.sf" "6.sf" "7.sf" "c.sf"))
+
+(printf "; now you may run~%;  ~s~%; to generate .c files~%"
+ '(sfc "-v" "0.sf" "1.sf" "2.sf" "3.sf" "4.sf" "5.sf" "6.sf" "7.sf" "c.sf"))

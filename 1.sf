@@ -28,7 +28,7 @@
 ; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 ; THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(load "0.sf")
+#fload "0.sf"
 
 ;------------------------------------------------------------------------------
 
@@ -324,8 +324,15 @@
 
 (set-sharp-macro! #\f 
   (lambda (c port) 
-    (read-char port) 
-    #f))
+    (read-char port)
+    ; esl++: #fload hack
+    (let ([c (peek-char port)])
+      (if (and (not (eof-object? c)) (char-alphabetic? c))
+          (let ([name (sub-read-carefully port)])
+            (if (eq? name 'load)
+                (list 'load (sub-read-carefully port))
+                (r-error "unknown syntax #\\f" name port)))
+          #f))))
 
 (set-sharp-macro! #\t 
   (lambda (c port) 

@@ -32,7 +32,7 @@
 ;  o  literals are decomposed into %quote / %const
 ;  o  modified to get rid of variadics, not needed for self-compile
 
-(load "0.sf")
+#fload "0.sf"
 
 ;------------------------------------------------------------------------------
 
