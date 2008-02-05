@@ -341,20 +341,22 @@
 
 (define (main argv)
   (define (about)
-    (printf "sfc build 180~%Usage: sfc [-v] file ...~%"))
+    (printf "sfc build 11q~%Usage: sfc [-vd] file ...~%")
+    #t)
   (define args 
     (cdr (argv->list argv)))
   (if (null? args)
       (about)
-      (for-each 
-        (lambda (fn)
-          (cond
-            [(string=? fn "-v") (set! *showlog* #t)]
-            [(string=? fn "-d") (set! *silent* #f)]
-            [(string=? fn "--help") (about)]
-            [(not (file-exists? fn)) (printf "cannot open input file: ~a~%" fn)]
-            [else 
-             (if *showlog* (printf "compiling ~a~%" fn))
-             (let ([ofn (compile-file fn)])
-               (if *showlog* (printf "~a~%" ofn)))]))
-        args)))
+      (let loop ([args args])
+	(cond
+	 [(null? args) #f]
+	 [(string=? (car args) "-v") (set! *showlog* #t) (loop (cdr args))]
+	 [(string=? (car args) "-d") (set! *silent* #f) (loop (cdr args))]
+	 [(string=? (car args) "--help") (about) #f]
+	 [(not (file-exists? (car args)))
+	  (printf "cannot open input file ~a~%" (car args))
+	  #t]
+	 [else (if *showlog* (printf "compiling ~a:~%" (car args)))
+	       (let ([ofn (compile-file (car args))])
+		 (if *showlog* (printf "  writing ~a~%" ofn)))
+	       (loop (cdr args))]))))
