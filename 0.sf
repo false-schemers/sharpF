@@ -1870,29 +1870,103 @@ void *getnative(obj o, cxtype_t *tp) {
 
 ; equivalence
 
+(%definition "extern int iseqv(obj x, obj y);")
+(%localdef "int iseqv(obj x, obj y) {
+  obj h; if (x == y) return 1;
+  if (!x || !y || notaptr(x) || notaptr(y) || notobjptr(x) || notobjptr(y)) return 0;
+  if ((h = objptr_from_obj(x)[-1]) != objptr_from_obj(y)[-1]) return 0;
+  if (h == (obj)FLONUM_NTAG) return *(flonum_t*)objptr_from_obj(x)[0] == *(flonum_t*)objptr_from_obj(y)[0]; 
+  return 0;
+}")
+
+(%definition "extern obj ismemv(obj x, obj l);")
+(%localdef "obj ismemv(obj x, obj l) {
+  if (!x || notaptr(x) || notobjptr(x)) {
+    for (; l != mknull(); l = cdr(l)) 
+      { if (car(l) == x) return l; }
+  } else if (is_flonum_obj(x)) {
+    flonum_t fx = flonum_from_obj(x); 
+    for (; l != mknull(); l = cdr(l)) 
+      { obj y = car(l); if (is_flonum_obj(y) && fx == flonum_from_obj(y)) return l; }
+  } else { /* for others, memv == memq */
+    for (; l != mknull(); l = cdr(l)) 
+      { if (car(l) == x) return l; }
+  } return 0;
+}")
+
+(%definition "extern obj isassv(obj x, obj l);")
+(%localdef "obj isassv(obj x, obj l) {
+  if (!x || notaptr(x) || notobjptr(x)) {
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l); if (car(p) == x) return p; }
+  } else if (is_flonum_obj(x)) {
+    flonum_t fx = flonum_from_obj(x); 
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l), y = car(p); if (is_flonum_obj(y) && fx == flonum_from_obj(y)) return p; }
+  } else { /* for others, assv == assq */
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l); if (car(p) == x) return p; }
+  } return 0;
+}")
+
+(%definition "extern int isequal(obj x, obj y);")
+(%localdef "int isequal(obj x, obj y) {
+  obj h; int i, n; loop: if (x == y) return 1;
+  if (!x || !y || notaptr(x) || notaptr(y) || notobjptr(x) || notobjptr(y)) return 0;
+  if ((h = objptr_from_obj(x)[-1]) != objptr_from_obj(y)[-1]) return 0;
+  if (h == (obj)FLONUM_NTAG) return *(flonum_t*)objptr_from_obj(x)[0] == *(flonum_t*)objptr_from_obj(y)[0]; 
+  if (h == (obj)STRING_NTAG) return strcmp(stringchars(x), stringchars(y)) == 0; 
+  if (isaptr(h) || !(n = size_from_obj(h)) || hblkref(x, 0) != hblkref(y, 0)) return 0;
+  for (i = 1; i < n-1; ++i) if (!isequal(hblkref(x, i), hblkref(y, i))) return 0;
+  if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 0; 
+}")
+
+(%definition "extern obj ismember(obj x, obj l);")
+(%localdef "obj ismember(obj x, obj l) {
+  if (!x || notaptr(x) || notobjptr(x)) {
+    for (; l != mknull(); l = cdr(l)) 
+      { if (car(l) == x) return l; }
+  } else if (is_flonum_obj(x)) {
+    flonum_t fx = flonum_from_obj(x); 
+    for (; l != mknull(); l = cdr(l)) 
+      { obj y = car(l); if (is_flonum_obj(y) && fx == flonum_from_obj(y)) return l; }
+  } else if (isstring(x)) {
+    char *xs = stringchars(x);
+    for (; l != mknull(); l = cdr(l)) 
+      { obj y = car(l); if (isstring(y) && 0 == strcmp(xs, stringchars(y))) return l; }
+  } else {
+    for (; l != mknull(); l = cdr(l)) 
+      { if (isequal(car(l), x)) return l; }
+  } return 0;
+}")
+
+(%definition "extern obj isassoc(obj x, obj l);")
+(%localdef "obj isassoc(obj x, obj l) {
+  if (!x || notaptr(x) || notobjptr(x)) {
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l); if (car(p) == x) return p; }
+  } else if (is_flonum_obj(x)) {
+    flonum_t fx = flonum_from_obj(x); 
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l), y = car(p); if (is_flonum_obj(y) && fx == flonum_from_obj(y)) return p; }
+  } else if (isstring(x)) {
+    char *xs = stringchars(x);
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l), y = car(p); if (isstring(y) && 0 == strcmp(xs, stringchars(y))) return p; }
+  } else {
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l); if (isequal(car(p), x)) return p; }
+  } return 0;
+}")
+
 (define-inline (eq? x y)
   (%prim "bool(obj_from_$arg == obj_from_$arg)" x y))
 
 (define-inline (eqv? x y)
   (or (eq? x y) (and (flonum? x) (flonum? y) (fl=? x y))))
 
-(define (equal? x y)
-  (or (eqv? x y)
-      (cond [(string? x) 
-             (and (string? y) (string=? x y))]
-            [(vector? x)
-             (and (vector? y)
-               (let ([xl (vector-length x)] [yl (vector-length y)])
-                 (and (fx=? xl yl)
-                      (let loop ([i 0]) 
-                        (if (fx=? i xl) #t 
-                            (and (equal? (vector-ref x i) (vector-ref y i))
-                                 (loop (fx+ i 1))))))))]
-            [(pair? x)
-             (and (pair? y) (equal? (car x) (car y)) (equal? (cdr x) (cdr y)))]
-            [(box? x)
-             (and (box? y) (equal? (unbox x) (unbox y)))]
-            [else #f])))
+(define-inline (equal? x y)
+  (%prim "bool(isequal(obj_from_$arg, obj_from_$arg))" x y))
 
 (define-syntax case
   (letrec-syntax
@@ -1920,13 +1994,11 @@ void *getnative(obj o, cxtype_t *tp) {
     for (; l != mknull(); l = cdr(l)) if (car(l) == x) break;
     $return obj(l == mknull() ? obj_from_bool(0) : l); }" x l)) 
 
-(define-integrable (memv x l)
-  (let memv ([l l])
-    (cond [(null? l) #f] [(eqv? x (car l)) l] [else (memv (cdr l))])))
+(define-inline (memv x l)
+  (%prim? "obj(ismemv(obj_from_$arg, obj_from_$arg))" x l)) 
 
-(define (member x l)
-  (let member ([l l])
-    (cond [(null? l) #f] [(equal? x (car l)) l] [else (member (cdr l))])))
+(define-inline (member x l)
+  (%prim? "obj(ismember(obj_from_$arg, obj_from_$arg))" x l)) 
 
 (define-inline (assq x l)
   (%prim? "{ /* assq */
@@ -1934,22 +2006,11 @@ void *getnative(obj o, cxtype_t *tp) {
     for (; l != mknull(); l = cdr(l)) { p = car(l); if (car(p) == x) break; }
     $return obj(l == mknull() ? obj_from_bool(0) : p); }" x l)) 
 
-(define-integrable (assv x l)
-  (if (null? l) 
-      #f 
-      (let ([p (car l)]) 
-         (if (eqv? x (car p))
-             p
-             (assv x (cdr l))))))
+(define-inline (assv x l)
+  (%prim? "obj(isassv(obj_from_$arg, obj_from_$arg))" x l)) 
 
-(define (assoc x l)
-  (if (null? l)
-      #f
-      (let ([p (car l)]) 
-        (if (equal? x (car p))
-            p
-            (assoc x (cdr l))))))
-
+(define-inline (assoc x l)
+  (%prim? "obj(isassoc(obj_from_$arg, obj_from_$arg))" x l)) 
 
 
 ;------------------------------------------------------------------------------

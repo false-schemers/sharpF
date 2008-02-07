@@ -341,20 +341,100 @@ extern cxtype_t *OPORT_NTAG;
 #define isoport(o) (isnative(o, OPORT_NTAG))
 #define oportdata(o) ((FILE*)getnative(o, OPORT_NTAG))
 #define mkoport(l, fp) hpushptr(fp, OPORT_NTAG, l)
+extern int iseqv(obj x, obj y);
+int iseqv(obj x, obj y) {
+  obj h; if (x == y) return 1;
+  if (!x || !y || notaptr(x) || notaptr(y) || notobjptr(x) || notobjptr(y)) return 0;
+  if ((h = objptr_from_obj(x)[-1]) != objptr_from_obj(y)[-1]) return 0;
+  if (h == (obj)FLONUM_NTAG) return *(flonum_t*)objptr_from_obj(x)[0] == *(flonum_t*)objptr_from_obj(y)[0]; 
+  return 0;
+}
+extern obj ismemv(obj x, obj l);
+obj ismemv(obj x, obj l) {
+  if (!x || notaptr(x) || notobjptr(x)) {
+    for (; l != mknull(); l = cdr(l)) 
+      { if (car(l) == x) return l; }
+  } else if (is_flonum_obj(x)) {
+    flonum_t fx = flonum_from_obj(x); 
+    for (; l != mknull(); l = cdr(l)) 
+      { obj y = car(l); if (is_flonum_obj(y) && fx == flonum_from_obj(y)) return l; }
+  } else { /* for others, memv == memq */
+    for (; l != mknull(); l = cdr(l)) 
+      { if (car(l) == x) return l; }
+  } return 0;
+}
+extern obj isassv(obj x, obj l);
+obj isassv(obj x, obj l) {
+  if (!x || notaptr(x) || notobjptr(x)) {
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l); if (car(p) == x) return p; }
+  } else if (is_flonum_obj(x)) {
+    flonum_t fx = flonum_from_obj(x); 
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l), y = car(p); if (is_flonum_obj(y) && fx == flonum_from_obj(y)) return p; }
+  } else { /* for others, assv == assq */
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l); if (car(p) == x) return p; }
+  } return 0;
+}
+extern int isequal(obj x, obj y);
+int isequal(obj x, obj y) {
+  obj h; int i, n; loop: if (x == y) return 1;
+  if (!x || !y || notaptr(x) || notaptr(y) || notobjptr(x) || notobjptr(y)) return 0;
+  if ((h = objptr_from_obj(x)[-1]) != objptr_from_obj(y)[-1]) return 0;
+  if (h == (obj)FLONUM_NTAG) return *(flonum_t*)objptr_from_obj(x)[0] == *(flonum_t*)objptr_from_obj(y)[0]; 
+  if (h == (obj)STRING_NTAG) return strcmp(stringchars(x), stringchars(y)) == 0; 
+  if (isaptr(h) || !(n = size_from_obj(h)) || hblkref(x, 0) != hblkref(y, 0)) return 0;
+  for (i = 1; i < n-1; ++i) if (!isequal(hblkref(x, i), hblkref(y, i))) return 0;
+  if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 0; 
+}
+extern obj ismember(obj x, obj l);
+obj ismember(obj x, obj l) {
+  if (!x || notaptr(x) || notobjptr(x)) {
+    for (; l != mknull(); l = cdr(l)) 
+      { if (car(l) == x) return l; }
+  } else if (is_flonum_obj(x)) {
+    flonum_t fx = flonum_from_obj(x); 
+    for (; l != mknull(); l = cdr(l)) 
+      { obj y = car(l); if (is_flonum_obj(y) && fx == flonum_from_obj(y)) return l; }
+  } else if (isstring(x)) {
+    char *xs = stringchars(x);
+    for (; l != mknull(); l = cdr(l)) 
+      { obj y = car(l); if (isstring(y) && 0 == strcmp(xs, stringchars(y))) return l; }
+  } else {
+    for (; l != mknull(); l = cdr(l)) 
+      { if (isequal(car(l), x)) return l; }
+  } return 0;
+}
+extern obj isassoc(obj x, obj l);
+obj isassoc(obj x, obj l) {
+  if (!x || notaptr(x) || notobjptr(x)) {
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l); if (car(p) == x) return p; }
+  } else if (is_flonum_obj(x)) {
+    flonum_t fx = flonum_from_obj(x); 
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l), y = car(p); if (is_flonum_obj(y) && fx == flonum_from_obj(y)) return p; }
+  } else if (isstring(x)) {
+    char *xs = stringchars(x);
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l), y = car(p); if (isstring(y) && 0 == strcmp(xs, stringchars(y))) return p; }
+  } else {
+    for (; l != mknull(); l = cdr(l)) 
+      { obj p = car(l); if (isequal(car(p), x)) return p; }
+  } return 0;
+}
 
 /* cx globals */
 obj cx__2Acurrent_2Derror_2Dport_2A; /* *current-error-port* */
 obj cx__2Acurrent_2Dinput_2Dport_2A; /* *current-input-port* */
 obj cx__2Acurrent_2Doutput_2Dport_2A; /* *current-output-port* */
-obj cx_assoc; /* assoc */
-obj cx_equal_3F; /* equal? */
 obj cx_fixnum_2D_3Estring; /* fixnum->string */
 obj cx_flonum_2D_3Estring; /* flonum->string */
 obj cx_fprintf_2A; /* fprintf* */
 obj cx_fxexpt; /* fxexpt */
 obj cx_list_3F; /* list? */
 obj cx_make_2Dpromise; /* make-promise */
-obj cx_member; /* member */
 obj cx_reset; /* reset */
 obj cx_set_2Dreset_2Dhandler_21; /* set-reset-handler! */
 obj cx_string_2D_3Efixnum; /* string->fixnum */
@@ -385,9 +465,9 @@ static obj cxs_vector_2Dfill_21(obj v14_v, obj v13_x)
   { /* letrec */
     obj v18_i;
   { /* let */
-    obj v373_tmp = obj_from_fixnum(0);
+    obj v299_tmp = obj_from_fixnum(0);
     /* tail call */
-    v18_i = (v373_tmp);
+    v18_i = (v299_tmp);
     goto s_loop;
   }
   s_loop:
@@ -396,148 +476,10 @@ static obj cxs_vector_2Dfill_21(obj v14_v, obj v13_x)
   } else {
     (void) obj_from_void(vectorref((v14_v), fixnum_from_obj(v18_i)) = (v13_x));
   { /* let */
-    obj v372_tmp = obj_from_fixnum(fixnum_from_obj(v18_i) + (1));
+    obj v298_tmp = obj_from_fixnum(fixnum_from_obj(v18_i) + (1));
     /* tail call */
-    v18_i = (v372_tmp);
+    v18_i = (v298_tmp);
     goto s_loop;
-  }
-  }
-  }
-}
-
-/* equal? */
-static obj cxs_equal_3F(obj v249_x, obj v248_y)
-{ 
-  s_equal_3F:
-  { /* let */
-    obj v257_x = (((v249_x) == (v248_y)) ? obj_from_bool((v249_x) == (v248_y)) : ((is_flonum_obj(v249_x)) ? ((is_flonum_obj(v248_y)) ? obj_from_bool(flonum_from_obj(v249_x) == flonum_from_obj(v248_y)) : obj_from_bool(0)) : obj_from_bool(0)));
-  if (bool_from_obj(v257_x)) {
-    return (v257_x);
-  } else {
-  if ((isstring((v249_x)))) {
-    return ((isstring((v248_y))) ? obj_from_bool(strcmp(stringchars((v249_x)), stringchars((v248_y))) == 0) : obj_from_bool(0));
-  } else {
-  if ((isvector((v249_x)))) {
-  if ((isvector((v248_y)))) {
-  if (((vectorlen((v249_x))) == (vectorlen((v248_y))))) {
-  { /* letrec */
-    obj v274_i;
-  { /* let */
-    obj v371_tmp = obj_from_fixnum(0);
-    /* tail call */
-    v274_i = (v371_tmp);
-    goto s_loop;
-  }
-  s_loop:
-  if ((fixnum_from_obj(v274_i) == (vectorlen((v249_x))))) {
-    return obj_from_bool(1);
-  } else {
-  if (bool_from_obj(cxs_equal_3F((vectorref((v249_x), fixnum_from_obj(v274_i))), (vectorref((v248_y), fixnum_from_obj(v274_i)))))) {
-  { /* let */
-    obj v370_tmp = obj_from_fixnum(fixnum_from_obj(v274_i) + (1));
-    /* tail call */
-    v274_i = (v370_tmp);
-    goto s_loop;
-  }
-  } else {
-    return obj_from_bool(0);
-  }
-  }
-  }
-  } else {
-    return obj_from_bool(0);
-  }
-  } else {
-    return obj_from_bool(0);
-  }
-  } else {
-  if ((ispair((v249_x)))) {
-  if ((ispair((v248_y)))) {
-  if (bool_from_obj(cxs_equal_3F((car((v249_x))), (car((v248_y)))))) {
-  { /* let */
-    obj v369_tmp = (cdr((v248_y)));
-    obj v368_tmp = (cdr((v249_x)));
-    /* tail call */
-    v249_x = (v368_tmp);
-    v248_y = (v369_tmp);
-    goto s_equal_3F;
-  }
-  } else {
-    return obj_from_bool(0);
-  }
-  } else {
-    return obj_from_bool(0);
-  }
-  } else {
-  if ((isbox((v249_x)))) {
-  if ((isbox((v248_y)))) {
-  { /* let */
-    obj v367_tmp = (boxref((v248_y)));
-    obj v366_tmp = (boxref((v249_x)));
-    /* tail call */
-    v249_x = (v366_tmp);
-    v248_y = (v367_tmp);
-    goto s_equal_3F;
-  }
-  } else {
-    return obj_from_bool(0);
-  }
-  } else {
-    return obj_from_bool(0);
-  }
-  }
-  }
-  }
-  }
-  }
-}
-
-/* member */
-static obj cxs_member(obj v289_x, obj v288_l)
-{ 
-  { /* letrec */
-    obj v291_l;
-    /* tail call */
-    v291_l = (v288_l);
-    goto s_member_v290;
-  s_member_v290:
-  if ((isnull((v291_l)))) {
-    return obj_from_bool(0);
-  } else {
-  if (bool_from_obj(cxs_equal_3F((v289_x), (car((v291_l)))))) {
-    return (v291_l);
-  } else {
-  { /* let */
-    obj v365_tmp = (cdr((v291_l)));
-    /* tail call */
-    v291_l = (v365_tmp);
-    goto s_member_v290;
-  }
-  }
-  }
-  }
-}
-
-/* assoc */
-static obj cxs_assoc(obj v300_x, obj v299_l)
-{ 
-  s_assoc:
-  if ((isnull((v299_l)))) {
-    return obj_from_bool(0);
-  } else {
-  { /* let */
-    obj v302_p = (car((v299_l)));
-  if (bool_from_obj(cxs_equal_3F((v300_x), (car((v302_p)))))) {
-    return (v302_p);
-  } else {
-  { /* let */
-    obj v364_tmp = (cdr((v299_l)));
-    obj v363_tmp = (v300_x);
-    /* tail call */
-    v300_x = (v363_tmp);
-    v299_l = (v364_tmp);
-    goto s_assoc;
-  }
   }
   }
   }
@@ -570,14 +512,14 @@ static cxroot_t root = {
 
 /* entry points */
 static obj host(obj);
-static obj cases[34] = {
+static obj cases[31] = {
   (obj)host,  (obj)host,  (obj)host,  (obj)host,  (obj)host,
   (obj)host,  (obj)host,  (obj)host,  (obj)host,  (obj)host,
   (obj)host,  (obj)host,  (obj)host,  (obj)host,  (obj)host,
   (obj)host,  (obj)host,  (obj)host,  (obj)host,  (obj)host,
   (obj)host,  (obj)host,  (obj)host,  (obj)host,  (obj)host,
   (obj)host,  (obj)host,  (obj)host,  (obj)host,  (obj)host,
-  (obj)host,  (obj)host,  (obj)host,  (obj)host,
+  (obj)host,
 };
 
 /* host procedure */
@@ -625,11 +567,8 @@ case 0: /* load module */
     { static obj c[] = { obj_from_case(15) }; cx_with_2Doutput_2Dto_2Dfile = (obj)c; }
     { static obj c[] = { obj_from_case(17) }; cx_write_2F3 = (obj)c; }
     { static obj c[] = { obj_from_case(25) }; cx_fprintf_2A = (obj)c; }
-    { static obj c[] = { obj_from_case(29) }; cx_equal_3F = (obj)c; }
-    { static obj c[] = { obj_from_case(30) }; cx_member = (obj)c; }
-    { static obj c[] = { obj_from_case(31) }; cx_assoc = (obj)c; }
-    { static obj c[] = { obj_from_case(32) }; cx_reset = (obj)c; }
-    { static obj c[] = { obj_from_case(33) }; cx_set_2Dreset_2Dhandler_21 = (obj)c; }
+    { static obj c[] = { obj_from_case(29) }; cx_reset = (obj)c; }
+    { static obj c[] = { obj_from_case(30) }; cx_set_2Dreset_2Dhandler_21 = (obj)c; }
     r[0] = obj_from_void(0);
     r[1+0] = r[0];
     pc = 0; /* exit from module init */
@@ -650,8 +589,8 @@ case 1: /* fxexpt k x y */
     goto s_ex;
 
 s_ex: /* k y x */
-    { const fixnum_t v837_y = fixnum_from_obj(r[1]);
-  if (((v837_y) == 0)) {
+    { const fixnum_t v730_y = fixnum_from_obj(r[1]);
+  if (((v730_y) == 0)) {
     /* r[0] */    
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
@@ -669,7 +608,7 @@ s_ex: /* k y x */
     assert(rc = 3);
     goto jump;
   } else {
-  if (((v837_y) < (0))) {
+  if (((v730_y) < (0))) {
     /* r[0] */    
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
@@ -678,7 +617,7 @@ s_ex: /* k y x */
     assert(rc = 3);
     goto jump;
   } else {
-  if (((v837_y) == (1))) {
+  if (((v730_y) == (1))) {
     /* r[0] */    
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
@@ -687,14 +626,14 @@ s_ex: /* k y x */
     assert(rc = 3);
     goto jump;
   } else {
-  if (((v837_y) % 2 != 0)) {
+  if (((v730_y) % 2 != 0)) {
     hreserve(hbsz(2+1), 3); /* 3 live regs */
     *--hp = r[2];  
     *--hp = r[0];  
     *--hp = obj_from_case(2);
     r[3] = (hendblk(2+1));
     r[0] = r[3];  
-    r[1] = obj_from_fixnum((v837_y) - (1));
+    r[1] = obj_from_fixnum((v730_y) - (1));
     /* r[2] */    
     goto s_ex;
   } else {
@@ -703,7 +642,7 @@ s_ex: /* k y x */
     *--hp = obj_from_case(3);
     r[3] = (hendblk(1+1));
     r[0] = r[3];  
-    r[1] = obj_from_fixnum((v837_y) / (2));
+    r[1] = obj_from_fixnum((v730_y) / (2));
     /* r[2] */    
     goto s_ex;
   }
@@ -734,11 +673,11 @@ case 3: /* clo ek r */
     r[1+2] = p[1]; }
     r += 1; /* shift reg. wnd */
     /* ek r k */
-    { const fixnum_t v836_r = fixnum_from_obj(r[1]);
+    { const fixnum_t v729_r = fixnum_from_obj(r[1]);
     r[0] = r[2];  
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
-    r[2] = obj_from_fixnum((v836_r) * (v836_r));
+    r[2] = obj_from_fixnum((v729_r) * (v729_r));
     rreserve(MAX_LIVEREGS);
     assert(rc = 3);
     goto jump; } 
@@ -1123,18 +1062,18 @@ gs_write_2F3: /* k x d? p */
     goto jump;
   } else {
   if ((is_char_obj(r[1]))) {
-    { const char_t v835_x = char_from_obj(r[1]);
+    { const char_t v728_x = char_from_obj(r[1]);
   if (bool_from_obj(r[2])) {
-    r[4] = obj_from_void(fputc((v835_x), oportdata((r[3]))));
+    r[4] = obj_from_void(fputc((v728_x), oportdata((r[3]))));
   } else {
-  if (((v835_x) == (10))) {
+  if (((v728_x) == (10))) {
     r[4] = obj_from_void(fputs(stringchars((cx__23134)), oportdata((r[3]))));
   } else {
-  if (((v835_x) == (32))) {
+  if (((v728_x) == (32))) {
     r[4] = obj_from_void(fputs(stringchars((cx__23131)), oportdata((r[3]))));
   } else {
     (void)(fputs(stringchars((cx__23129)), oportdata((r[3]))));
-    r[4] = obj_from_void(fputc((v835_x), oportdata((r[3]))));
+    r[4] = obj_from_void(fputc((v728_x), oportdata((r[3]))));
   }
   }
   }
@@ -1169,7 +1108,7 @@ gs_write_2F3: /* k x d? p */
     r[5+3] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    goto s_loop_v691;
+    goto s_loop_v584;
   }
   } else {
   if ((isvector((r[1])))) {
@@ -1187,7 +1126,7 @@ gs_write_2F3: /* k x d? p */
     r[5+4] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    goto s_loop_v668;
+    goto s_loop_v561;
   } else {
     r[5+0] = obj_from_ktrap();
     r[5+1] = obj_from_void(0);
@@ -1195,7 +1134,7 @@ gs_write_2F3: /* k x d? p */
     r[5+3] = r[3];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    goto s_l_v680;
+    goto s_l_v573;
   }
   } else {
   if ((isbox((r[1])))) {
@@ -1321,9 +1260,9 @@ case 20: /* clo ek  */
     assert(rc = 3);
     goto jump;
 
-s_loop_v691: /* k i p x */
-    { const fixnum_t v833_i = fixnum_from_obj(r[1]);
-  if (((v833_i) == (stringlen((r[3]))))) {
+s_loop_v584: /* k i p x */
+    { const fixnum_t v726_i = fixnum_from_obj(r[1]);
+  if (((v726_i) == (stringlen((r[3]))))) {
     /* r[0] */    
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
@@ -1332,14 +1271,14 @@ s_loop_v691: /* k i p x */
     assert(rc = 3);
     goto jump;
   } else {
-    { const char_t v834_c = (*stringref((r[3]), (v833_i)));
-    (void)((((v834_c) == (34)) || ((v834_c) == (92))) ? (void)(fputc((92), oportdata((r[2])))) : (void)(0));
-    (void)(fputc((v834_c), oportdata((r[2])))); } 
+    { const char_t v727_c = (*stringref((r[3]), (v726_i)));
+    (void)((((v727_c) == (34)) || ((v727_c) == (92))) ? (void)(fputc((92), oportdata((r[2])))) : (void)(0));
+    (void)(fputc((v727_c), oportdata((r[2])))); } 
     /* r[0] */    
-    r[1] = obj_from_fixnum((v833_i) + (1));
+    r[1] = obj_from_fixnum((v726_i) + (1));
     /* r[2] */    
     /* r[3] */    
-    goto s_loop_v691;
+    goto s_loop_v584;
   } } 
 
 case 21: /* clo ek  */
@@ -1363,7 +1302,7 @@ case 22: /* clo ek  */
     r[1+2] = p[1];
     r[1+3] = p[2]; }
     r += 1; /* shift reg. wnd */
-s_l_v680: /* ek  k p */
+s_l_v573: /* ek  k p */
     r[0] = r[2];  
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
@@ -1379,7 +1318,7 @@ case 23: /* clo k i */
     r[1+3] = p[2];
     r[1+4] = p[3]; }
     r += 1; /* shift reg. wnd */
-s_loop_v668: /* k i d? p x */
+s_loop_v561: /* k i d? p x */
     hreserve(hbsz(3+1), 5); /* 5 live regs */
     *--hp = r[4];  
     *--hp = r[3];  
@@ -1410,13 +1349,13 @@ case 24: /* clo ek  */
     r[1+6] = p[5]; }
     r += 1; /* shift reg. wnd */
     /* ek  loop k p i x */
-    { const fixnum_t v832_i = fixnum_from_obj(r[5]);
-  if ((!((v832_i) == ((vectorlen((r[6]))) - (1))))) {
+    { const fixnum_t v725_i = fixnum_from_obj(r[5]);
+  if ((!((v725_i) == ((vectorlen((r[6]))) - (1))))) {
     (void)(fputc((32), oportdata((r[4]))));
     r[0] = r[2];  
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[3];  
-    r[2] = obj_from_fixnum((v832_i) + (1));
+    r[2] = obj_from_fixnum((v725_i) + (1));
     rreserve(MAX_LIVEREGS);
     assert(rc = 3);
     goto jump;
@@ -1448,14 +1387,14 @@ case 25: /* fprintf* k port fstr olst */
     r[5+3] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    goto s_loop_v639;
+    goto s_loop_v532;
 
 case 26: /* clo k flst olst */
     assert(rc == 4);
     { obj* p = objptr_from_obj(r[0]);
     r[1+3] = p[1]; }
     r += 1; /* shift reg. wnd */
-s_loop_v639: /* k flst olst port */
+s_loop_v532: /* k flst olst port */
     hreserve(hbsz(1+1), 4); /* 4 live regs */
     *--hp = r[3];  
     *--hp = obj_from_case(26);
@@ -1533,7 +1472,7 @@ s_loop_v639: /* k flst olst port */
     r[1] = r[6];  
     /* r[2] */    
     /* r[3] */    
-    goto s_loop_v639;
+    goto s_loop_v532;
   } else {
   if ((char_from_obj(r[5]) == (126))) {
     (void)(fputc((126), oportdata((r[3]))));
@@ -1543,7 +1482,7 @@ s_loop_v639: /* k flst olst port */
     r[1] = r[6];  
     /* r[2] */    
     /* r[3] */    
-    goto s_loop_v639;
+    goto s_loop_v532;
   } else {
     /* r[0] */    
     pc = objptr_from_obj(r[0])[0];
@@ -1573,7 +1512,7 @@ s_loop_v639: /* k flst olst port */
     r[1] = r[5];  
     /* r[2] */    
     /* r[3] */    
-    goto s_loop_v639;
+    goto s_loop_v532;
   }
   }
 
@@ -1617,46 +1556,7 @@ case 28: /* clo ek  */
     assert(rc = 4);
     goto jump;
 
-case 29: /* equal? k x y */
-    assert(rc == 4);
-    r += 1; /* shift reg. wnd */
-    /* k x y */
-    r[3+0] = r[0];  
-    pc = objptr_from_obj(r[3+0])[0];
-    r[3+1] = obj_from_ktrap();
-    r[3+2] = (cxs_equal_3F((r[1]), (r[2])));
-    r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
-    goto jump;
-
-case 30: /* member k x l */
-    assert(rc == 4);
-    r += 1; /* shift reg. wnd */
-    /* k x l */
-    r[3+0] = r[0];  
-    pc = objptr_from_obj(r[3+0])[0];
-    r[3+1] = obj_from_ktrap();
-    r[3+2] = (cxs_member((r[1]), (r[2])));
-    r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
-    goto jump;
-
-case 31: /* assoc k x l */
-    assert(rc == 4);
-    r += 1; /* shift reg. wnd */
-    /* k x l */
-    r[3+0] = r[0];  
-    pc = objptr_from_obj(r[3+0])[0];
-    r[3+1] = obj_from_ktrap();
-    r[3+2] = (cxs_assoc((r[1]), (r[2])));
-    r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
-    goto jump;
-
-case 32: /* reset k */
+case 29: /* reset k */
     assert(rc == 2);
     r += 1; /* shift reg. wnd */
     /* k */
@@ -1669,7 +1569,7 @@ case 32: /* reset k */
     assert(rc = 3);
     goto jump;
 
-case 33: /* set-reset-handler! k fn */
+case 30: /* set-reset-handler! k fn */
     assert(rc == 3);
     r += 1; /* shift reg. wnd */
     /* k fn */

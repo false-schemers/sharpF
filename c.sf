@@ -348,15 +348,16 @@
   (if (null? args)
       (about)
       (let loop ([args args])
-	(cond
-	 [(null? args) #f]
-	 [(string=? (car args) "-v") (set! *showlog* #t) (loop (cdr args))]
-	 [(string=? (car args) "-d") (set! *silent* #f) (loop (cdr args))]
-	 [(string=? (car args) "--help") (about) #f]
-	 [(not (file-exists? (car args)))
-	  (printf "cannot open input file ~a~%" (car args))
-	  #t]
-	 [else (if *showlog* (printf "compiling ~a:~%" (car args)))
-	       (let ([ofn (compile-file (car args))])
-		 (if *showlog* (printf "  writing ~a~%" ofn)))
-	       (loop (cdr args))]))))
+        (cond
+          [(null? args) #f] ; #f is OK, return status 0
+          [(string=? (car args) "-v") (set! *showlog* #t) (loop (cdr args))]
+          [(string=? (car args) "-d") (set! *silent* #f) (loop (cdr args))]
+          [(string=? (car args) "--help") (about) #f]
+          [(not (file-exists? (car args)))
+           (printf "cannot open input file ~a~%" (car args))
+           #t]
+          [else 
+           (if *showlog* (printf "compiling ~a:~%" (car args)))
+           (let ([ofn (compile-file (car args))])
+             (if *showlog* (printf "  writing ~a~%" ofn)))
+           (loop (cdr args))]))))
