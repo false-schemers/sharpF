@@ -1966,7 +1966,7 @@ void *getnative(obj o, cxtype_t *tp) {
   (or (eq? x y) (and (flonum? x) (flonum? y) (fl=? x y))))
 
 (define-inline (equal? x y)
-  (%prim "bool(isequal(obj_from_$arg, obj_from_$arg))" x y))
+  (%prim? "bool(isequal(obj_from_$arg, obj_from_$arg))" x y))
 
 (define-syntax case
   (letrec-syntax

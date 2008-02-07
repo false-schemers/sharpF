@@ -7377,8 +7377,9 @@ case 171: /* clo ek r */
     r[1+10] = p[9]; }
     r += 1; /* shift reg. wnd */
     /* ek r else-exp unbox-vals substs then-exp uv test-exp k id r */
-  if ((isequal((r[10]), (r[1])))) {
-    hreserve(hbsz(8+1), 11); /* 11 live regs */
+    r[11] = obj_from_bool(isequal((r[10]), (r[1])));
+  if (bool_from_obj(r[11])) {
+    hreserve(hbsz(8+1), 12); /* 12 live regs */
     *--hp = r[9];  
     *--hp = (r[10]);
     *--hp = r[8];  
@@ -7388,10 +7389,10 @@ case 171: /* clo ek r */
     *--hp = r[4];  
     *--hp = r[3];  
     *--hp = obj_from_case(172);
-    r[11] = (hendblk(8+1));
+    r[12] = (hendblk(8+1));
     r[0] = r[6];  
     pc = objptr_from_obj(r[0])[0];
-    r[1] = (r[11]);
+    r[1] = (r[12]);
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
     assert(rc = 3);
