@@ -518,65 +518,75 @@ obj cxg_regs[REGS_SIZE];
 int cxg_rc = 0;
 #endif
 
-static obj *heap2 = NULL;
-static size_t hsize = 0; 
-static cxoint_t hmask2 = 0;
-static int gccount = 0, bumpcount = 0;
+static obj *cxg_heap2 = NULL;
+static size_t cxg_hsize = 0; 
+static cxoint_t cxg_hmask2 = 0;
+static int cxg_gccount = 0, cxg_bumpcount = 0;
 
-#define notfwdptr(o) (((char*)(o) - (char*)heap2) & hmask2)
-
-static void toheap2(obj* p)
+static obj *toheap2(obj* p, obj *hp, obj *h1, cxoint_t m1, obj *h2, cxoint_t m2)
 {
   obj o = *p, *op, fo, *fop;
-  if (notobjptr(o)) return;
+  if (((char*)(o) - (char*)h1) & m1) return hp;
   fo = (op = objptr_from_obj(o))[-1]; assert(fo);
   if (notaptr(fo)) {
-    fop = op + size_from_obj(fo); while (fop >= op) *--cxg_hp = *--fop;
-    *p = *fop = obj_from_objptr(cxg_hp+1);
-  } else if (notfwdptr(fo)) {
-    *--cxg_hp = *op--; *--cxg_hp = *op;
-    *p = *op = obj_from_objptr(cxg_hp+1);
+    fop = op + size_from_obj(fo); while (fop >= op) *--hp = *--fop;
+    *p = *fop = obj_from_objptr(hp+1);
+  } else if (((char*)(fo) - (char*)h2) & m2) {
+    *--hp = *op--; *--hp = *op;
+    *p = *op = obj_from_objptr(hp+1);
   } else *p = fo;
+  return hp;
 }
 
-static void finalize(obj *hp, obj *end)
+static void finalize(obj *hp1, obj *he1, obj *h2, cxoint_t m2)
 {
-  while (hp < end) {
-    obj fo = *hp++; assert(fo);
-    if (notaptr(fo)) hp += size_from_obj(fo);
-    else if (notfwdptr(fo)) ((cxtype_t*)fo)->free((void*)*hp++);
-    else if (notaptr(fo = objptr_from_obj(fo)[-1])) hp += size_from_obj(fo);
-    else ++hp;
-  } assert(hp == end);
+  while (hp1 < he1) {
+    obj fo = *hp1++; assert(fo);
+    if (notaptr(fo)) hp1 += size_from_obj(fo);
+    else if (((char*)(fo) - (char*)h2) & m2) ((cxtype_t*)fo)->free((void*)*hp1++);
+    else if (notaptr(fo = objptr_from_obj(fo)[-1])) hp1 += size_from_obj(fo);
+    else ++hp1;
+  } assert(hp1 == he1);
 }
 
-static size_t relocate(obj *regs, obj *regp, obj *end2, obj *end1) 
+static obj *relocate(cxroot_t *pr, obj *regs, obj *regp, 
+obj *he2, obj *he1, obj *hp, obj *h1, cxoint_t m1, obj *h2, cxoint_t m2) 
 {
-  obj *p, *hp1 = cxg_hp; cxroot_t *pr; 
-  cxg_hp = end2; if (!cxg_heap) return 0;
-  for (p = regs; p < regp; ++p) toheap2(p);
-  for (pr = cxg_rootp; pr; pr = pr->next) {
+  obj *p, *hp1 = hp; hp = he2;
+  for (p = regs; p < regp; ++p) hp = toheap2(p, hp, h1, m1, h2, m2);
+  for (; pr; pr = pr->next) {
     obj **pp = pr->globv; int c = pr->globc;
-    while (c-- > 0) toheap2(*pp++);
+    while (c-- > 0) hp = toheap2(*pp++, hp, h1, m1, h2, m2);
   }
-  for (p = end2; p > cxg_hp; --p) toheap2(p-1);
-  if (end1) finalize(hp1, end1);
-  return end2 - cxg_hp;
+  for (p = he2; p > hp; --p) hp = toheap2(p-1, hp, h1, m1, h2, m2);
+  if (he1) finalize(hp1, he1, h2, m2);
+  return hp;
 }
 
 obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs) 
 {
-  obj *p = cxg_heap; cxg_hp = hp; ++gccount;
-  if (hsize < (needs += relocate(regs, regp, heap2 + hsize, p + hsize))) {
+  obj *h1 = cxg_heap, *h2 = cxg_heap2; cxoint_t m1 = cxg_hmask, m2 = cxg_hmask2;
+  size_t hs = cxg_hsize; cxroot_t *pr = cxg_rootp;
+
+  obj *h = h1, *he1 = h1 + hs, *he2 = h2 + hs; 
+  ++cxg_gccount;
+  if (h1) hp = relocate(pr, regs, regp, he2, he1, hp, h1, m1, h2, m2), 
+    needs += h2 + hs - hp;
+  else hp = h2 + hs;
+  if (hs < needs) {
     size_t s = HEAP_SIZE; while (s < needs) s *= 2;
-    hmask2 = 1 | ~(s*sizeof(obj)-1);
-    if (!(p = realloc(cxg_heap, s*sizeof(obj)))) { perror(\"alloc[h]\"); exit(2); }
-    cxg_heap = heap2; heap2 = p; relocate(regs, regp, heap2 + s, 0);
-    if (!(p = realloc(cxg_heap, s*sizeof(obj)))) { perror(\"alloc[h]\"); exit(2); }
-    hsize = s; cxg_hmask = hmask2; ++bumpcount;
+    m2 = 1 | ~(s*sizeof(obj)-1);
+    if (!(h = realloc(h1, s*sizeof(obj)))) { perror(\"alloc[h]\"); exit(2); }
+    h1 = h2; h2 = h; he2 = h2 + s; he1 = 0; /* no finalize flag */
+    if (h1) hp = relocate(pr, regs, regp, he2, he1, hp, h1, m1, h2, m2);
+    else hp = h2 + s;
+    if (!(h = realloc(h1, s*sizeof(obj)))) { perror(\"alloc[h]\"); exit(2); }
+    hs = s; m1 = m2; ++cxg_bumpcount;
   }
-  cxg_heap = heap2; heap2 = p;
-  return cxg_hp;
+  h1 = h2; h2 = h;
+
+  cxg_heap = h1; cxg_hmask = m1; cxg_heap2 = h2; cxg_hmask2 = m2;
+  cxg_hsize = hs; return cxg_hp = hp;
 }
 
 obj *cxm_rgc(obj *regs, obj *regp) 
@@ -609,7 +619,7 @@ int main(int argc, char **argv) {
   while (pc) pc = (*(cxhost_t*)pc)(pc); 
   assert(cxg_rc == 3);
   res = (cxg_regs[2] != 0); 
-  /* fprintf(stderr, \"%d collections, %d reallocs\\n\", gccount, bumpcount); */
+  /* fprintf(stderr, \"%d collections, %d reallocs\\n\", cxg_gccount, cxg_bumpcount); */
   return res; 
 }
 ")

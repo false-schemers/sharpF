@@ -178,7 +178,10 @@
               (list
                 (cons 
                   (list
-                    "/* " filename " */\n" 
+                    "/* " filename " */\n"
+                    "#ifdef PROFILE\n"
+                    "#define host host_" (module-name filename) "\n"
+                    "#endif\n"
                     "#define MODULE " (module-name filename) "\n"
                     "#define LOAD() " 
                       (map (lambda (n) (list n "(); ")) module-loads)
@@ -341,7 +344,7 @@
 
 (define (main argv)
   (define (about)
-    (printf "sfc build 11q~%Usage: sfc [-vd] file ...~%")
+    (printf "sfc build 185~%Usage: sfc [-vd] file ...~%")
     #t)
   (define args 
     (cdr (argv->list argv)))

@@ -1,4 +1,7 @@
 /* 7.sf */
+#ifdef PROFILE
+#define host host_module_7
+#endif
 #define MODULE module_7
 #define LOAD() module_6(); module_3(); module_0(); 
 extern void module_0(void); /* 0.sf */

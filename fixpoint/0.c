@@ -1,4 +1,7 @@
 /* 0.sf */
+#ifdef PROFILE
+#define host host_module_0
+#endif
 #define MODULE module_0
 #define LOAD() 
 
