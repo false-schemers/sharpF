@@ -1,0 +1,658 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>4. Core Language</title>
+<style type="text/css">
+body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
+#menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
+* html #menu { position: absolute; }
+#menu p { font-size: 9pt; line-height: 3ex; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 2.8ex; margin: 0; padding: 0;  }
+#menu a:visited, #menu a { text-decoration: none; color: #1D5CA5; }
+#menu a:hover { text-decoration: underline; color: #1D5CA5; }
+body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
+tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
+abbr, var { font-style: italic; }
+q { font-style: italic; text-decoration: none; }
+pre { margin-top: 1.5ex; margin-bottom: 0; }
+p { line-height: 3ex; font-size: 10pt; margin-top: 1.5ex; margin-bottom: 0; padding: 0; text-align: justify; }
+p.note { font-size: 9pt; }
+p.note tt, code, pre { font-size: 10.5pt; }
+h1 { margin-top: 0; margin-bottom: 0; font-size: 17pt; border-top: 1.5ex solid white; }
+h2 { margin-top: 0; margin-bottom: 0; font-size: 13pt; border-top: 3ex solid white; }
+h3 { margin-top: 0; margin-bottom: 0; font-size: 11pt; border-top: 3ex solid white; }
+h4 { margin-top: 0; margin-bottom: 0; font-size: 10pt; border-top: 1.5ex solid white; }
+table.proto { margin-top: 3ex; margin-bottom: 0; border: 0; border-spacing: 0; padding: 0; }
+table.proto td { font-size: 10pt; line-height: 3ex; }
+</style>
+<!--[if lte IE 6]>
+   <style type="text/css">
+   /*<![CDATA[*/ 
+html { overflow-x: auto; overflow-y: hidden; }
+   /*]]>*/
+   </style>
+<![endif]-->
+</head>
+<body>
+
+<div id="menu">
+<p>4.&nbsp;&nbsp;<a href="#4.">Core language</a></p>
+<p>4.1.&nbsp;&nbsp;<a href="#4.1.">Run-time forms</a></p>
+<p>4.1.1.&nbsp;&nbsp;<a href="#4.1.1.">Variable references</a></p>
+<p>4.1.2.&nbsp;&nbsp;<a href="#4.1.2.">Procedure calls</a></p>
+<p>4.1.3.&nbsp;&nbsp;<a href="#4.1.3.">Procedures</a></p>
+<p>4.1.4.&nbsp;&nbsp;<a href="#4.1.4.">Conditionals</a></p>
+<p>4.1.5.&nbsp;&nbsp;<a href="#4.1.5.">Assignments</a></p>
+<p>4.1.6.&nbsp;&nbsp;<a href="#4.1.6.">Continuations</a></p>
+<p>4.1.7.&nbsp;&nbsp;<a href="#4.1.7.">Sequencing</a></p>
+<p>4.2.&nbsp;&nbsp;<a href="#4.2.">Macros</a></p>
+<p>4.2.1.&nbsp;&nbsp;<a href="#4.2.1.">Syntactic keywords</a></p>
+<p>4.2.2.&nbsp;&nbsp;<a href="#4.2.2.">Macro uses</a></p>
+<p>4.2.3.&nbsp;&nbsp;<a href="#4.2.3.">Macro abstractions</a></p>
+<p>4.2.4.&nbsp;&nbsp;<a href="#4.2.4.">Macro transformers</a></p>
+<p>4.3.&nbsp;&nbsp;<a href="#4.3.">Definitions and scope</a></p>
+<p>4.3.1.&nbsp;&nbsp;<a href="#4.3.1.">Top level definitions</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full table of contents</a> &rsaquo;</p>
+<p>&nbsp;</p>
+<!-- p><abbr>variable</abbr>&nbsp;&nbsp;&nbsp;<a href="#4.1.1.">4.1.1.</a></p>
+<p><abbr>procedure call</abbr>&nbsp;&nbsp;&nbsp;<a href="#4.1.2.">4.1.2.</a></p -->
+<p><tt>lambda</tt>&nbsp;&nbsp;&nbsp;<a href="#4.1.3.">4.1.3.</a></p>
+<p><tt>if</tt>&nbsp;&nbsp;&nbsp;<a href="#4.1.4.">4.1.4.</a></p>
+<p><tt>set!</tt>&nbsp;&nbsp;&nbsp;<a href="#4.1.5.">4.1.5.</a></p>
+<p><tt>letcc</tt>&nbsp;&nbsp;&nbsp;<a href="#4.1.6.">4.1.6.</a></p>
+<p><tt>withcc</tt>&nbsp;&nbsp;&nbsp;<a href="#4.1.6.">4.1.6.</a></p>
+<p><tt>sequence</tt>&nbsp;&nbsp;&nbsp;<a href="#4.1.7.">4.1.7.</a></p>
+<p><tt>begin</tt>&nbsp;&nbsp;&nbsp;<a href="#4.1.7.">4.3.</a>&nbsp;&nbsp;<a href="#4.3.">4.3.</a></p>
+<!-- p><abbr>keyword</abbr>&nbsp;&nbsp;&nbsp;<a href="#4.2.1.">4.2.1.</a></p>
+<p><abbr>macro use</abbr>&nbsp;&nbsp;&nbsp;<a href="#4.2.2.">4.2.2.</a></p -->
+<p><tt>syntax-lambda</tt>&nbsp;&nbsp;&nbsp;<a href="#4.2.3.">4.2.3.</a></p>
+<p><tt>syntax-rules</tt>&nbsp;&nbsp;&nbsp;<a href="#4.2.4.">4.2.4.</a></p>
+<p><tt>define</tt>&nbsp;&nbsp;&nbsp;<a href="#4.3.">4.3.</a></p>
+<p><tt>define-syntax</tt>&nbsp;&nbsp;&nbsp;<a href="#4.3.">4.3.</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full index</a> &rsaquo;</p>
+</div>
+
+<div style="width: 30pc;">
+
+
+<a id="4."/><h1>4.&nbsp;&nbsp;&nbsp;&nbsp;Core language</h1>
+
+<p>This chapter describes the set of core expression types available in the #F’s 
+<em>default environment</em>. These expression types, together with program structure
+forms [5.] and system interface constructs [6.] provide all necessary machinery
+for bulding a larger language (or languages) in a modular and controlled manner. 
+#F system comes with a set of pre-built libraries which provide most of the features
+expected of a reasonably complete Scheme system. These libraries are built on top of the
+core language described here and each other; from the compiler’s point of view, the libraries
+are no different from any other #F source file.</p>
+
+<a id="4.1."/>
+<h2>4.1.&nbsp;&nbsp;&nbsp;&nbsp;Run-time forms</h2>
+
+<p>The core language provides a set of basic Scheme expressions, aimed at representing
+non-redundant features of Scheme. A smaller set could be devised, but this one is 
+sufficiently small for practical purposes (that is to give the compiler something
+to chew on).</p>
+
+<a id="4.1.1"/><h3>4.1.1.&nbsp;&nbsp;&nbsp;&nbsp;Variable references</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><abbr>variable</abbr></td><td align="right">syntax</td></tr>
+</table>
+
+<p>An expression consisting of a variable (an identifier which is not a syntactic keyword)
+is a variable reference. The value of the variable reference is the value stored in the 
+location to which the variable is bound. It is an error to reference an unbound variable.</p>
+
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>(define x 28)
+x &rArr; 28
+</pre>
+
+<a id="4.1.2."/><h3>4.1.2.&nbsp;&nbsp;&nbsp;&nbsp;Procedure calls</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(<abbr>operator</abbr> <abbr>operand<sub>1</sub></abbr> &hellip;)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>A procedure call consists of expressions for the procedure to be called and the arguments 
+to be passed to it, with enclosing parentheses. A form in an expression context is a 
+procedure call if macroexpansion of <abbr>operator</abbr> does not produce a macro transformer 
+(see section ?.? Macro uses).</p>
+
+<p>When a procedure call is evaluated, the operator and operand expressions are evaluated 
+(in an unspecified order) and the resulting procedure is passed the resulting arguments.</p>
+
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>(+ 3 4) &rArr; 7
+((if #f + *) 3 4) &rArr; 12
+</pre>
+
+<a id="4.1.3."/><h3>4.1.3.&nbsp;&nbsp;&nbsp;&nbsp;Procedures</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(lambda (<abbr>variable<sub>1</sub></abbr> &hellip;) <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>A lambda expression evaluates to a procedure. The environment in effect when the lambda 
+expression was evaluated is remembered as part of the procedure. When the procedure is later 
+called with some actual arguments, the environment in which the lambda expression was evaluated 
+will be extended by binding the variables in the formal argument list to fresh locations, 
+the corresponding actual argument values will be stored in those locations, and the 
+expression in the body of the lambda expression will be evaluated in the extended environment. 
+The result(s) of the body expression will be returned as the result(s) of the procedure call.
+</p>
+
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>(lambda (x) (+ x x))              &rArr;  <q>a procedure</q>
+((lambda (x) (+ x x)) 4)          &rArr;  8
+
+(define reverse-subtract
+  (lambda (x y) (- y x)))
+(reverse-subtract 7 10)           &rArr;  3
+
+(define add4
+  ((lambda (x)
+     (lambda (y) (+ x y)))
+   4))
+(add4 6)                          &rArr;  10
+</pre>
+
+<p>It is an error for a <abbr>variable</abbr> to appear more than once in 
+the formal argument list.</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>In contrast to other dialects of Scheme, #F does not support
+sequences of definitions and expressions as primitive syntax of lambda expressions. 
+Improper argument lists are also not considered primitive. Both features can
+be introduced by extending the primitive form (as exemplified by definitions
+provided in base library).</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>#F does not require each procedure created as the result of 
+evaluating a lambda expression to be (conceptually) tagged with a unique storage 
+location. Two computationally equivalent procedures may share a single storage
+location even if they were created by two distinct lambda expressions.</p>
+
+<a id="4.1.4."/><h3>4.1.4.&nbsp;&nbsp;&nbsp;&nbsp;Conditionals</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(if <abbr>test</abbr> <abbr>consequent</abbr> <abbr>alternate</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>An <tt>if</tt> expression is evaluated as follows: first, <abbr>test</abbr> is evaluated. 
+If it yields a true value (see section ?.?), then <abbr>consequent</abbr> is evaluated 
+and its value(s) is(are) returned. Otherwise <abbr>alternate</abbr> is evaluated and 
+its value(s) is(are) returned. <abbr>Test</abbr>, <abbr>consequent</abbr>, and
+<abbr>alternate</abbr> may be arbitrary expressions.</p>
+
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>(if (> 3 2) 'yes 'no)             &rArr;  yes
+(if (> 2 3) 'yes 'no)             &rArr;  no
+(if (> 3 2)
+    (- 3 2)
+    (+ 3 2))                      &rArr;  1
+</pre>    
+
+<p><em>Note:&nbsp;&nbsp;</em>In contrast to other dialects of Scheme, #F does not support
+one-armed <tt>if</tt> form as primitive. This feature can be added by extending 
+the primitive form (and can be imported from base library).</p>
+
+<a id="4.1.5."/><h3>4.1.5.&nbsp;&nbsp;&nbsp;&nbsp;Assignments</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(set! <abbr>variable</abbr> <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p><abbr>Expression</abbr> is evaluated, and the resulting value is stored in the location 
+to which <abbr>variable</abbr> is bound. <abbr>Variable</abbr> must be bound either in 
+some region enclosing the <tt>set!</tt> expression or at top level of the current compilation
+unit. The result of the <tt>set!</tt> expression is unspecified.</p>
+
+<pre>(define x 2)
+(+ x 1)                           &rArr;  3
+(set! x 4)                        &rArr;  <q>unspecified</q>
+(+ x 1)                           &rArr;  5
+</pre>
+
+<p><em>Note:&nbsp;&nbsp;</em>#F does not allow the same top-level variable to be assigned from more 
+than one compilation unit.</p>
+
+
+<a id="4.1.6."/><h3>4.1.6.&nbsp;&nbsp;&nbsp;&nbsp;Continuations</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(letcc <abbr>variable</abbr> <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>A <tt>letcc</tt> expression is evaluated as follows: first, the continuation for the <tt>letcc</tt>
+expression being evaluated is captured in a form of a procedure. Then, the environment in which the <tt>letcc</tt> 
+expression is evaluated is extended by binding <abbr>variable</abbr> to a fresh location, the continuation
+procedure is stored in this location, and <abbr>expression</abbr> is evaluated in the extended 
+environment. The result(s) of the expression is(are) returned.</p>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(withcc <abbr>continuation</abbr> <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>When a <tt>withcc</tt> expression is evaluated, <abbr>continuation</abbr> is evaluated and
+the resulting procedure is used as the continuation for evaluation of <abbr>expression</abbr>.
+The result(s) of the expression is(are) returned directly to the supplied continuation procedure
+in a tail-recursive manner. The continuation used to evaluate <tt>withcc</tt> form is ignored.</p>
+
+<p class="note"><em>Rationale: </em> #F’s special-form interface to continuations is chosen for three reasons.
+First, it allows for a more precise syntactic characterization of the proper tail-recursive
+behavior in presence of continuations: if <tt>letcc</tt> or <tt>withcc</tt> form is in tail 
+position, its body expression is also in tail position. Second, Scheme’s traditional <tt>call/cc</tt> 
+interface does not allow passing the values of an application to a continuation procedure
+in a tail-recursive manner (both direct application and <tt>call-with-values</tt> have to
+add an extra control frame because of the procedural nature of the interface). Third, the
+<tt>letcc</tt>&thinsp;/&thinsp;<tt>withcc</tt> pair is not encumbered by dynamic contexts and translates
+to CPS in a straightforward manner (and allows reverse translation for CPS form with no
+restrictions on the use of continuation-bound identifiers). Traditional Scheme interface
+built upon these two forms can be imported from base library.</p>
+
+<a id="4.1.7."/><h3>4.1.7.&nbsp;&nbsp;&nbsp;&nbsp;Sequencing</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(sequence <abbr>expression<sub>1</sub></abbr> <abbr>expression<sub>2</sub></abbr>)</code></td><td align="right">prototype syntax</td></tr>
+</table>
+
+<p>The <tt>sequence</tt> expression is one of #F’s “stub” or “prototype” syntax forms which
+have a suggested semantics but are not implemented in the core language itself. The raison d'être
+for such forms is to pass as many implementation decisions as possible to library authors in cases
+when the related “surface” syntax has to be supported, but cannot be implemented as a macro.</p>
+
+<p>The suggested semantics for the <tt>sequence</tt> expression is first to evaluate 
+<abbr>expression<sub>1</sub></abbr>, discarding its return values in an implementation-dependent
+manner. Then, <abbr>expression<sub>2</sub></abbr> is to be evaluated tail-recursively and its 
+result(s) is(are) returned.</p>
+
+<p>Sequence expressions can be written explicitly or appear as intermediate forms during
+expansion of some <tt>begin</tt>, <tt>syntax-lambda</tt>, top-level and derived forms featuring
+implicit sequencing (in a form of a “body” or a “sequence of commands”). If any such form is used
+in the program, a syntax transformer for the <tt>sequence</tt> form should be provided.</p>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(begin <abbr>expression<sub>1</sub></abbr> <abbr>expression<sub>2</sub></abbr> &hellip;)</code></td><td align="right">derived syntax</td></tr>
+</table>
+
+<p>The <tt>begin</tt> expression provides one of several ways to request sequencing of
+side effects (the other being implicit body of a <tt>syntax-lambda</tt> form and 
+top-level of a compilation unit). The semantics of <tt>begin</tt> expressions is fully
+defined by their transformation into nested <tt>sequence</tt> expressions, as if <tt>begin</tt>
+were defined as follows:</p>
+
+<pre>
+(define-syntax begin 
+  (syntax-rules ()
+    ((begin exp1 exp2) 
+     (sequence exp1 exp2))
+    ((begin exp1 exp2 . more)
+     (sequence exp1 (begin exp2 . more)))))
+</pre>
+
+<p>In reality, <tt>begin</tt>’s transformer has to handle the use of <tt>begin</tt> as
+a definition form (see ?.?) and a splicing top-level form (see ?.?). #F’s macro definition
+mechanism is not expressive enough to handle overloaded syntax forms, so they are handled 
+by built-in syntax transformers.</p>
+
+<p>Examples:</p>
+
+<pre>(define x 1)
+(begin (set! x 4) 5)          &rArr;  <q>error: sequence is not defined</q>
+
+(define-syntax sequence 
+  (syntax-rules ()
+    ((sequence exp1 exp2)
+     ((lambda (ignore) exp1) 
+      exp2))))
+(begin (set! x 4) 5)          &rArr;  5
+x                             &rArr;  4
+(begin (letcc k (k 1 2)) 5)   &rArr;  <q>error: too many values</q>
+</pre>
+
+<a id="4.2."/><h2>4.2.&nbsp;&nbsp;&nbsp;&nbsp;Macros</h2>
+
+<p>#F programs can define and use new kinds of derived expressions and definitions called 
+<em>syntactic abstractions</em> or <em>macros</em>. A syntactic abstraction is created by specifying 
+a <em>macro transformer</em> which determines how a use of the macro (called a <em>macro use</em>) 
+is transcribed into a more primitive form.</p>
+
+<p>During the macroexpansion process, macro transformers (among other things) can be syntactically
+bound to identifiers. Identifiers with syntactic bindings (opposed to variables which have regular bindings 
+introduced by lambda expression and its derivatives) are called <em>syntactic keywords</em> or just 
+<em>keywords</em>. Keywords occupy the same name space as variables. That is, within the same scope, 
+an identifier can be bound as a variable or keyword, or neither, but not both, and local bindings of 
+either kind may shadow other bindings of either kind.</p>
+
+<p>Macro transformers and syntactic bindings in effect during the expansion 
+of an expression direct the expansion process, but are absent from the residual program.
+The expansion is performed as the first phase of the compilation process and thus cannot
+be affected by the non-macro parts of the program being compiled.</p>
+
+<p class="note"><em>Rationale:&nbsp;&nbsp;</em>Most modern Scheme systems provide a way to mix macroexpansion
+and evaluation environments, allowing macros to use parts of the program being interpreted.
+This approach leads to all sorts of complications, which can be either resolved in ad-hoc manner
+(via <tt>eval-when</tt> and similar constructs), or by introduction of a “tower” of interpreters
+requiring an intricate computational environment to support it. #F chose a traditionalist standalone
+compiler model which requires a fixed compilation environment, so its macro system stays within
+the R<sup>5</sup>RS framework (no way to write a transformer in the target language, and thus no
+<tt>syntax-case</tt>).</p>
+
+<p>Macros defined using <em>syntax-lambda</em> and <em>syntax-rules</em> with no <em>template escapes</em>
+are “hygienic” and “referentially transparent” and thus preserve lexical scoping. Template escapes
+provide a limited set of methods to break the hygiene by introducing constructed identifiers which
+can bind or be bound by identifiers present in the original source code.</p>
+
+
+<a id="4.2.1."/><h3>4.2.1.&nbsp;&nbsp;&nbsp;&nbsp;Syntactic keywords</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><abbr>keyword</abbr></td><td align="right">syntax</td></tr>
+</table>
+
+<p>Macroexpansion of an expression consisting of a syntactic keyword (an identifier which is 
+bound via <tt>define-syntax</tt>, <tt>syntax-lambda</tt>, or their derivatives) produces its
+associated meaning in the syntactic environment of the keyword expression.</p>
+
+<p>The following examples assume the base math library has been imported:</p>
+
+<pre>(define-syntax x *)
+((if #f + x) 3 4) &rArr; 12
+((lambda (+ *) (x + *)) 3 4) &rArr; 12
+
+(define-syntax y if)
+((y #f + x) 3 4) &rArr; 12
+</pre>
+
+<p><em>Note:&nbsp;&nbsp;</em>In #F, as in R<sup>6</sup>RS Scheme, a macro writer cannot
+rely on referential transparency of identifier expressions. #F’s identifiers can be
+syntactically bound to expressions which may produce side effects (cf. <tt>identifier-syntax</tt>).</p>
+
+<a id="4.2.2."/><h3>4.2.2.&nbsp;&nbsp;&nbsp;&nbsp;Macro uses</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(<abbr>macro</abbr> <abbr>datum<sub>1</sub></abbr> &hellip;)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>A macro use is recognized during the macroexpansion of a parenthesized expression.
+If the first element of the expression expands to a macro transformer, the expression is
+a macro use and its expanded form is obtained by following the rules set by the transformer.
+At this step, the <abbr>datum</abbr> forms are not considered to be in expression position,
+so they are not expanded.</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>Lambda expressions, conditionals, and assignments are macro uses,
+expanded according to built-in rules associated with syntactic keywords <tt>lambda</tt>, <tt>if</tt>,
+and <tt>set!</tt>, respectively. So are all other syntax forms in this chapter except for variable
+references and applications.</p>
+
+<p>The following examples assume the base math library has been imported:</p>
+
+<pre>
+(define-syntax ifnot
+  (syntax-rules ()
+    ((ifnot test con alt)
+     (if test alt con))))
+
+((ifnot #t + *) 3 4) &rArr; 12
+
+((syntax-rules ()
+   ((let ((var init) ...) exp)
+    ((lambda (var ...) exp) 
+     init ...)))
+ ((x 1) (y 2)) (+ x y)) &rArr; 3
+</pre>
+
+
+<a id="4.2.3."/><h3>4.2.3.&nbsp;&nbsp;&nbsp;&nbsp;Macro abstractions</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(syntax-lambda (<abbr>keyword<sub>1</sub></abbr> &hellip;) <abbr>body</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>When expanded, each use of <tt>syntax-lambda</tt> produces a new macro transformer. 
+The syntactic environment in effect when the use of <tt>syntax-lambda</tt> was expanded is
+remembered as part of the transformer. When the transformer is later used with some datums
+as arguments, the datums are first expanded in the syntactic environment of macro use,
+then the syntactic environment in which <tt>syntax-lambda</tt> form was expanded is
+extended by syntax bindings of each <abbr>keyword</abbr> to the corresponding result
+of the expansion of the argument datums, and then the <abbr>body</abbr> is expanded
+in the extended environment.</p>
+
+<p>The <abbr>body</abbr> of the <tt>syntax-lambda</tt> form is a single expression or
+a sequence of definitions and expressions. If the body is a single expression, it is
+expanded as described above and the expansion result is processed in accordance with the
+usual evaluation rules (if the original form was in expression position). The semantics
+of <abbr>body</abbr> as a sequence of definitions and expressions is described in the 
+next section.</p>
+
+<p>It is an error for a <abbr>keyword</abbr> to appear more than once in the keyword list
+of the <tt>syntax-lambda</tt> expression.</p> 
+
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>
+(define-syntax si
+  (syntax-lambda (test con alt)
+    (if test con alt)))
+
+((si #f + *) 3 4) &rArr; 12
+</pre>
+
+
+<a id="4.2.4."/><h3>4.2.4.&nbsp;&nbsp;&nbsp;&nbsp;Macro transformers</h3>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(syntax-rules (<abbr>literal</abbr> &hellip;) (<abbr>pattern<sub>1</sub></abbr> <abbr>template<sub>1</sub></abbr>) &hellip;)</code></td><td align="right">syntax</td></tr>
+<tr><td><code>(syntax-rules <abbr>ellipsis</abbr> (<abbr>literal</abbr> &hellip;) (<abbr>pattern<sub>1</sub></abbr> <abbr>template<sub>1</sub></abbr>) &hellip;)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>Each use of <tt>syntax-rules</tt> produces a new macro transformer by specifying a sequence 
+of hygienic rewrite rules. A use of a macro which expands to a transformer specified by <tt>syntax-rules</tt>
+is matched against patterns contained in the body of the form, beginning with the leftmost <abbr>pattern</abbr>. 
+When a match is found, the macro use is transcribed hygienically according to the corresponding <abbr>template</abbr>
+and the expansion process is repeated until the result of the transcription is no longer a macro use.</p>
+
+<p>An identifier that appears in <abbr>pattern</abbr> is a pattern variable, unless it is the identifier 
+that begins the pattern, is listed as <abbr>literal</abbr> in the head of the form, or is the identifier 
+<abbr>ellipsis</abbr> (defaults to the peculiar three dots identifier <tt>...</tt>). Pattern variables match 
+arbitrary input elements and are used to refer to elements of the input in the <abbr>template</abbr>. 
+It is an error for the same pattern variable to appear more than once in <abbr>pattern</abbr>.</p>
+
+<p>The identifier at the beginning of <abbr>pattern</abbr> is not involved in the matching and is not considered 
+a pattern variable or literal identifier. The first subform of the macro use (a transformer) is also not
+involved in the matching.</p>
+
+<p>An identifiers that appears as <abbr>literal</abbr> is interpreted as a literal identifier to be matched against 
+corresponding subforms of the input. A subform in the input matches a literal identifier if and only if it is 
+an identifier and either both its occurrence in the macro expression and its occurrence in the macro definition 
+have the same lexical binding, or the two identifiers are equal and both have no lexical binding.</p>
+
+<p> A <abbr>pattern</abbr> is an identifier, constant, or one of the following:</p>
+
+<pre style="line-height: 3.5ex"> &bull; (<abbr>pattern</abbr> &hellip;)
+ &bull; (<abbr>pattern</abbr> <abbr>pattern</abbr> &hellip; . <abbr>pattern</abbr>)
+ &bull; (<abbr>pattern</abbr> &hellip; <abbr>pattern</abbr> <abbr>ellipsis</abbr> <abbr>pattern</abbr> &hellip;)
+ &bull; (<abbr>pattern</abbr> &hellip; <abbr>pattern</abbr> <abbr>ellipsis</abbr> <abbr>pattern</abbr> &hellip; . <abbr>pattern</abbr>)
+ &bull; #(<abbr>pattern</abbr> &hellip;)
+ &bull; #(<abbr>pattern</abbr> &hellip; <abbr>pattern</abbr> <abbr>ellipsis</abbr> <abbr>pattern</abbr> &hellip;)
+ &bull; #&(<abbr>pattern-escape</abbr> <abbr>pattern</abbr>)
+</pre>
+
+<p>In nested appearances of <abbr>pattern</abbr>, the first position is subject to the normal
+matching rules. A <abbr>template</abbr> is a pattern variable, an identifier 
+that is not a pattern variable, a pattern datum, or one of the following:</p>
+
+<pre style="line-height: 3.5ex"> &bull; (<abbr>element</abbr> &hellip;)
+ &bull; (<abbr>element</abbr> <abbr>element</abbr> &hellip; . <abbr>template</abbr>)
+ &bull; #(<abbr>element</abbr> &hellip;)
+ &bull; #&(<abbr>template-escape</abbr> <abbr>element</abbr> &hellip;)
+ &bull; #&(<abbr>template-escape</abbr> <abbr>element</abbr> <abbr>element</abbr> &hellip; . <abbr>template</abbr>)
+</pre>
+
+<p>where an <abbr>element</abbr> is a <abbr>template</abbr> optionally followed by an 
+<abbr>ellipsis</abbr> and an <abbr>ellipsis</abbr> is either the identifier supplied 
+in the <tt>syntax-rules</tt> use or the identifier <tt>...</tt> (three dots). A 
+<abbr>pattern-escape</abbr> and <abbr>template-escape</abbr> are specified below.
+An <abbr>ellipsis</abbr> cannot be used as an identifier in either a template or a pattern.</p>
+
+<p>Pattern variables match arbitrary input subforms and are used to refer to elements of the input. 
+It is a syntax violation if the same pattern variable appears more than once in a <abbr>pattern</abbr>.</p>
+
+<p>A literal identifier matches an input subform if and only if the input subform is an identifier 
+and either both its occurrence in the input expression and its occurrence in the list of literals 
+have the same lexical binding, or the two identifiers have the same name and both have no lexical 
+binding.</p>
+
+<p>A subpattern followed by an ellipsis can match zero or more elements of the input.</p>
+
+<p>When a macro use is transcribed according to the template of the matching syntax rule, 
+pattern variables that occur in the template are replaced by the subforms they match in 
+the input.</p>
+
+<p>Pattern data and identifiers that are not pattern variables or ellipses are copied 
+into the output. A template followed by an ellipsis expands into zero or more occurrences 
+of the template. Pattern variables that occur in patterns followed by one or more ellipses 
+may occur only in templates that are followed by (at least) as many ellipses. These pattern 
+variables are replaced in the output by the input subforms to which they are bound, 
+distributed as specified. If a pattern variable is followed by more ellipses in the 
+template than in the associated pattern, the input form is replicated as necessary. 
+The template must contain at least one pattern variable from a pattern followed by 
+an ellipsis, and for at least one such pattern variable, the template must be followed 
+by exactly as many ellipses as the pattern in which the pattern variable appears. 
+(Otherwise, the expander would not be able to determine how many times the subform 
+should be repeated in the output.) It is a syntax violation if the constraints 
+of this paragraph are not met.</p>
+
+<p>A <abbr>pattern-escape</abbr> is one of the following identifiers, recognized
+by their literal names:</p> 
+
+<pre style="line-height: 3.5ex"> &bull; number?          <q>matches numerical constants</q>
+ &bull; string?          <q>matches string constants</q>
+ &bull; id?              <q>matches identifiers (symbols)</q>
+</pre>
+
+<p>A <abbr>pattern-escape</abbr> pattern matches an input subform if its subpattern
+matches the subform and satisfies a constraint specified by the escape name. In all
+other respects a <abbr>pattern-escape</abbr> pattern is equivalent to its subpattern.</p> 
+
+<p>A <abbr>template-escape</abbr> is one of the following identifiers, recognized
+by their literal names:</p> 
+
+<pre style="line-height: 3.5ex">
+ &bull; number->string   <q>converts a number into a string</q>
+ &bull; string->number   <q>converts a string into a number</q>
+ &bull; id->string       <q>converts an identifier into a string</q>
+ &bull; string->id       <q>converts a string into a capturing identifier</q>
+ &bull; length           <q>converts a list to its length (a number)</q>
+ &bull; +                <q>adds numbers</q>
+ &bull; *                <q>multiplies numbers</q>
+ &bull; string-append    <q>appends strings</q>
+</pre>
+
+<p>A <abbr>template-escape</abbr> template expands by first expanding its subtemplates
+as if they were components of a list template. The result of the expansion is then
+processed according to a transformation specified by the name of the template escape.
+The first five escape forms require exactly one subform, the other three can accept
+any number of subforms. It is an error if a subform does not belong to a class
+implied in the escape name.</p>
+
+<p>The <tt>string->id</tt> escape expands into an identifier that can refer to a
+synonymous binding in the lexical scope of the transformer macro use. If it is
+introduced into a bound position, it can capture the references by the same name
+withing the scope of its binding. In short, the constructed identifier behaves
+as if it were present in the original program text.</p>
+
+<p>The following examples assume the base math library has been imported:</p>
+
+<pre>
+(define-syntax let-syntax
+  (syntax-rules ()
+    ((_ ((kw init) ...) . body)
+     ((syntax-lambda (kw ...) . body)
+      init ...))))
+
+(let-syntax 
+  ((foo (let-syntax 
+          ((bar (syntax-rules () ((bar x) (- x)))))
+          (syntax-rules () ((foo) (bar 2))))))
+  (foo))  
+&rArr; -2
+
+(let-syntax ((q quote)) (q x)) &rArr; x
+
+(define n 0)
+(let-syntax ((n++ (set! n (+ n 1))))
+  (begin n++ n++ n++ n))
+&rArr; 3
+
+(define-syntax with-math-defines 
+  (syntax-rules () 
+    ((_ x) 
+     ((lambda (#&(string->id "pi") #&(string->id "e")) x) 
+      3.141592653589793 2.718281828459045))))
+(with-math-defines (+ pi e)) 
+&rArr; 5.859874482048838
+</pre>
+
+<a id="4.3"/><h2>4.3.&nbsp;&nbsp;&nbsp;&nbsp;Definitions and scope</h2>
+
+<p>Modern Schemes feature a complicated mechanism of assembling a set of top-level or
+local bindings by transforming a <abbr>program</abbr> or a <abbr>body</abbr>
+into a sequence of global assignments or mutually recursive bindings. This transformation
+is too complex to be performed by a <tt>syntax-rules</tt> based macroexpander, so a minimal
+set of constructs for scopes and definitions is provided in the core language.</p>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(define <abbr>variable</abbr> <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+<tr><td><code>(define-syntax <abbr>keyword</abbr> <abbr>datum</abbr>)</code></td><td align="right">syntax</td></tr>
+<tr><td><code>(begin <abbr>definition</abbr> &hellip;)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>Definitions are valid in some, but not all, contexts where expressions are allowed. They are valid 
+only at the top level of a compilation unit and at the beginning of a <tt>syntax-lambda</tt> form.
+A definition is not an expression and has no value.</p>
+
+<a id="4.3.1"/><h3>4.3.1.&nbsp;&nbsp;&nbsp;&nbsp;Top level definitions</h3>
+
+<p>At the top level of a compilation unit, a definition</p>
+<pre>
+   (define <abbr>variable</abbr> <abbr>expression</abbr>)
+</pre>
+<p>has essentially the same effect as the assignment expression</p>
+<pre>
+   (set! <abbr>variable</abbr> <abbr>expression</abbr>)
+</pre>
+<p>if <abbr>variable</abbr> is bound in the compilation unit. If <abbr>variable</abbr>
+is not bound, then the definition will bind <abbr>variable</abbr> to a new location
+before performing the assignment. In #F, all compilation units share a single
+global namespace, so variables bound at the top-level in one unit are visible in
+all other units. It is an error to bind a variable in more than one compilation unit
+of the program. It is also an error to reference a variable which is not bound in
+any compilation units constituting a program.</p>
+
+<p>During the macroexpansion of the program a top level definition of the form</p>
+<pre>
+   (define-syntax <abbr>keyword</abbr> <abbr>datum</abbr>)
+</pre>
+<p>extends the top-level syntactic environment by binding <abbr>keyword</abbr>
+(an identifier) to the result of the expansion of <abbr>datum</abbr> in the
+original syntactic environment.</p>
+
+
+<a id="A1"/><h3>4.3.2.&nbsp;&nbsp;&nbsp;&nbsp;Internal definitions</h3>
+
+<p>Definitions may Adjacent definitions at the beginning of a <tt>syntax-lambda</tt> ...</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>All traditional forms with <em>implicit body</em> are constructed as macros which
+use <tt>syntax-lambda</tt> to scope definitions. Traditional forms are available in base library.</p>
+
+
+
+</div>
+</body>
+</html>
