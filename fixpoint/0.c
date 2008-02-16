@@ -96,7 +96,7 @@ int getimms(obj o, int t) {
   extern int getimmu(obj o, int t);
   extern int getimms(obj o, int t);
 #endif
-#define mkimm(o, t) ((((o) & 0xffffff) << 8) | ((t) << 1) | 1)
+#define mkimm(o, t) (obj)((((o) & 0xffffff) << 8) | ((t) << 1) | 1)
 #ifndef NDEBUG
 int isnative(obj o, cxtype_t *tp) {
   return isobjptr(o) && objptr_from_obj(o)[-1] == (obj)tp; 
@@ -208,7 +208,7 @@ char* stringref(obj o, int i) {
 #endif
 extern int *newstring(char *s);
 int *newstring(char *s) {
-  int l, *d; assert(s); l = strlen(s); 
+  int l, *d; assert(s); l = (int)strlen(s); 
   d = cxm_cknull(malloc(sizeof(int)+l+1), "malloc(string)");
   *d = l; strcpy((char*)(d+1), s); return d;
 }

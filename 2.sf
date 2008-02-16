@@ -76,20 +76,18 @@
 
 ; representation helpers
 
-(define (integer-representation-width x)
-  (let loop ([rb 8])
-    (let ([rb-least (- (expt 2 (- rb 1)))]
-          [rb-grtst (- (expt 2 (- rb 1)) 1)])
-      (cond [(<= rb-least x rb-grtst) rb]
-            [(< rb 128) (loop (+ rb 8))]
-            [else #f]))))
-
 (define (unsigned-representation-width x)
   (and (not (negative? x))
-       (let loop ([rb 8])
-         (cond [(< x (expt 2 rb)) rb]
-               [(< rb 128) (loop (+ rb 8))]
+       (let loop ([rb 8] [rb-max 255])
+         (cond [(<= x rb-max) rb]
+               [(< rb 24) (loop (+ rb 8) (+ (* rb-max 256) 255))]
                [else #f]))))
+
+(define (integer-representation-width x)
+  (let loop ([rb 8] [rb-min -128] [rb-max 127])
+    (cond [(<= rb-min x rb-max) rb]
+          [(< rb 24) (loop (+ rb 8) (* rb-min 256) (+ (* rb-max 256) 255) )]
+          [else #f])))
                
 (define (char-safe? c)
   (and (char<=? c #\~) (char>=? c #\space)

@@ -89,7 +89,7 @@ extern int cxg_rc;
   extern int getimmu(obj o, int t);
   extern int getimms(obj o, int t);
 #endif
-#define mkimm(o, t) ((((o) & 0xffffff) << 8) | ((t) << 1) | 1)
+#define mkimm(o, t) (obj)((((o) & 0xffffff) << 8) | ((t) << 1) | 1)
 #ifdef NDEBUG
    static int isnative(obj o, cxtype_t *tp) 
      { return isobjptr(o) && objptr_from_obj(o)[-1] == (obj)tp;  }

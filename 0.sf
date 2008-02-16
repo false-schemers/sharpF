@@ -269,7 +269,7 @@
   extern int getimms(obj o, int t);
 #endif")
 
-(%definition "#define mkimm(o, t) ((((o) & 0xffffff) << 8) | ((t) << 1) | 1)")
+(%definition "#define mkimm(o, t) (obj)((((o) & 0xffffff) << 8) | ((t) << 1) | 1)")
 
 
 
@@ -877,7 +877,7 @@ void *getnative(obj o, cxtype_t *tp) {
 
 (%definition "extern int *newstring(char *s);")
 (%localdef "int *newstring(char *s) {
-  int l, *d; assert(s); l = strlen(s); 
+  int l, *d; assert(s); l = (int)strlen(s); 
   d = cxm_cknull(malloc(sizeof(int)+l+1), \"malloc(string)\");
   *d = l; strcpy((char*)(d+1), s); return d;
 }")
@@ -1973,6 +1973,8 @@ void *getnative(obj o, cxtype_t *tp) {
     ([compare
       (syntax-rules ()
         [(_ key ()) #f]
+        [(_ key (#&(id? datum) . data))
+         (if (eq? key 'datum) #t (compare key data))]
         [(_ key (datum . data))
          (if (eqv? key 'datum) #t (compare key data))])]
      [case
