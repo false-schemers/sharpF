@@ -1,0 +1,353 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>7. Runtime System</title>
+<style type="text/css">
+body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
+#menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
+* html #menu { position: absolute; }
+#menu p { font-size: 9pt; line-height: 3ex; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 2.8ex; margin: 0; padding: 0;  }
+#menu a:visited, #menu a { text-decoration: none; color: #1D5CA5; }
+#menu a:hover { text-decoration: underline; color: #1D5CA5; }
+body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
+tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
+abbr, var { font-style: italic; }
+q { font-style: italic; text-decoration: none; }
+pre { margin-top: 1.5ex; margin-bottom: 0; }
+p { line-height: 3ex; font-size: 10pt; margin-top: 1.5ex; margin-bottom: 0; padding: 0; text-align: justify; }
+p.note { font-size: 9pt; }
+p.note tt, code, pre { font-size: 10.5pt; }
+h1 { margin-top: 0; margin-bottom: 0; font-size: 17pt; border-top: 1.5ex solid white; }
+h2 { margin-top: 0; margin-bottom: 0; font-size: 13pt; border-top: 3ex solid white; }
+h3 { margin-top: 0; margin-bottom: 0; font-size: 11pt; border-top: 3ex solid white; }
+h4 { margin-top: 0; margin-bottom: 0; font-size: 10pt; border-top: 1.5ex solid white; }
+table.proto { margin-top: 0; margin-bottom: 0; border: 0; border-spacing: 0; padding: 0; border-top: 3ex solid white;}
+table.proto td { font-size: 10pt; line-height: 3ex; }
+</style>
+<!--[if lte IE 6]>
+   <style type="text/css">
+   /*<![CDATA[*/ 
+html { overflow-x: auto; overflow-y: hidden; }
+   /*]]>*/
+   </style>
+<![endif]-->
+</head>
+<body>
+
+<div id="menu">
+<p>7.&nbsp;&nbsp;<a href="#7.">Runtime system</a></p>
+<p>7.1.&nbsp;&nbsp;<a href="#7.1.">Object representation</a></p>
+<p>7.1.1.&nbsp;&nbsp;<a href="#7.1.1.">Partitioning of obj values</a></p>
+<p>7.1.2.&nbsp;&nbsp;<a href="#7.1.2.">Representation of procedures</a></p>
+<p>7.1.3.&nbsp;&nbsp;<a href="#7.1.3.">Representation of locations</a></p>
+<p>7.2.&nbsp;&nbsp;<a href="#7.2.">Garbage collection</a></p>
+<p>7.2.1.&nbsp;&nbsp;<a href="#7.2.1.">Allocation of obj blocks</a></p>
+<p>7.2.2.&nbsp;&nbsp;<a href="#7.2.2.">Allocation of native blocks</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full table of contents</a> &rsaquo;</p>
+<p>&nbsp;</p>
+<p><tt>obj</tt>&nbsp;&nbsp;&nbsp;<a href="#obj">7.1.</a></p>
+<p><tt>cxtype_t</tt>&nbsp;&nbsp;&nbsp;<a href="#cxtype_t">7.1.1.</a></p>
+<p><tt>notobjptr</tt>&nbsp;&nbsp;&nbsp;<a href="#notobjptr">7.1.1.</a></p>
+<p><tt>isobjptr</tt>&nbsp;&nbsp;&nbsp;<a href="#isobjptr">7.1.1.</a></p>
+<p><tt>notaptr</tt>&nbsp;&nbsp;&nbsp;<a href="#notaptr">7.1.1.</a></p>
+<p><tt>isaptr</tt>&nbsp;&nbsp;&nbsp;<a href="#isaptr">7.1.1.</a></p>
+<p><tt>hblklen</tt>&nbsp;&nbsp;&nbsp;<a href="#hblklen">7.1.1.</a></p>
+<p><tt>hblkref</tt>&nbsp;&nbsp;&nbsp;<a href="#hblkref">7.1.1.</a></p>
+<p><tt>hp</tt>&nbsp;&nbsp;&nbsp;<a href="#hp">7.2.</a></p>
+<p><tt>hreserve</tt>&nbsp;&nbsp;&nbsp;<a href="#hreserve">7.2.1.</a></p>
+<p><tt>hbsz</tt>&nbsp;&nbsp;&nbsp;<a href="#hbsz">7.2.1.</a></p>
+<p><tt>hendblk</tt>&nbsp;&nbsp;&nbsp;<a href="#hendblk">7.2.1.</a></p>
+<p><tt>hpushptr</tt>&nbsp;&nbsp;&nbsp;<a href="#hpushptr">7.2.2.</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full index</a> &rsaquo;</p>
+</div>
+
+<div style="width: 30pc;">
+
+
+<a id="7."/><h1>7.&nbsp;&nbsp;&nbsp;&nbsp;Runtime system</h1>
+
+<p>#F system provides a simple and fairly portable framework for creating
+a custom runtime system. The framework does not cover every aspect of
+runtime representation, but lays down a set of basic rules relied upon
+by the compiler. Since the compiler's target language is ANSI C, the
+rules are described in C terms (types, calling conventions etc.)</p>
+
+<a id="7.1."/><h2>7.1.&nbsp;&nbsp;&nbsp;&nbsp;Object representation</h2>
+
+<a id="obj"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>obj</code></td><td align="right">standard prelude typedef</td></tr>
+</table>
+
+<p>#F objects have a <em>universal representation</em>, allowing arbitrary
+manipulation in absence of compile-time type information. All first-class
+objects are represented by C type <tt>obj</tt>, which is defined as follows:</p>
+
+<pre>typedef ptrdiff_t obj;  /* pointer or immediate */
+</pre>
+
+<p>#F assumes that <tt>ptrdiff_t</tt> is large enough to store pointers. Another
+assumption is that pointers returned by C <tt>malloc</tt>, <tt>calloc</tt>, and
+<tt>realloc</tt> procedures, as well as pointers to static arrays of pointers are
+aligned to an even address and that when these pointers are cast to <tt>ptrdiff_t</tt>,
+the resulting integer will have zero in its lower bit. These assumptions hold on 
+most modern architectures (Crays, AS/400s, and <a href="http://en.wikipedia.org/wiki/DeathStation_9000">DS9K</a> 
+are well-known counterexamples).</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>When support for C99 standard becomes more widespread,
+#F will switch to more portable <tt>intptr_t</tt> type for pointer-sized integers.</p>
+
+<a id="7.1.1."/><h3>7.1.1.&nbsp;&nbsp;&nbsp;&nbsp;Partitioning of obj values</h3>
+
+<p>#F maintains a collectible object heap for dynamically allocated objects subject
+to garbage collection. All pointers that point outside the collectible heap are also
+valid #F objects, but their management is left to the library authors. The <tt>NULL</tt>
+pointer which, when converted to <tt>obj</tt>, has a bit pattern of all zeroes
+is interpreted as a canonical boolean false value (<tt>#f</tt>). The remaining
+<tt>obj</tt> values with lower bit <tt>1</tt> are called &ldquo;immediate&rdquo;
+quantities, reserved for values which can fit into a small fixed number of bits.
+#F assumes that <tt>ptrdiff_t</tt> is at least <tt>32</tt> bit long, so immediate
+objects are guaranteed to have <tt>31</tt> representation bits.</p>
+
+<p>An <tt>obj</tt> which is a pointer into the collectible heap may point to
+one of two different types of allocation units. The first type is an variable-length 
+array of arbitrary <tt>obj</tt> elements (an <em>obj block</em>), the other is a single-element
+array containing any type of <tt>obj</tt> except references to the collectible heap
+(a <em>native block</em>). The type of the allocation unit is determined by
+the <tt>ptrdiff_t</tt>-size value immediately preceding the data pointed to by the
+<tt>obj</tt>. This value is the <em>header</em> of the block, giving the total
+allocation size in <tt>ptrdiff_t</tt> elements as <tt>N+1</tt> for an obj block and
+<tt>2</tt> for a native block. The header for the native block contains the number of
+elements in the block (excluding the header), shifted left by <tt>1</tt> and
+or-ed with <tt>1</tt> to make it look like an immediate value for the garbage
+collector. The header for the native block is a pointer to a static structure
+of the type <tt>cxtype_t</tt> defined as follows:</p>
+
+<a id="cxtype_t"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>cxtype_t</code></td><td align="right">standard prelude typedef</td></tr>
+</table>
+
+<pre>typedef struct {
+  const char *tname;          /* name (debug) */
+  void (*free)(void*);        /* deallocator */
+} cxtype_t;
+</pre>
+
+<p>Native block headers are used to determine the run-time type of
+the object represented by the block as well as for deallocation of
+the object's non-collectible resources when the object itself is
+collected. At the end of a collection cycle the collector traces
+every &ldquo;garbage&rdquo; native block, calling its <tt>free</tt>
+member procedure with its single element as an argument.</p>
+
+<p>The partititioning of <tt>obj</tt> values are summarized in the 
+following table:</p>
+
+<table style="margin-left: 1pc; margin-top: 2ex;" cellpadding="2ex;">
+<tr><td><em>bit pattern</em></td><td><em>type of value</em></td></tr>
+<tr><td><tt>0&hellip;0</tt>&nbsp; (all zeroes)</td><td>boolean false (<tt>#f</tt>)</td></tr>
+<tr><td><tt>X&hellip;0</tt>&nbsp; (pointer into gc heap)&nbsp;&nbsp;</td><td>obj block of size N, header = <tt>(N<<1)|1</tt></td></tr>
+<tr><td><tt>X&hellip;0</tt>&nbsp; (pointer into gc heap)&nbsp;&nbsp;</td><td>native block, header is <tt>cxtype_t*</tt></td></tr>
+<tr><td><tt>X&hellip;0</tt>&nbsp; (pointer outside gc heap)&nbsp;&nbsp;</td><td>external pointer to non-collectible data</td></tr>
+<tr><td><tt>X&hellip;1</tt>&nbsp; (lsb is <tt>1</tt>)</td><td>immediate quantity (<tt>31</tt> bit)</td></tr>
+</table>
+
+<p>#F&rsquo;s standard <em>runtime prelude</em> (C code automatically included in every
+output file) provides basic macros to check the partition of a given <tt>obj</tt>:</p>
+
+<a id="notobjptr"/><a id="isobjptr"/><a id="notaptr"/><a id="isaptr"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>notobjptr(o)</code></td><td align="right">standard prelude #define</td></tr>
+<tr><td><code>isobjptr(o)</code></td><td align="right">standard prelude #define</td></tr>
+<tr><td><code>notaptr(o)</code></td><td align="right">standard prelude #define</td></tr>
+<tr><td><code>isaptr(o)</code></td><td align="right">standard prelude #define</td></tr>
+</table>
+
+<p>The <tt>notobjptr</tt> macro tests if an object is either <tt>#f</tt>, an external
+pointer, or an immediate quantity. Its inverse is <tt>isobjptr</tt> which checks
+for pointers to gc heap blocks (obj or native).</p>
+
+<p>The <tt>notaptr</tt> macro tests if an object is an immediate quantity (note
+that <tt>#f</tt> is NULL pointer, not an immediate quantity). Its inverse is 
+<tt>isaptr</tt> which checks for <tt>#f</tt>/any pointer.</p>
+
+<p>Obj blocks can be inspected with the help of the following
+macros in the standard prelude:</p>
+
+<a id="hblklen"/><a id="hblkref"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>hblklen(p)</code></td><td align="right">standard prelude #define</td></tr>
+<tr><td><code>hblkref(p, i)</code></td><td align="right">standard prelude #define</td></tr>
+</table>
+
+<p>If <tt>p</tt> is a pointer to an obj block, <tt>hblklen(p)</tt> returns an
+<tt>int</tt> specifying the number of elements in the block, excluding the header.
+If <tt>p</tt> is a pointer to an obj block and <tt>i</tt> is any non-negative <tt>int</tt>
+less than the number of elements in the block, <tt>hblklen(p, i)</tt> will return
+a reference to ith element of the block (an <tt>obj*</tt> pointer).</p>
+
+<a id="7.1.2."/><h3>7.1.2.&nbsp;&nbsp;&nbsp;&nbsp;Representation of procedures</h3>
+
+<p>#F compiler needs to standardize the representation of two types
+of objects actively used in the generated code &mdash; procedures and locations.</p>
+
+<p>A Scheme procedure is a first-class object consisting of a static code and parts
+of the environment needed to support lexical scope indefinetely (a <em>closure</em>). #F&rsquo;s
+procedures have to have a universal representation, so that any procedure can
+be invoked from anywhere in absense of a compile-time information.</p>
+
+<p>Procedures are represented at run-time by obj blocks of length <tt>1</tt> or more.
+The first element of the procedure block is a pointer to its entry point (implemented
+as an element of statically-allocated array of function pointers). The remaining elements
+of the obj block serve as a <em>display</em> holding the values of the free variables
+at the moment of the procedure creation.</p>
+
+<p>The layout of the procedure should be taken into account if there is a need to
+implement a predicate to recognize procedures at run time. Normally, this is done
+by making sure that other obj block based data types never use the first element
+of the block to store external pointers.</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>One possible approach is to use the first element
+of the obj block to hold an immediate type tag or a pointer to another obj
+block serving as a type descriptor.</p>
+
+<a id="7.1.3."/><h3>7.1.3.&nbsp;&nbsp;&nbsp;&nbsp;Representation of locations</h3>
+
+<p>In Scheme semantics, a <em>location</em> is allocated each time a variable
+is bound to store the value of the variable. Locations are needed to allow any
+variable to be assigned to via <tt>set!</tt>. In #F and Scheme programs most
+variables do not change their values after binding, so #F compiler needs
+to allocate locations only for variables that do change.</p>
+
+<p>At run time, the locations are represented as single-element obj blocks.
+Locations are allocated automatically at procedure entry, and all location
+operations are performed &ldquo;behind the curtain&rdquo; as required by
+the #F semantics. Since there is no way to get access to a location itself 
+as a first class object, there is no need to distinguish them from first
+class objects.</p>
+
+<a id="7.2."/><h2>7.2.&nbsp;&nbsp;&nbsp;&nbsp;Garbage collection</h2>
+
+<p>#F system uses Cheney's stop-and-copy garbage collector to manage
+its gc heap. At any given moment, the system maintains two heaps 
+(semi-spaces), one active, used as push-only stack, the other reserved
+to hold surviving blocks during the collection.</p>
+
+<p>The surviving blocks are identified by tracing all global
+Scheme variables and a small set of <em>live registers</em> holding
+temporary values. The details on the organization of the global
+data and execution of the compiled code are provided in section [?].</p>
+
+<a id="hp"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>hp</code></td><td align="right">runtime host variable</td></tr>
+</table>
+
+<p>The free space pointer in the active heap is held in the global
+variable <tt>cxg_hp</tt> when control is outside the host procedure
+of a compilation unit. Inside the host procedure, the free space
+pointer is kept in a local variable <tt>hp</tt>. All allocations
+inside a host procedure begin by checking that sufficient room is
+available in the heap, triggering the collection if needed. Next,
+one or more blocks are pushed into the heap, decrementing the
+free space pointer. Each obj block is written in reverse, starting
+from the last element and ending with the header. Native blocks
+are usually written with a single command that pushes the data
+element (usually a pointer returned by <tt>malloc</tt>) and the
+header (a pointer to native descriptor). These steps are performed
+with the help of the standard prelude macros described below.</p>
+
+<a id="7.2.1."/><h3>7.2.1.&nbsp;&nbsp;&nbsp;&nbsp;Allocation of obj blocks</h3>
+
+<a id="hreserve"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>hreserve(n, l)</code></td><td align="right">standard prelude #define</td></tr>
+</table>
+
+<p>The <tt>hreserve(n, l)</tt> macro checks if the heap has room for 
+<tt>n</tt> new elements (headers count too). If there is not enough
+room, a garbage collection is triggered, and the new space is allocated
+as needed. The <tt>l</tt> parameter specifies the number of live
+registers, needed by the collector. Both parameters are <tt>int</tt>s.</p>
+
+<a id="hbsz"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>hbsz(n)</code></td><td align="right">standard prelude #define</td></tr>
+</table>
+
+<p>The <tt>hbsz(n)</tt> macro calculates the total number of heap elements
+needed to allocate an obj block of size <tt>n</tt>. This macro is defined
+as <tt>((n) + 1)</tt>.</p>
+ 
+<a id="hendblk"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>hendblk(n)</code></td><td align="right">standard prelude #define</td></tr>
+</table>
+
+<p><tt>hendblk(n)</tt> pushes obj block header into the heap and returns the
+pointer to the first element of the block, cast to <tt>obj</tt>. This is the
+standard way to finish allocation of an obj block. The parameter <tt>n</tt> must 
+be a non-negative <tt>int</tt> specifying the number of elements in the block.</p>
+
+<p>Below is a hypothetical allocation sequence for <tt>(list a b)</tt>
+with no run-time tags, assuming that <tt>a</tt>, <tt>b</tt>, and <tt>nil</tt> 
+are held in registers <tt>r[1]-r[3]</tt>, the result is expected in <tt>r[0]</tt>, 
+and the current number of live registers is <tt>4</tt>:</p>
+
+<pre>
+    hreserve(2*hbsz(2), 4); /* 4 live regs */
+    *--hp = r[3]; /* nil */ 
+    *--hp = r[2]; /* b */
+    r[0] = hendblk(2);
+    *--hp = r[0];  
+    *--hp = r[1]; /* a */
+    r[0] = hendblk(2);    
+</pre>
+
+<p>The following example is a definition of <tt>(cons a d)</tt>
+taken from the original version of the compiler's own runtime:</p>
+
+<pre>(%prim* "{ /* cons */ 
+    hreserve(hbsz(3), $live); /* $live live regs */
+    *--hp = obj_from_$arg;
+    *--hp = obj_from_$arg;
+    *--hp = PAIR_TAG; 
+    $return obj(hendblk(3)); }" d a)
+</pre>
+
+<p>Note that the heap grows downwards and that one <tt>hreserve</tt>
+can reserve heap space for more than one obj block.</p>
+
+<a id="7.2.2."/><h3>7.2.2.&nbsp;&nbsp;&nbsp;&nbsp;Allocation of native blocks</h3>
+
+<a id="hpushptr"/>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>hpushptr(p, pt, l)</code></td><td align="right">standard prelude #define</td></tr>
+</table>
+
+<p>Given an external (non-gc-heap) pointer <tt>p</tt> of type <tt>void*</tt> and
+a pointer to the corresponding statically allocated native descriptor <tt>pt</tt>
+of type <tt>cxtype_t*</tt>, and the number of live registers <tt>l</tt>, 
+<tt>hpushptr(p, pt, l)</tt> reserves <tt>2</tt> heap elements needed to place the
+native block, possibly triggering a garbage collection, pushes the block,
+and returns the pointer to the block's first element cast to <tt>obj</tt>.</p>
+
+<p>The following example of poor-man&rsquo;s implementation of
+string datatype with no error checking illustrates definition and
+allocation of native blocks:</p>
+
+<pre>
+    cxtype_t cxt_string = { "string", free };
+    &hellip;
+    /* allocation (r[0-2] are alive) */
+    char *p = strdup("Hello, World!");
+    r[3] = hpushptr(p, &cxt_string, 3); 
+</pre>
+
+
+</div>
+</body>
+</html>
