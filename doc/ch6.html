@@ -1,0 +1,319 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>6. Compilation</title>
+<style type="text/css">
+body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
+#menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
+* html #menu { position: absolute; }
+#menu p { font-size: 9pt; line-height: 3ex; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 2.8ex; margin: 0; padding: 0;  }
+#menu a:visited, #menu a { text-decoration: none; color: #1D5CA5; }
+#menu a:hover { text-decoration: underline; color: #1D5CA5; }
+body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
+tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
+abbr, var { font-style: italic; }
+q { font-style: italic; text-decoration: none; }
+pre { margin-top: 1.5ex; margin-bottom: 0; }
+p { line-height: 3ex; font-size: 10pt; margin-top: 1.5ex; margin-bottom: 0; padding: 0; text-align: justify; }
+p.note { font-size: 9pt; }
+p.note tt, code, pre { font-size: 10.5pt; }
+p a:visited, p a { text-decoration: none; color: #1D5CA5; }
+p a:hover { text-decoration: underline; color: #1D5CA5; }
+h1 { margin-top: 0; margin-bottom: 0; font-size: 17pt; border-top: 1.5ex solid white; }
+h2 { margin-top: 0; margin-bottom: 0; font-size: 13pt; border-top: 3ex solid white; }
+h3 { margin-top: 0; margin-bottom: 0; font-size: 11pt; border-top: 3ex solid white; }
+h4 { margin-top: 0; margin-bottom: 0; font-size: 10pt; border-top: 1.5ex solid white; }
+table.proto { margin-top: 0; margin-bottom: 0; border: 0; border-spacing: 0; padding: 0; border-top: 3ex solid white;}
+table.proto td { font-size: 10pt; line-height: 3ex; }
+</style>
+<!--[if lte IE 6]>
+   <style type="text/css">
+   /*<![CDATA[*/ 
+html { overflow-x: auto; overflow-y: hidden; }
+   /*]]>*/
+   </style>
+<![endif]-->
+</head>
+<body>
+
+<div id="menu">
+<p>6.&nbsp;&nbsp;<a href="#6.">Compilation</a></p>
+<p>6.1.&nbsp;&nbsp;<a href="#6.1.">Compilation units</a></p>
+<p>6.1.1.&nbsp;&nbsp;<a href="#6.1.1.">Global namespace</a></p>
+<p>6.1.2.&nbsp;&nbsp;<a href="#6.1.2.">Unit dependencies</a></p>
+<p>6.1.3.&nbsp;&nbsp;<a href="#6.1.3.">Linkage</a></p>
+<p>6.1.4.&nbsp;&nbsp;<a href="#6.1.4.">Main entry point</a></p>
+<p>6.2.&nbsp;&nbsp;<a href="#6.2.">Including C code</a></p>
+<p>6.3.&nbsp;&nbsp;<a href="#6.3.">Compilation technique</a></p>
+<p>6.3.1.&nbsp;&nbsp;<a href="#6.3.1.">Host functions</a></p>
+<p>6.3.2.&nbsp;&nbsp;<a href="#6.3.2.">Optimizations</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full table of contents</a> &rsaquo;</p>
+<p>&nbsp;</p>
+<p><tt>#fload</tt>&nbsp;&nbsp;&nbsp;<a href="#fload">6.1.2.</a></p>
+<p><tt>main</tt>&nbsp;&nbsp;&nbsp;<a href="#main">6.1.4.</a></p>
+<p><tt>%include</tt>&nbsp;&nbsp;&nbsp;<a href="#include">6.2.</a></p>
+<p><tt>%definition</tt>&nbsp;&nbsp;&nbsp;<a href="#definition">6.2.</a></p>
+<p><tt>%localdef</tt>&nbsp;&nbsp;&nbsp;<a href="#definition">6.2.</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full index</a> &rsaquo;</p>
+</div>
+
+<div style="width: 30pc;">
+
+
+<a id="6."/><h1>6.&nbsp;&nbsp;&nbsp;&nbsp;Compilation</h1>
+
+<p>#F compiler translates #F source code into C code. #F supports separate
+compilation and provides a way to specify dependencies between source
+components (<em>compilation units</em>). The compiler implements full tail recursion,
+using trampoline compilation techniques similar to the ones used by Gambit C and
+MIT Scheme [<a href="http://citeseer.ist.psu.edu/feeley97compiling.html">Feeley97</a>].
+
+The parts of the C code inserted by the compiler conform to ANSI C standard [C89].</p>
+
+<a id="6.1."/><h2>6.1.&nbsp;&nbsp;&nbsp;&nbsp;Compilation units</h2>
+
+<p>#F compiler translates #F <em>compilation unit</em> into C. 
+A #F compilation unit is a single file, conventionally ending in <tt>.sf</tt>,
+that contains #F source code. The result of the translation is a
+single C file with the same base name as the #F file and the  
+extension <tt>.c</tt>, located in the same directory as the original.</p>
+
+<a id="6.1.1."/><h3>6.1.1.&nbsp;&nbsp;&nbsp;&nbsp;Global namespace</h3>
+
+<p>#F has a simplistic model of the global namespace (top level environment), 
+borrowed from C and traditional Scheme. All top-level bindings occupy a single 
+namespace shared by all units. There is no import or export of bindings; all 
+top level bindings in all units of a program are accessible from any unit (the 
+compiler may need to know where to look for, but there is no name resolution).
+In large-scale projects, name conflicts can be prevented in the traditional
+Scheme way by wrapping internal definitions in <tt>let</tt> forms or
+following a consistent naming convention. #F macro system supports
+simple name aliasing, which works equally well for variables and
+keywords, e.g.:</p>
+
+<pre>(define-syntax zap! acme.util.zap!)
+(define-syntax withcz acme.sugar.with-current-zapping)
+</pre>
+
+<p>Note that the original long names will still be visible.</p>
+
+<a id="6.1.2."/><h3>6.1.2.&nbsp;&nbsp;&nbsp;&nbsp;Unit dependencies</h3>
+
+<p>A compilation unit may depend on other compilation units in two ways.
+First, it may use macros defined in other units. Second, it can contain
+initialization code which depends on effects of initialization code in other
+units (top-level procedures get their values during the initialization 
+of the unit that contains their definitions).</p>
+
+<p>#F treats both kind of dependencies in the same way. If unit A depends
+on units B and C, it should contain explicit <em>processing instructions</em>,
+telling the compiler to <em>visit</em> B and C before compiling A, and
+arrange the initialization order so that A is initialized after B and C.</p>
+
+<a id="fload" />
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>#fload "<abbr>filename</abbr>"</code></td><td align="right">processing instruction</td></tr>
+</table>
+
+<p>The <tt>#fload</tt> instruction tells the compiler that the unit being
+compiled depends on the unit named <abbr>filename</abbr>. At the macroexpansion
+phase, <abbr>filename</abbr> will be processed by the macroexpander as if
+its contents were present at the point of the instruction {<em>what happens to nested instructions? &ndash;esl</em>}.  
+All processing instructions for unit dependencies should precede any
+regular #F forms in the unit.</p>
+
+<a id="6.1.3."/><h3>6.1.3.&nbsp;&nbsp;&nbsp;&nbsp;Linkage</h3>
+
+<p>When a compilation unit is translated into C, each variable bound by a top level 
+<tt>define</tt>, assigned to via <tt>set!</tt>, or simply referred to in the code
+produces a single global C variable. If a variable is neither defined nor assigned to
+in the unit, the corresponding global C variable is attributed with <tt>extern</tt>
+specifier. Otherwise, the C variable has no <tt>extern</tt> specifier, which makes it
+defined in the unit for the system linker. In both cases, the global C variables
+have external linkage.</p>
+
+<p>This simple strategy allows #F compiler to determine the unit where a variable 
+is defined automatically and pass the correct linkage information to the system linker.
+When the program is assembled from the compiled units, the linker will report all
+cases of undefined and redefined top level variables.</p>
+
+<p>As a result, every global identifier has a single place of definition and
+can not be assigned to from the units other than the unit where it is defined.
+Limiting all assignments to a single unit has many benefits. In particular, it
+allows the compiler to perform single assignment analysis, opening possibilities
+for inline substitution and call sequence optimizations.</p>
+
+
+<a id="6.1.4."/><h3>6.1.4.&nbsp;&nbsp;&nbsp;&nbsp;Main entry point</h3>
+
+<p>When the compiled units are linked together to form an executable
+program, there has to be a way to specify an entry point for the program.
+#F compiler adopted the C model of identifying the entry point by name.</p>
+
+<a id="main" />
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(main <abbr>argv</abbr>)</code></td><td align="right">entry point procedure</td></tr>
+</table>
+
+<p><em>Semantics:&nbsp;&nbsp;</em>If a unit defines a global procedure called
+<tt>main</tt>, this unit is identified as the <em>main unit</em> of the program
+and at the start of the program and initialization of all units specified
+as dependencies of the main unit (recursively), the control will be transferred 
+to the <tt>main</tt> procedure with the original argument vector passed to it
+as the single parameter. When this procedure returns the false value (<tt>#f</tt>), 
+the program will terminate with exit code <tt>0</tt> (a success). Any true value
+returned from <tt>main</tt> will be mapped to non-zero exit code in an
+unspecified manner.</p>
+
+<p>When emitting C code for the main unit, the compiler adds all the pieces
+needed to start and run the application. This includes C <tt>main</tt> function
+and a minimal runtime system, described in [Ch7].</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>The fact that a certain unit is <em>linked</em>
+into the final program does not mean that it will be initialized and that the
+global variables it defines will have the expected values. If a unit is not
+reachable through any dependency chain starting at the main unit, it will
+not be initialized and all global variables it defines will have their
+default values (false). In practice, failure to <tt>#fload</tt> a module
+often causes the program to crash when a procedure from that module is
+invoked.</p>
+
+<a id="6.2."/><h2>6.2.&nbsp;&nbsp;&nbsp;&nbsp;Including C code</h2>
+
+<p>Since the compiler emits C code, it can allow the programmer to inject
+pieces of C code into the output an no extra cost. This functionality is
+made available through three special forms which can only be used at
+the top level of a unit. All three forms do not allow expressions as
+arguments and have no value. In other respects they behave as regular
+forms and can be produced as the result of macroexpansion.</p>
+
+<a id="include" />
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(%include "<abbr>filename</abbr>")</code></td><td align="right">syntax</td></tr>
+<tr><td><code>(%include &lt;<abbr>filename</abbr>&gt;)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>These forms tell the compiler to add the corresponding <tt>#incude</tt>
+definitions to the prologue of the generated C file and C files produced
+by compilation of the units dependent of the unit being compiled. The compiler 
+adds includes for <tt>stdio.h</tt>, <tt>stddef.h</tt>, <tt>stdlib.h</tt>, 
+and <tt>assert.h</tt> by default, so those need not to be included 
+explicitly.</p>
+
+<a id="definition" />
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(%definition "<abbr>code</abbr>")</code></td><td align="right">syntax</td></tr>
+<tr><td><code>(%localdef "<abbr>code</abbr>")</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>These forms insert arbitrary C code immediately after the includes and
+standard definitions added by the compiler. The first form (<tt>%definition</tt>)
+injects the code into the unit being compiled and all the dependent units, so it 
+is normally used for C macros, function prototypes and inline functions. The
+second form (<tt>%localdef</tt>) does not insert any code into dependent
+units, so it is usually used to define C functions. Example:</p>
+
+<pre>(%include &lt;math.h&gt)
+(%definition "extern double square(double);")
+(%localdef "double square(double x) {
+  return x*x;
+}")
+</pre>
+
+<p><em>Note:&nbsp;&nbsp;</em>The fact that the syntax of these forms uses
+string literals does not mean that a complete #F program that uses these
+forms should provide a run-time implementation of strings (or lists for
+that matter). Only parts of the surface syntax of #F program that are
+manipulated at run time need a runtime implementation.</p>
+
+<a id="6.3."/><h2>6.3.&nbsp;&nbsp;&nbsp;&nbsp;Compilation technique</h2>
+
+<p>The compiler follows a simple strategy for implementing full tail recursion
+and unrestricted continuations while compiling into portable C. All #F
+code in a compilation unit is compiled into a single <em>host</em> procedure,
+where all internal transfers of control are implemented with C <tt>switch</tt>,
+<tt>case</tt>s, labels, and <tt>goto</tt>s. </p>
+
+<p>In a general case, #F control frames are allocated in the garbage-collected 
+heap, and the resulting C program does not use C stack until the control has 
+to cross the boundary of a compilation unit. At this point, the host function 
+returns to its caller which serves as a dispatcher (a <em>trampoline</em>)
+responsible for inter-host transfers of control. The dispatcher&rsquo;s job is 
+to locate the host function holding the target control point and to call into 
+this procedure with the control point as argument. It is the responsibility 
+of the host function to transfer the control within itself so that the execution
+continues from the correct statement.</p>
+
+<a id="6.3.1."/><h2>6.3.1.&nbsp;&nbsp;&nbsp;&nbsp;Host functions</h2>
+
+<p>Host functions receive a run-time representation of control point
+within the host and return a run-time representation of a control point
+not found in the host. A control point (or <em>case</em>) is represented
+as an address of an element in the array of function pointers. In C code 
+generated for a #F compilation unit, a static array of function pointers
+is generated with one element per each control point reachable from other
+units. All pointers in this array point to the unit&rsquo;s host function,
+so the host function for a given case can be found by dereferencing the
+address.</p>
+
+<p>Each host function starts with a prologue, where global variables
+needed to keep track of the execution are copied to local variables for
+faster access. The prologue is followed by a <tt>switch</tt>, dispatching
+on an offset of the current <em>case</em> from the beginning of the unit&rsquo;s
+array of cases, and the control ends up on an actual C <tt>case</tt> label,
+where the C code for the control point is located. Any transfer of control
+to an unknown location starts from jumping to the beginning of the switch
+statement in the local host function. If the offset is negative or larger 
+than the last C <tt>case</tt> label in the current host, the <tt>default:</tt>
+statement of the switch flushes local copies of the global execution
+environment back to global variables and returns the failed case to the
+host function&rsquo;s caller, where the control is transferred to another
+host and the process is repeated.</p>
+
+<a id="6.3.2."/><h2>6.3.2.&nbsp;&nbsp;&nbsp;&nbsp;Optimizations</h2>
+
+<p>#F compiler attempts to improve on the general mechanism described
+above by trying to generate <em>helper functions</em> and making 
+<em>direct jumps</em> to statically known destinations.</p>
+
+<p><em>Helper functions</em> are C functions produced from #F procedures 
+that satisfy the restrictions imposed by C memory management and calling
+conventions. Currently, the restrictions do not allow any allocation
+from garbage-collected heap, multiple return values, getting access
+to the current continuation or returning to a continuation other than
+the current, or calling functions other than itself or a previously
+defined helper function. A helper function can call itself any way
+it likes and contain internal loops with tail calls.</p>
+
+<p>If a top-level #F procedure qualifies to be compiled as a helper
+function, the corresponding C code is inserted before the host function
+and the calls to the procedure are replaced with C expressions for
+the calls to the helper function. The fact that C runtime stack is
+used by helper functions does not break the tail-recursive behavior
+of #F programs because there is a fixed limit on the number of C
+stack frames used by tail calls, equal to the number of helper
+functions in the current unit (assuming the worst situation where
+they call each other tail-recursively in the reverse order of their
+definition).</p>
+
+<p><em>Direct jumps</em> are generated for all intra-host transfers
+of controls where the target of the transfer is statically known to
+the compiler. Such targets receive their unique C labels and the
+transfer of control is implemented via C <tt>goto</tt> statements.</p>
+
+<!-- 
+@misc{ feeley97compiling,
+  author = "M. Feeley and J. Miller and G. Rozas and J. Wilson",
+  title = "Compiling Higher-Order Languages into Fully Tail-Recursive Portable C",
+  text = "M. Feeley, J. Miller, G. Rozas, and J. Wilson. Compiling Higher-Order Languages
+    into Fully Tail-Recursive Portable C. Technical Report 1078, D'epartement
+    d'informatique et de recherche op'erationelle, Universit'e de Montr'eal,
+    1997.",
+  year = "1997",
+  url = "citeseer.ist.psu.edu/feeley97compiling.html" }
+-->
+</div>
+</body>
+</html>

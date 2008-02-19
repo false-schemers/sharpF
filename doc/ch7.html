@@ -119,7 +119,7 @@ array containing any type of <tt>obj</tt> except references to the collectible h
 the <tt>ptrdiff_t</tt>-size value immediately preceding the data pointed to by the
 <tt>obj</tt>. This value is the <em>header</em> of the block, giving the total
 allocation size in <tt>ptrdiff_t</tt> elements as <tt>N+1</tt> for an obj block and
-<tt>2</tt> for a native block. The header for the native block contains the number of
+<tt>2</tt> for a native block. The header for the obj block contains the number of
 elements in the block (excluding the header), shifted left by <tt>1</tt> and
 or-ed with <tt>1</tt> to make it look like an immediate value for the garbage
 collector. The header for the native block is a pointer to a static structure
