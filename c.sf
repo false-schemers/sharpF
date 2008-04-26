@@ -7,6 +7,9 @@
 ; Montreal Scheme/Lisp User Group on October 20, 2004. The original code was
 ; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
 
+; Changes
+;   04/25/2008 -- added svn's Id string.
+
 #fload "0.sf"
 #fload "1.sf"
 #fload "2.sf"
@@ -344,7 +347,8 @@
 
 (define (main argv)
   (define (about)
-    (printf "sfc build 185~%Usage: sfc [-vd] file ...~%")
+    (printf "sfc build $Id$~%")
+    (printf "Usage: sfc [-vd] file ...~%")
     #t)
   (define args 
     (cdr (argv->list argv)))
