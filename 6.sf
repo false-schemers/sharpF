@@ -571,7 +571,7 @@ obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs)
   obj *h = h1, *he1 = h1 + hs, *he2 = h2 + hs; 
   ++cxg_gccount;
   if (h1) hp = relocate(pr, regs, regp, he2, he1, hp, h1, m1, h2, m2), 
-    needs += h2 + hs - hp;
+    needs += (h2 + hs - hp)*2; /* make heap half empty */
   else hp = h2 + hs;
   if (hs < needs) {
     size_t s = HEAP_SIZE; while (s < needs) s *= 2;

@@ -8,8 +8,9 @@
 ; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
 
 ; Changes
-;   04/25/2008 -- added svn's Id string.
-;              -- added emitting Id in the .c output
+;   04/26/2008 -- gc tuned to prevent thrashing
+;   04/25/2008 -- added svn's Id string
+;   04/25/2008 -- added emitting Id in the .c output
 
 #fload "0.sf"
 #fload "1.sf"
