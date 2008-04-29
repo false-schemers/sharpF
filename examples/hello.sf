@@ -1,0 +1,7 @@
+; obligatory hello world example 
+
+(define main 
+  (lambda (argv)
+    (%prim! "void(printf(\"Hello, World!\\n\"))")))
+
+ 

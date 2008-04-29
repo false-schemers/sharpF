@@ -1,0 +1,355 @@
+
+; Takeuchi benchmark (strings)
+
+; we'll need let-syntax and internal definitions, so let's define them first
+
+(define-syntax let-syntax
+  (syntax-rules ()
+    [(_ ([kw init] ...)) (begin)]
+    [(_ ([kw init] ...) . body) ((syntax-lambda (kw ...) . body) init ...)]))
+
+(define-syntax letrec-syntax
+  (let-syntax ([let-syntax let-syntax] [define-syntax define-syntax])
+    (syntax-rules ()
+      [(_ ([kw init] ...) . body)
+       (let-syntax ()
+         (define-syntax kw init) ... (let-syntax () . body))])))
+
+(define-syntax lambda
+  (let-syntax ([old-lambda lambda])
+    (syntax-rules () [(_ args . body) (old-lambda args (let-syntax () . body))])))
+
+(define-syntax define
+  (let-syntax ([old-define define])
+    (letrec-syntax
+      ([new-define
+        (syntax-rules ()
+          [(_ exp) (old-define exp)]
+          [(_ (var-or-prototype . args) . body)
+           (new-define var-or-prototype (lambda args . body))]
+          [(_ . other) (old-define . other)])])
+     new-define)))
+     
+(define-syntax define-inline
+  (syntax-rules ()
+    [(_ (op . ll) . body)
+     (define-syntax op (lambda ll . body))]
+    [(_ op val)
+     (define-syntax op val)]))
+
+(define-syntax define-rule
+  (syntax-rules ()
+    [(_ (op . pat) . body)
+     (define-syntax op (syntax-rule pat . body))]))
+
+(define-syntax let
+  (syntax-rules ()
+    [(_ ([var init] ...) . body)
+     ((lambda (var ...) . body) init ...)]
+    [(_ name ([var init] ...) . body)
+     ((letrec ([name (lambda (var ...) . body)])
+        name)
+      init ...)]))
+
+(define-syntax let*
+  (syntax-rules ()
+    [(_ () . body) (let () . body)]
+    [(_ ([var init] . bindings) . body)
+     (let ([var init]) (let* bindings . body))]))
+
+(define-syntax letrec
+  (syntax-rules ()
+    [(_ ([var init] ...) . body)
+     (let () (define var init) ... (let () . body))]))
+
+(define-syntax do
+  (let-syntax ([do-step (syntax-rules () [(_ x) x] [(_ x y) y])])
+    (syntax-rules ()
+      [(_ ([var init step ...] ...)
+         [test expr ...]
+          command ...)
+       (let loop ([var init] ...)
+         (if test
+             (begin (if #f #f) expr ...)
+             (let () 
+               command ...
+               (loop (do-step var step ...) ...))))])))
+
+
+; Let's make immediate objects from 7-bit tag followed by 24 bits of data
+; tag bits follow lsb which is 1 in all SFC's non-pointer objects 
+
+(%definition "/* immediate object representation */")
+(%definition "#define isimm(o, t) (((o) & 0xff) == (((t) << 1) | 1))")
+(%definition "#define getimmu(o, t) (int)(((o) >> 8) & 0xffffff)")
+(%definition "#define getimms(o, t) (int)(((((o) >> 8) & 0xffffff) ^ 0x800000) - 0x800000)")
+(%definition "#define mkimm(o, t) ((((o) & 0xffffff) << 8) | ((t) << 1) | 1)")
+
+
+; native blocks are 1-element blocks containing a native
+; (non-scheme) pointer as 0th element and cxtype ptr in block header
+
+(%localdef "#ifndef NDEBUG
+int isnative(obj o, cxtype_t *tp) {
+  return isobjptr(o) && objptr_from_obj(o)[-1] == (obj)tp; 
+}
+void *getnative(obj o, cxtype_t *tp) {
+  assert(isnative(o, tp));
+  return (void*)(*objptr_from_obj(o));
+}
+#endif")
+
+(%definition "#ifdef NDEBUG
+   static int isnative(obj o, cxtype_t *tp) 
+     { return isobjptr(o) && objptr_from_obj(o)[-1] == (obj)tp;  }
+   #define getnative(o, t) ((void*)(*objptr_from_obj(o)))
+#else
+  extern int isnative(obj o, cxtype_t *tp);
+  extern void *getnative(obj o, cxtype_t *tp);
+#endif")
+
+
+; booleans
+; #f is hardwired as (obj)0; let's represent #t as immediate 0 with tag 0
+; this layout is compatible with C conventions (0 = false, 1 = true)
+; note that any obj but #f is counted as true in conditionals and that
+; bool_from_obj and bool_from_bool are already defined in std prelude
+
+(%definition "/* booleans */")
+(%definition "#define TRUE_ITAG 0")  
+(%definition "typedef int bool_t;")
+(%definition "#define is_bool_obj(o) (!((o) & ~(obj)1))")  
+(%definition "#define is_bool_bool(b) ((b), 1)")  
+(%definition "#define void_from_bool(b) (void)(b)")
+(%definition "#define obj_from_bool(b) ((b) ? mkimm(0, TRUE_ITAG) : 0)")
+
+; boolean literals 
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (boolean)
+      [(_ boolean "0") (%prim "bool(0)")] 
+      [(_ boolean "1") (%prim "bool(1)")] 
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+; some functions we might need, inlined for speed
+(define-syntax not (syntax-rules () [(_ x) (%prim "bool(!bool_from_$arg)" x)]))
+
+; fixnums
+; let's represent fixnums as (24-bit) immediates with tag 1
+
+(%definition "/* fixnums */")
+(%definition "#define FIXNUM_ITAG 1")  
+(%definition "typedef int fixnum_t;")
+(%definition "#define is_fixnum_obj(o) (isimm(o, FIXNUM_ITAG))")
+(%definition "#define is_fixnum_fixnum(i) ((i), 1)")
+(%definition "#define fixnum_from_obj(o) (getimms(o, FIXNUM_ITAG))")
+(%definition "#define fixnum_from_fixnum(i) (i)")
+(%definition "#define void_from_fixnum(i) (void)(i)")
+(%definition "#define obj_from_fixnum(i) mkimm(i, FIXNUM_ITAG)")
+(%definition "#define FIXNUM_MIN -8388608")
+(%definition "#define FIXNUM_MAX 8388607")
+
+; fixnum literals
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (exact-integer + -)
+      [(_ exact-integer 8 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 8 - n) (%prim ("fixnum(-" n ")"))] 
+      [(_ exact-integer 16 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 16 - n) (%prim ("fixnum(-" n ")"))]
+      [(_ exact-integer 24 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 24 - n) (%prim ("fixnum(-" n ")"))]
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+; functions we will need for stak, as inlined primitives
+(define-syntax + (syntax-rules () [(_ x y) (%prim "fixnum(fixnum_from_$arg + fixnum_from_$arg)" x y)]))
+(define-syntax - (syntax-rules () [(_ x y) (%prim "fixnum(fixnum_from_$arg - fixnum_from_$arg)" x y)]))
+(define-syntax < (syntax-rules () [(_ x y) (%prim "bool(fixnum_from_$arg < fixnum_from_$arg)" x y)]))
+(define-syntax > (syntax-rules () [(_ x y) (%prim "bool(fixnum_from_$arg > fixnum_from_$arg)" x y)]))
+(define-syntax = (syntax-rules () [(_ x y) (%prim "bool(fixnum_from_$arg == fixnum_from_$arg)" x y)]))
+(define-syntax <= (syntax-rules () [(_ x y) (%prim "bool(fixnum_from_$arg <= fixnum_from_$arg)" x y)]))
+(define-syntax >= (syntax-rules () [(_ x y) (%prim "bool(fixnum_from_$arg >= fixnum_from_$arg)" x y)]))
+
+
+; characters
+
+(%include <ctype.h>)
+
+(%definition "/* characters */")
+(%definition "#define CHAR_ITAG 2")  
+(%definition "typedef int char_t;")
+(%definition "#define is_char_obj(o) (isimm(o, CHAR_ITAG))")
+(%definition "#define is_char_char(i) ((i), 1)")
+(%definition "#define char_from_obj(o) (getimms(o, CHAR_ITAG))")
+(%definition "#define char_from_char(i) (i)")
+(%definition "#define void_from_char(i) (void)(i)")
+(%definition "#define obj_from_char(i) mkimm(i, CHAR_ITAG)")
+
+
+; strings
+
+(%include <string.h>)
+
+(%definition "/* strings */")
+(%localdef "static cxtype_t cxt_string = { \"string\", free };")
+(%localdef "cxtype_t *STRING_NTAG = &cxt_string;")
+(%definition "extern cxtype_t *STRING_NTAG;")
+(%definition "#define isstring(o) (isnative(o, STRING_NTAG))")
+(%definition "#define stringdata(o) ((char*)getnative(o, STRING_NTAG))")
+(%definition "#define mkstring(l, n, c) hpushptr(allocstring(n, c), STRING_NTAG, l)")
+(%definition "#define cpstring(l, s) hpushptr(dupstring(s), STRING_NTAG, l)")
+(%definition "extern char *dupstring(char *s);")
+(%localdef "char *dupstring(char *s) {
+  assert(s); return strcpy(cxm_cknull(malloc(strlen(s)+1), \"malloc(string)\"), s);
+}")
+(%definition "extern char *allocstring(int n, int c);")
+(%localdef "char *allocstring(int n, int c) {
+  char *s; assert(n+1 > 0); 
+  s = cxm_cknull(malloc(n+1), \"malloc(string)\");
+  memset(s, c, n); s[n] = 0;
+  return s;
+}")
+
+(%localdef "int stringlen(obj o) {
+  char *s = stringdata(o);
+  return (int)strlen(s); 
+}")
+
+(%localdef "char* stringref(obj o, int i) {
+  char *s = stringdata(o);
+  int l = (int)strlen(s); 
+  assert(i >= 0 && i < l);  
+  return s+i;
+}")
+
+(%definition "#ifdef NDEBUG
+  #define stringlen(o) ((int)strlen(stringdata(o)))
+  #define stringref(o, i) (stringdata(o)+(i))
+#else
+  extern int stringlen(obj o);
+  extern char* stringref(obj o, int i);
+#endif")
+
+(%definition "extern int strcmp_ci(char *s1, char*s2);")
+(%localdef "int strcmp_ci(char *s1, char *s2) {
+    int c1, c2, d;
+    do { c1 = *s1++; c2 = *s2++; d = (unsigned)tolower(c1) - (unsigned)tolower(c2); }
+    while (!d && c1 && c2);
+    return d;
+}")
+
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (string)
+      [(_ string s)
+       (%prim* ("obj(cpstring($live, \"" s "\"))"))]
+      [(_ string 8 c ...)
+       (%prim* ("{ static char s[] = { " (c ", ") ... "0 };\n"
+                "    $return obj(cpstring($live, s)); }"))]
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+(define-inline (string? x)
+  (%prim "bool(isstring(obj_from_$arg))" x))
+
+(define-syntax make-string
+  (syntax-rules ()
+    [(_ k) (%prim* "obj(mkstring($live, fixnum_from_$arg, '?'))" k)]
+    [(_ k c) (%prim* "obj(mkstring($live, fixnum_from_$arg, char_from_$arg))" k c)]))
+
+(define-rule (string c ...)
+  (%prim* "{ /* string */
+    obj o = mkstring($live, $argc, ' ');
+    char *s = stringdata(o);
+    ${*s++ = char_from_$arg;
+    $}$return obj(o); }" c ...))
+
+(define-inline (string-length s)
+  (%prim "fixnum(stringlen(obj_from_$arg))" s))
+
+(define-inline (string-ref s k)
+  (%prim? "char(*stringref(obj_from_$arg, fixnum_from_$arg))" s k))
+
+(define-inline (string-set! s k c)
+  (%prim! "void(*stringref(obj_from_$arg, fixnum_from_$arg) = char_from_$arg)" s k c))
+
+(define-inline (string=? x y)
+  (%prim? "bool(strcmp(stringdata(obj_from_$arg), stringdata(obj_from_$arg)) == 0)" x y))
+
+(define-inline (string<? x y)
+  (%prim? "bool(strcmp(stringdata(obj_from_$arg), stringdata(obj_from_$arg)) < 0)" x y))
+
+(define (substring s start end)
+  (let* ([k (- end start)] [ss (make-string k)])
+    (do ([i 0 (+ i 1)]) [(>= i k) ss]
+      (string-set! ss i (string-ref s (+ start i)))))) 
+
+(define (string-append a b)
+  (let ([al (string-length a)] [bl (string-length b)]) 
+    (let ([s (make-string (+ al bl))])
+      (do ([i 0 (+ i 1)]) [(>= i al)]
+        (string-set! s i (string-ref a i)))
+      (do ([i 0 (+ i 1)]) [(>= i bl)]
+        (string-set! s (+ al i) (string-ref b i)))
+      s))) 
+    
+(define-inline (string-copy s)
+  (%prim*? "obj(cpstring($live, stringdata(obj_from_$arg)))" s))
+
+(define (string-fill! s c)
+  (let ([n (string-length s)])
+    (do ([i 0 (+ i 1)]) [(= i n)]
+      (string-set! s i c))))
+
+
+; minimalistic i/o, also inlined
+(define-syntax display (syntax-rules () [(_ x) (%prim! "void(fputs(stringdata(obj_from_$arg), stdout))" x)])) 
+(define-syntax newline (syntax-rules () [(_) (%prim! "void(putchar('\\n'))")]))
+
+
+; the test itself
+
+
+; "arithmetic" with strings of stars
+
+(define (string- s1 s2)
+  (let ([l1 (string-length s1)] [l2 (string-length s2)])
+    (substring s1 0 (- l1 l2))))
+      
+(define (string+ s1 s2) 
+  (string-append s1 s2))
+
+(define s18 "******************")
+(define s16 "****************")
+(define s14 "**************")
+(define s12 "************")
+(define s10 "**********")
+(define s8  "********")
+(define s6  "******")
+(define s4  "****")
+(define s2  "**")
+(define s1  "*")
+(define s0  "")
+(define s20 (string+ s10 s10))
+(define s40 (string+ s20 s20))
+(define s80 (string+ s40 s40))
+(define s100 (string+ s80 s20))
+
+(define tak 
+  (lambda (x y z)
+    (if (string<? y x)
+        (tak (tak (string- x s1) y z)
+             (tak (string- y s1) z x)
+             (tak (string- z s1) x y))
+         z)))
+
+(define runtak 
+  (lambda (n r)
+    (if (string=? n s0)
+        r
+        (runtak (string- n s1) (string+ r (tak s18 s12 s6))))))
+
+(define main
+  (lambda (argv)
+    (display (runtak s100 s0)) 
+    (newline)))
+

@@ -1,0 +1,108 @@
+
+; Takeuchi benchmark (fixnums)
+
+; we'll need let-syntax and internal definitions, so let's define them first
+
+(define-syntax let-syntax
+  (syntax-rules ()
+    [(_ ([kw init] ...)) (begin)]
+    [(_ ([kw init] ...) . body) ((syntax-lambda (kw ...) . body) init ...)]))
+
+(define-syntax lambda
+  (let-syntax ([old-lambda lambda])
+    (syntax-rules () [(_ args . body) (old-lambda args (let-syntax () . body))])))
+
+
+; SFC's immediate objects have 7-bit tag followed by 24 bits of data
+; subtype bits follow lsb which is 1 in non-pointer objects
+
+(%definition "/* immediate object representation */")
+(%definition "#define isimm(o, t) (((o) & 0xff) == (((t) << 1) | 1))")
+(%definition "#define getimmu(o, t) (int)(((o) >> 8) & 0xffffff)")
+(%definition "#define getimms(o, t) (int)(((((o) >> 8) & 0xffffff) ^ 0x800000) - 0x800000)")
+(%definition "#define mkimm(o, t) ((((o) & 0xffffff) << 8) | ((t) << 1) | 1)")
+
+; booleans
+; #f is hardwired as (obj)0; let's represent #t as immediate 0 with tag 0
+; this layout is compatible with C conventions (0 = false, 1 = true)
+; note that any obj but #f is counted as true in conditionals and that
+; bool_from_obj and bool_from_bool are already defined in std prelude
+
+(%definition "/* booleans */")
+(%definition "#define TRUE_ITAG 0")  
+(%definition "typedef int bool_t;")
+(%definition "#define is_bool_obj(o) (!((o) & ~(obj)1))")  
+(%definition "#define is_bool_bool(b) ((b), 1)")  
+(%definition "#define void_from_bool(b) (void)(b)")
+(%definition "#define obj_from_bool(b) ((b) ? mkimm(0, TRUE_ITAG) : 0)")
+
+; boolean literals 
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (boolean)
+      [(_ boolean "0") (%prim "bool(0)")] 
+      [(_ boolean "1") (%prim "bool(1)")] 
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+; some functions we might need, inlined for speed
+(define-syntax not (syntax-rules () [(_ x) (%prim "bool(!bool_from_$arg)" x)]))
+
+; fixnums
+; let's represent fixnums as (24-bit) immediates with tag 1
+
+(%definition "/* fixnums */")
+(%definition "#define FIXNUM_ITAG 1")  
+(%definition "typedef int fixnum_t;")
+(%definition "#define is_fixnum_obj(o) (isimm(o, FIXNUM_ITAG))")
+(%definition "#define is_fixnum_fixnum(i) ((i), 1)")
+(%definition "#define fixnum_from_obj(o) (getimms(o, FIXNUM_ITAG))")
+(%definition "#define fixnum_from_fixnum(i) (i)")
+(%definition "#define void_from_fixnum(i) (void)(i)")
+(%definition "#define obj_from_fixnum(i) mkimm(i, FIXNUM_ITAG)")
+(%definition "#define FIXNUM_MIN -8388608")
+(%definition "#define FIXNUM_MAX 8388607")
+
+; fixnum literals
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (exact-integer + -)
+      [(_ exact-integer 8 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 8 - n) (%prim ("fixnum(-" n ")"))] 
+      [(_ exact-integer 16 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 16 - n) (%prim ("fixnum(-" n ")"))]
+      [(_ exact-integer 24 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 24 - n) (%prim ("fixnum(-" n ")"))]
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+; functions we will need for tak, inlined for speed
+(define-syntax + (syntax-rules () [(_ x y) (%prim "fixnum(fixnum_from_$arg + fixnum_from_$arg)" x y)]))
+(define-syntax - (syntax-rules () [(_ x y) (%prim "fixnum(fixnum_from_$arg - fixnum_from_$arg)" x y)]))
+(define-syntax * (syntax-rules () [(_ x y) (%prim "fixnum(fixnum_from_$arg * fixnum_from_$arg)" x y)]))
+(define-syntax < (syntax-rules () [(_ x y) (%prim "bool(fixnum_from_$arg < fixnum_from_$arg)" x y)]))
+(define-syntax = (syntax-rules () [(_ x y) (%prim "bool(fixnum_from_$arg == fixnum_from_$arg)" x y)]))
+
+; minimalistic i/o, also inlined
+(define-syntax write (syntax-rules () [(_ x) (%prim! "void(printf(\"%d\", fixnum_from_$arg))" x)])) 
+(define-syntax newline (syntax-rules () [(_) (%prim! "void(putchar('\\n'))")]))
+
+; the test itself
+
+(define test
+  (lambda (n r)
+    (define tak 
+      (lambda (x y z)
+        (if (< y x)
+            (tak (tak (- x 1) y z)
+                 (tak (- y 1) z x)
+                 (tak (- z 1) x y))
+             z)))
+    (define runtak 
+      (lambda (n r)
+        (if (= n 0)
+            r
+            (runtak (- n 1) (+ r (tak 18 12 6))))))
+    (runtak n r)))
+
+(define main
+  (lambda (argv)
+    (begin (write (test 1000 0)) (newline))))

@@ -1,0 +1,559 @@
+
+; RNRS Runge-Kutta example as a standalone #F program
+
+; LET-SYNTAX, LETREC-SYNTAX and extended LAMBDA allowing internal definitions
+
+(define-syntax let-syntax
+  (syntax-rules ()
+    [(_ ([kw init] ...))
+     (begin)]
+    [(_ ([kw init] ...) . body)
+     ((syntax-lambda (kw ...) . body)
+      init ...)]))
+
+(define-syntax letrec-syntax
+  (let-syntax ([let-syntax let-syntax] [define-syntax define-syntax])
+    (syntax-rules ()
+      [(_ ([kw init] ...) . body)
+       (let-syntax ()
+         (define-syntax kw init) ... (let-syntax () . body))])))
+
+(define-syntax lambda
+  (let-syntax ([old-lambda lambda])
+    (syntax-rules ()
+      [(_ args . body)
+       (old-lambda args (let-syntax () . body))])))
+
+
+; LET, LET*, LETREC, COND, DO, DELAY
+
+(define-syntax let
+  (syntax-rules ()
+    [(_ ([var init] ...) . body)
+     ((lambda (var ...) . body) init ...)]
+    [(_ name ([var init] ...) . body)
+     ((letrec ([name (lambda (var ...) . body)])
+        name)
+      init ...)]))
+
+(define-syntax let*
+  (syntax-rules ()
+    [(_ () . body) (let () . body)]
+    [(_ ([var init] . bindings) . body)
+     (let ([var init]) (let* bindings . body))]))
+
+(define-syntax letrec
+  (syntax-rules ()
+    [(_ ([var init] ...) . body)
+     (let () (define var init) ... (let () . body))]))
+
+(define-syntax cond
+  (syntax-rules (else =>)
+    [(_) (if #f #f)] ; undefined
+    [(_ [else . exps]) (let () . exps)]
+    [(_ [x] . rest) (or x (cond . rest))]
+    [(_ [x => proc] . rest)
+     (let ([tmp x]) (cond [tmp (proc tmp)] . rest))]
+    [(_ [x . exps] . rest)
+     (if x (let () . exps) (cond . rest))]))
+
+(define-syntax do
+  (let-syntax ([do-step (syntax-rules () [(_ x) x] [(_ x y) y])])
+    (syntax-rules ()
+      [(_ ([var init step ...] ...)
+         [test expr ...]
+          command ...)
+       (let loop ([var init] ...)
+         (if test
+             (begin (if #f #f) expr ...)
+             (let () 
+               command ...
+               (loop (do-step var step ...) ...))))])))
+
+(define-syntax delay
+  (syntax-rules ()
+    [(delay exp)
+     (make-promise (lambda () exp))]))
+
+
+; data types for RK example 
+
+
+(%definition "/* basic object representation */")
+
+; immediate objects have 7-bit tag followed by at least 24 bits of data
+; subtype bits follow lsb which is 1 in non-pointer objects 
+
+(%definition "#define isimm(o, t) (((o) & 0xff) == (((t) << 1) | 1))")
+
+(%localdef "int getimmu(obj o, int t) {
+  assert(isimm(o, t));
+  return (int)((o >> 8) & 0xffffff);
+}")
+
+(%localdef "int getimms(obj o, int t) {
+  assert(isimm(o, t));
+  return (int)((((o >> 8) & 0xffffff) ^ 0x800000) - 0x800000);
+}")
+
+(%definition "#ifdef NDEBUG
+  #define getimmu(o, t) (int)(((o) >> 8) & 0xffffff)
+  #define getimms(o, t) (int)(((((o) >> 8) & 0xffffff) ^ 0x800000) - 0x800000)
+#else
+  extern int getimmu(obj o, int t);
+  extern int getimms(obj o, int t);
+#endif")
+
+(%definition "#define mkimm(o, t) (obj)((((o) & 0xffffff) << 8) | ((t) << 1) | 1)")
+
+
+; native blocks are 1-element blocks containing a native
+; (non-cx) pointer as 0th element and cxtype ptr in block header
+
+(%localdef "#ifndef NDEBUG
+int isnative(obj o, cxtype_t *tp) {
+  return isobjptr(o) && objptr_from_obj(o)[-1] == (obj)tp; 
+}
+void *getnative(obj o, cxtype_t *tp) {
+  assert(isnative(o, tp));
+  return (void*)(*objptr_from_obj(o));
+}
+#endif")
+
+(%definition "#ifdef NDEBUG
+   static int isnative(obj o, cxtype_t *tp) 
+     { return isobjptr(o) && objptr_from_obj(o)[-1] == (obj)tp;  }
+   #define getnative(o, t) ((void*)(*objptr_from_obj(o)))
+#else
+  extern int isnative(obj o, cxtype_t *tp);
+  extern void *getnative(obj o, cxtype_t *tp);
+#endif")
+
+
+; tagged blocks are heap blocks with runtime int tag as 0th element
+; (disjoint from closures which have a pointer as 0th element)
+
+(%localdef "int istagged(obj o, int t) {
+  if (!isobjptr(o)) return 0;
+  else { obj h = objptr_from_obj(o)[-1];
+    return notaptr(h) && size_from_obj(h) >= 1 
+      && hblkref(o, 0) == obj_from_size(t); }
+}")
+
+(%localdef "obj cktagged(obj o, int t) {
+  assert(istagged(o, t));
+  return o;
+}")
+
+(%localdef "int taggedlen(obj o, int t) {
+  assert(istagged(o, t));
+  return hblklen(o) - 1;
+}")
+
+(%localdef "obj* taggedref(obj o, int t, int i) {
+  int len; assert(istagged(o, t));
+  len = hblklen(o);
+  assert(i >= 0 && i < len-1);  
+  return &hblkref(o, i+1);
+}")
+
+(%definition "extern int istagged(obj o, int t);")
+(%definition "#ifdef NDEBUG
+  #define cktagged(o, t) (o)
+  #define taggedlen(o, t) (hblklen(o)-1) 
+  #define taggedref(o, t, i) (&hblkref(o, (i)+1))
+#else
+  extern obj cktagged(obj o, int t);
+  extern int taggedlen(obj o, int t);
+  extern obj* taggedref(obj o, int t, int i); 
+#endif")
+
+
+; booleans
+
+; #f is (obj)0, #t is immediate 0 with tag 0 (singular true object)
+; this layout is compatible with C conventions (0 = false, 1 = true)
+; note that any obj but #f is counted as true in conditionals and that
+; bool_from_obj and bool_from_bool are already defined in std prelude
+
+(%definition "/* booleans */")
+(%definition "#define TRUE_ITAG 0")  
+(%definition "typedef int bool_t;")
+(%definition "#define is_bool_obj(o) (!((o) & ~(obj)1))")  
+(%definition "#define is_bool_bool(b) ((void)(b), 1)")  
+(%definition "#define void_from_bool(b) (void)(b)")
+(%definition "#define obj_from_bool(b) ((b) ? mkimm(0, TRUE_ITAG) : 0)")
+
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (boolean)
+      [(_ boolean "0") (%prim "bool(0)")] 
+      [(_ boolean "1") (%prim "bool(1)")] 
+      [(_ arg ...) (old-%const arg ...)])))
+
+
+; 24-bit fixnums with inline ZERO? and binary versions of + - = >
+
+(%definition "/* fixnums */")
+(%definition "#define FIXNUM_ITAG 1")  
+(%definition "typedef int fixnum_t;")
+(%definition "#define is_fixnum_obj(o) (isimm(o, FIXNUM_ITAG))")
+(%definition "#define is_fixnum_fixnum(i) ((void)(i), 1)")
+(%definition "#define fixnum_from_obj(o) (getimms(o, FIXNUM_ITAG))")
+(%definition "#define fixnum_from_fixnum(i) (i)")
+(%definition "#define void_from_fixnum(i) (void)(i)")
+(%definition "#define obj_from_fixnum(i) mkimm(i, FIXNUM_ITAG)")
+(%definition "#define FIXNUM_MIN -8388608")
+(%definition "#define FIXNUM_MAX 8388607")
+
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (exact-integer + -)
+      [(_ exact-integer 8 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 8 - n) (%prim ("fixnum(-" n ")"))] 
+      [(_ exact-integer 16 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 16 - n) (%prim ("fixnum(-" n ")"))]
+      [(_ exact-integer 24 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 24 - n) (%prim ("fixnum(-" n ")"))]
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+(define-syntax zero?
+  (syntax-rules ()
+    [(_ x) (%prim "bool(fixnum_from_$arg == 0)" x)]))
+
+(define-syntax +
+  (syntax-rules ()
+    [(_ x y) (%prim "fixnum(fixnum_from_$arg + fixnum_from_$arg)" x y)]))
+
+(define-syntax -
+  (syntax-rules ()
+    [(_ x y) (%prim "fixnum(fixnum_from_$arg - fixnum_from_$arg)" x y)]))
+
+(define-syntax =
+  (syntax-rules ()
+    [(_ x y) (%prim "bool(fixnum_from_$arg == fixnum_from_$arg)" x y)]))
+
+(define-syntax >
+  (syntax-rules ()
+    [(_ x y) (%prim "bool(fixnum_from_$arg > fixnum_from_$arg)" x y)]))
+
+
+; flonums with inline binary operations fl+ fl- fl* fl/ 
+
+(%include <math.h>)
+(%include <errno.h>)
+
+(%definition "/* flonums */")
+(%localdef "static cxtype_t cxt_flonum = { \"flonum\", free };")
+(%localdef "cxtype_t *FLONUM_NTAG = &cxt_flonum;")
+(%definition "extern cxtype_t *FLONUM_NTAG;")
+(%definition "typedef double flonum_t;")
+(%definition "#define is_flonum_obj(o) (isnative(o, FLONUM_NTAG))")
+(%definition "#define is_flonum_flonum(f) ((void)(f), 1)")
+(%definition "#define flonum_from_obj(o) (*(flonum_t*)getnative(o, FLONUM_NTAG))")
+(%definition "#define flonum_from_flonum(l, f) (f)")
+(%definition "#define void_from_flonum(l, f) (void)(f)")
+(%definition "#define obj_from_flonum(l, f) hpushptr(dupflonum(f), FLONUM_NTAG, l)")
+(%definition "extern flonum_t *dupflonum(flonum_t f);")
+(%localdef "flonum_t *dupflonum(flonum_t f) {
+  flonum_t *pf = cxm_cknull(malloc(sizeof(flonum_t)), \"malloc(flonum)\");
+  *pf = f; return pf;
+}")
+
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (inexact-real)
+      [(_ inexact-real n) (%prim* ("flonum($live, " n ")"))] 
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+(define-syntax fl+
+  (syntax-rules ()
+    [(_ x y) (%prim* "flonum($live, flonum_from_$arg + flonum_from_$arg)" x y)]))
+
+(define-syntax fl-
+  (syntax-rules ()
+    [(_ x y) (%prim* "flonum($live, flonum_from_$arg - flonum_from_$arg)" x y)]))
+
+(define-syntax fl*
+  (syntax-rules ()
+    [(_ x y) (%prim* "flonum($live, flonum_from_$arg * flonum_from_$arg)" x y)]))
+
+(define-syntax fl/
+  (syntax-rules ()
+    [(_ x y) (%prim* "flonum($live, flonum_from_$arg / flonum_from_$arg)" x y)]))
+
+
+; immutable pairs with inline CONS, CAR, CDR
+
+(%definition "/* pairs */")
+(%definition "#define PAIR_BTAG 1")  
+(%definition "#define ispair(o) istagged(o, PAIR_BTAG)")  
+(%definition "#define car(o) *taggedref(o, PAIR_BTAG, 0)")  
+(%definition "#define cdr(o) *taggedref(o, PAIR_BTAG, 1)")  
+
+(define-syntax cons
+  (syntax-rules ()
+    [(_ a d) (%prim* "{ /* cons */ 
+    hreserve(hbsz(3), $live); /* $live live regs */
+    *--hp = obj_from_$arg;
+    *--hp = obj_from_$arg;
+    *--hp = obj_from_size(PAIR_BTAG); 
+    $return obj(hendblk(3)); }" d a)]))
+
+(define-syntax car
+  (syntax-rules ()
+    [(_ p) (%prim "obj(car(obj_from_$arg))" p)]))
+
+(define-syntax cdr
+  (syntax-rules ()
+    [(_ p) (%prim "obj(cdr(obj_from_$arg))" p)]))
+
+
+; mutable vectors - VECTOR?, VECTOR, MAKE-VECTOR, VECTOR-LENGTH, VECTOR-REF, VECTOR-SET!
+
+(%definition "/* vectors */")
+(%definition "#define VECTOR_BTAG 2")  
+(%definition "#define isvector(o) istagged(o, VECTOR_BTAG)")  
+(%definition "#define vectorref(v, i) *taggedref(v, VECTOR_BTAG, i)")  
+(%definition "#define vectorlen(v) taggedlen(v, VECTOR_BTAG)")  
+
+(define-syntax vector?
+  (syntax-rules ()
+    [(_ o) (%prim "bool(isvector(obj_from_$arg))" o)]))
+
+(define-syntax vector
+  (letrec-syntax
+    ([prim*/rev
+      (syntax-rules ()
+        [(_ prim () args) (%prim* prim . args)]
+        [(_ prim (arg . more) args) (prim*/rev prim more (arg . args))])])
+    (syntax-rules ()
+      [(_ arg ...) (prim*/rev "{ /* vector */
+    hreserve(hbsz($argc+1), $live); /* $live live regs */
+    ${*--hp = obj_from_$arg;
+    $}*--hp = obj_from_size(VECTOR_BTAG);
+    $return obj(hendblk($argc+1)); }" (arg ...) ())])))
+
+(define-syntax make-vector
+  (syntax-rules ()
+    [(_ n i) (%prim* "{ /* make-vector */
+    obj o; int i = 0, c = fixnum_from_$arg;
+    hreserve(hbsz(c+1), $live); /* $live live regs */
+    o = obj_from_$arg; /* gc-safe */
+    while (i++ < c) *--hp = o;
+    *--hp = obj_from_size(VECTOR_BTAG);
+    $return obj(hendblk(c+1)); }" n i)]))
+
+(define-syntax vector-length
+  (syntax-rules ()
+    [(_ v) (%prim "fixnum(vectorlen(obj_from_$arg))" v)]))
+
+(define-syntax vector-ref
+  (syntax-rules ()
+    [(_ v i) (%prim? "obj(vectorref(obj_from_$arg, fixnum_from_$arg))" v i)]))
+
+(define-syntax vector-set!
+  (syntax-rules ()
+    [(_ v i x) (%prim! "void(vectorref(obj_from_$arg, fixnum_from_$arg) = obj_from_$arg)" v i x)]))
+
+
+; promises - MAKE_PROMISE, FORCE
+
+(define make-promise
+  (lambda (proc)
+    ((lambda (result-ready? result)
+       (lambda ()
+         (if result-ready?
+             result
+             ((lambda (x)
+                (if result-ready?
+                    result
+                    (begin
+                      (set! result-ready? #t)
+                      (set! result x)
+                      result)))
+              (proc)))))
+     #f
+     #f)))
+
+(define-syntax force
+  (lambda (promise)
+    (promise)))
+
+
+; Limited inline versions of NEWLINE and WRITE
+
+(define-syntax newline
+  (syntax-rules ()
+    [(_) (%prim! "void(fputc('\\n', stdout))")]))
+
+(define write
+  (lambda (o)
+    (cond
+      ((vector? o)
+       (%prim! "void(fputs(\"#(\", stdout))")
+       (do ((i 0 (+ i 1)) (l (vector-length o)))
+           ((= i l))
+         (if (zero? i) #f (%prim! "void(fputc(' ', stdout))"))
+         (write (vector-ref o i)))
+       (%prim! "void(fputc(')', stdout))"))
+      (else ; assume flonum
+       (%prim! "void(printf(\"%.15g\", flonum_from_$arg))" o)))))
+          
+
+
+; INTEGRATE-SYSTEM integrates the system 
+; y_k' = f_k(y_1, y_2, ..., y_n), k = 1, ..., n
+; of differential equations with the method of Runge-Kutta.
+
+; The parameter SYSTEM-DERIVATIVE is a function that takes a system
+; state (a vector of values for the state variables y_1, ..., y_n) and
+; produces a system derivative (the values y_1', ..., y_n').  The
+; parameter INITIAL-STATE provides an initial system state, and H is an
+; initial guess for the length of the integration step.
+
+; The value returned by INTEGRATE-SYSTEM is an infinite stream of
+; system states.
+
+(define integrate-system
+  (lambda (system-derivative initial-state h)
+    (let ((next (runge-kutta-4 system-derivative h)))
+      (letrec ((states
+                (cons initial-state
+                      (delay (map-streams next
+                                          states)))))
+        states))))
+
+; RUNGE-KUTTA-4 takes a function, F, that produces a
+; system derivative from a system state.  RUNGE-KUTTA-4
+; produces a function that takes a system state and
+; produces a new system state.
+
+(define runge-kutta-4
+  (lambda (f h)
+    (let ((*h (scale-vector h))
+          (*2 (scale-vector 2.0))
+          (*1/2 (scale-vector (fl/ 1.0 2.0)))
+          (*1/6 (scale-vector (fl/ 1.0 6.0))))
+      (lambda (y)
+        ;; y is a system state
+        (let* ((k0 (*h (f y)))
+               (k1 (*h (f (add-vectors y (*1/2 k0)))))
+               (k2 (*h (f (add-vectors y (*1/2 k1)))))
+               (k3 (*h (f (add-vectors y k2)))))
+          (add-vectors y
+                       (*1/6 (add-vectors k0
+                               (add-vectors (*2 k1)
+                                 (add-vectors (*2 k2)
+                                              k3))))))))))
+
+(define elementwise1
+  (lambda (f)
+    (lambda (v)
+      (generate-vector
+        (vector-length v)
+        (lambda (i)
+          (f (vector-ref v i)))))))
+
+(define elementwise2
+  (lambda (f)
+    (lambda (v1 v2)
+      (generate-vector
+        (vector-length v1)
+        (lambda (i)
+          (f (vector-ref v1 i) (vector-ref v2 i)))))))
+
+(define generate-vector
+  (lambda (size proc)
+    (let ((ans (make-vector size #f)))
+      (letrec ((loop
+                (lambda (i)
+                  (cond ((= i size) ans)
+                        (else
+                         (vector-set! ans i (proc i))
+                         (loop (+ i 1)))))))
+        (loop 0)))))
+
+(define add-vectors 
+  (elementwise2 (lambda (x y) (fl+ x y))))
+
+(define scale-vector
+  (lambda (s)
+    (elementwise1 (lambda (x) (fl* x s)))))
+
+; MAP-STREAMS is analogous to MAP: it applies its first
+; argument (a procedure) to all the elements of its second argument (a
+; stream).
+
+(define map-streams
+  (lambda (f s)
+    (cons (f (head s))
+          (delay (map-streams f (tail s))))))
+
+; Infinite streams are implemented as pairs whose car holds the first
+; element of the stream and whose cdr holds a promise to deliver the rest
+; of the stream.
+
+(define head 
+  (lambda (stream) (car stream)))
+
+(define tail
+  (lambda (stream) (force (cdr stream))))
+
+; The following illustrates the use of INTEGRATE-SYSTEM in
+; integrating the system
+;
+;          dvC         vC
+;        C --- = -iL - --
+;          dt          R
+;
+;          diL
+;        L --- = vC
+;          dt
+;
+; which models a damped oscillator.
+
+(define damped-oscillator
+  (lambda (R L C)
+    (lambda (state)
+      (let ((Vc (vector-ref state 0))
+            (Il (vector-ref state 1)))
+        (vector (fl- 0.0 (fl+ (fl/ Vc (fl* R C)) (fl/ Il C)))
+                (fl/ Vc L))))))
+
+(define the-states
+  (integrate-system
+   (damped-oscillator 
+     10000.0
+     1000.0
+     .001)
+   (vector 1.0 0.0)
+   0.01))
+
+(define show-states
+  (lambda (s n)
+    (newline)
+    (if (> n 0)
+      (begin
+        (write (head s))
+        (show-states (tail s) (- n 1))))))
+
+(define main
+  (lambda (argv)
+    (do ((i 10 (- i 1))
+         (s the-states (tail s)))
+        ((zero? i) (newline))
+      (newline)
+      (write (head s)))
+    #f))
+
+; #(1 0)
+; #(0.998950533570875 9.99483508291667e-06)
+; #(0.997802271793201 1.99786813508985e-05)
+; #(0.996555428180773 2.99505519099828e-05)
+; #(0.995210225887153 3.990946204957e-05)
+; #(0.993766897673729 4.98544293386622e-05)
+; #(0.992225685876852 5.9784473721778e-05)
+; #(0.99058684237404 6.96986176145339e-05)
+; #(0.988850628549271 7.95958859988832e-05)
+; #(0.987017315257352 8.94753065180031e-05)
