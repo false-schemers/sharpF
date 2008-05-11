@@ -183,6 +183,7 @@ extern int strcmp_ci(char *s1, char*s2);
 #define ispair(o) istagged(o, PAIR_BTAG)
 #define car(o) *taggedref(o, PAIR_BTAG, 0)
 #define cdr(o) *taggedref(o, PAIR_BTAG, 1)
+extern int islist(obj l);
 /* symbols */
 #define SYMBOL_ITAG 3
 #define issymbol(o) (isimm(o, SYMBOL_ITAG))

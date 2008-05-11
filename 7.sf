@@ -719,9 +719,12 @@
       (c-format "  &$a,\n" 
         (c-mangle (symbol->string (id->symbol id)) "cx_")))
     (define live-roots
-      (keep (lambda (id) 
-              (and (not (assq id static-roots)) 
-                   (var-assigned-in-exp? id input-fix-exp))) 
+      (keep (lambda (id)
+              (let ([ac (var-assignment-count id input-fix-exp)])
+                (cond [(zero? ac) #f] ; ignore externs
+                      [(not (assq id static-roots)) #t] ; keep non-statics
+                      [(> ac 1) #t] ; keep true variables (fix for issue 5)
+                      [else #f]))) ; ignore the rest (single-assigned statics)
             global-vars))
     (if (null? live-roots)
         (list "static cxroot_t root = { 0, NULL, NULL };\n\n")    

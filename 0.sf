@@ -1142,17 +1142,22 @@ void *getnative(obj o, cxtype_t *tp) {
 (define-inline (atom? o)
   (%prim "bool(!ispair(obj_from_$arg))" o))
 
-(define (list? o) ; too heavy for inlining
-  (%prim? "{ /* list? */
-    obj l = obj_from_$arg, s = l;
-    for (;;) {
-    if (isnull(l)) { $return bool(1); break; }
-    else if (!ispair(l)) { $return bool(0); break; }
-    else if ((l = cdr(l)) == s) { $return bool(0); break; }
-    else if (isnull(l)) { $return bool(1); break; }
-    else if (!ispair(l)) { $return bool(0); break; }
-    else if ((l = cdr(l)) == s) { $return bool(0); break; }
-    else s = cdr(s); } }" o))
+(%definition "extern int islist(obj l);")
+(%localdef "int islist(obj l) {
+  obj s = l;
+  for (;;) {
+    if (isnull(l)) return 1;
+    else if (!ispair(l)) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else if (isnull(l)) return 1;
+    else if (!ispair(l)) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else s = cdr(s); 
+  }
+}")
+
+(define-inline (list? o)
+  (%prim? "bool(islist(obj_from_$arg))" o))
 
 (define-inline (cons a d) 
   (%prim* "{ /* cons */ 
