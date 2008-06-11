@@ -1,0 +1,111 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>2. Notation and terminology</title>
+<style type="text/css">
+body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
+#menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
+* html #menu { position: absolute; }
+#menu p { font-size: 9pt; line-height: 14pt; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 14pt; margin: 0; padding: 0;  }
+a:visited, a { text-decoration: none; color: #1D5CA5; }
+a:hover { text-decoration: underline; color: #1D5CA5; }
+body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
+tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
+abbr, var { font-style: italic; }
+q { font-style: italic; text-decoration: none; }
+pre { margin-top: 1.5ex; margin-bottom: 0; }
+p { line-height: 3ex; font-size: 10pt; margin-top: 1.5ex; margin-bottom: 0; padding: 0; text-align: justify; }
+p.note { font-size: 9pt; }
+p.note tt, code, pre { font-size: 10.5pt; }
+h1 { margin-top: 0; margin-bottom: 0; font-size: 17pt; border-top: 1.5ex solid white; }
+h2 { margin-top: 0; margin-bottom: 0; font-size: 13pt; border-top: 3ex solid white; }
+h3 { margin-top: 0; margin-bottom: 0; font-size: 11pt; border-top: 3ex solid white; }
+h4 { margin-top: 0; margin-bottom: 0; font-size: 10pt; border-top: 1.5ex solid white; }
+table.proto { margin-top: 0; margin-bottom: 0; border: 0; border-spacing: 0; padding: 0; border-top: 3ex solid white;}
+table.proto td { font-size: 10pt; line-height: 3ex; }
+</style>
+<!--[if lte IE 6]>
+   <style type="text/css">
+   /*<![CDATA[*/ 
+html { overflow-x: auto; overflow-y: hidden; }
+   /*]]>*/
+   </style>
+<![endif]-->
+</head>
+<body>
+
+<div id="menu">
+<p>2.&nbsp;&nbsp;<a href="#">Notation and terminology</a></p>
+<p>2.1.&nbsp;&nbsp;<a href="#2.1.">Entry format</a></p>
+<p>2.2.&nbsp;&nbsp;<a href="#2.2.">Evaluation examples</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="toc.html">full table of contents</a> &rsaquo;</p>
+<p>&nbsp;</p>
+<p><tt>sfc</tt>&nbsp;&nbsp;&nbsp;<a href="#sfc">7.1.</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="ioe.html">full index</a> &rsaquo;</p>
+</div>
+
+<div style="width: 30pc;">
+
+
+<a id="2."></a><h1>2.&nbsp;&nbsp;&nbsp;&nbsp;Notation and terminology</h1>
+
+<a id="2.1."></a><h2>2.1.&nbsp;&nbsp;&nbsp;&nbsp;Entry format</h2>
+
+<p>The chapters describing bindings in the standard environment,
+system interface, and command-line interface are organized into
+entries. Each entry begins with a header line that usually includes 
+the name of the form or a feature in <tt>monospace</tt> font within 
+a template for its use. The names of the arguments or syntactic 
+components of the form are <abbr>italicized.</abbr> A notation such as</p>
+
+<p style="margin-left: 1pc;"><abbr>thing<sub>1</sub></abbr> &hellip;</p>
+
+<p>indicates zero or more occurences of <abbr>thing</abbr>. Thus</p>
+
+<p style="margin-left: 1pc;"><abbr>thing<sub>1</sub></abbr> <abbr>thing<sub>2</sub></abbr> &hellip;</p>
+
+<p>indicates at least one <abbr>thing</abbr>. At the right of the header 
+line one of the following categories will appear:</p>
+
+<table class="proto" style="border-top: 0;" width="100%" cellpadding="0" cellspacing="0">
+<tr><td></td><td align="right">syntax</td></tr>
+<tr><td></td><td align="right">procedure</td></tr>
+<tr><td></td><td align="right">standard prelude typedef</td></tr>
+<tr><td></td><td align="right">standard prelude #define</td></tr>
+<tr><td></td><td align="right">runtime host variable</td></tr>
+<tr><td></td><td align="right">command line utility</td></tr>
+</table>
+
+<p>An entry of a &ldquo;syntax&rdquo; category describes a syntactic
+class of forms, usually identified by a keyword. The header line for
+a syntactic class gives a template for the use of the form, with the
+components of the form designated by syntactic variables. Syntactic
+variables should be understood to denote other forms.</p>
+
+<p>If the category of an entry is &ldquo;procedure&rdquo;, then the
+entry describes a procedure, and the header line gives a template
+for a call to the procedure. The italicized names in the template
+denote the arguments to the procedure.</p>
+
+
+
+<a id="2.2."></a><h2>2.2.&nbsp;&nbsp;&nbsp;&nbsp;Evaluation examples</h2>
+
+<p>...</p>
+
+<!-- 
+@misc{ feeley97compiling,
+  author = "M. Feeley and J. Miller and G. Rozas and J. Wilson",
+  title = "Compiling Higher-Order Languages into Fully Tail-Recursive Portable C",
+  text = "M. Feeley, J. Miller, G. Rozas, and J. Wilson. Compiling Higher-Order Languages
+    into Fully Tail-Recursive Portable C. Technical Report 1078, D'epartement
+    d'informatique et de recherche op'erationelle, Universit'e de Montr'eal,
+    1997.",
+  year = "1997",
+  url = "citeseer.ist.psu.edu/feeley97compiling.html" }
+-->
+</div>
+</body>
+</html>

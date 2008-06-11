@@ -7,10 +7,10 @@
 body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
 #menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
 * html #menu { position: absolute; }
-#menu p { font-size: 9pt; line-height: 3ex; margin: 0; padding: 0;  }
-#menu p.tt { font-size: 11pt; line-height: 2.8ex; margin: 0; padding: 0;  }
-#menu a:visited, #menu a { text-decoration: none; color: #1D5CA5; }
-#menu a:hover { text-decoration: underline; color: #1D5CA5; }
+#menu p { font-size: 9pt; line-height: 14pt; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 14pt; margin: 0; padding: 0;  }
+a:visited, a { text-decoration: none; color: #1D5CA5; }
+a:hover { text-decoration: underline; color: #1D5CA5; }
 body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
 tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
 abbr, var { font-style: italic; }
@@ -39,7 +39,7 @@ html { overflow-x: auto; overflow-y: hidden; }
 <body>
 
 <div id="menu">
-<p>6.&nbsp;&nbsp;<a href="#6.">Compilation</a></p>
+<p>6.&nbsp;&nbsp;<a href="#">Compilation</a></p>
 <p>6.1.&nbsp;&nbsp;<a href="#6.1.">Compilation units</a></p>
 <p>6.1.1.&nbsp;&nbsp;<a href="#6.1.1.">Global namespace</a></p>
 <p>6.1.2.&nbsp;&nbsp;<a href="#6.1.2.">Unit dependencies</a></p>
@@ -49,20 +49,20 @@ html { overflow-x: auto; overflow-y: hidden; }
 <p>6.3.&nbsp;&nbsp;<a href="#6.3.">Compilation technique</a></p>
 <p>6.3.1.&nbsp;&nbsp;<a href="#6.3.1.">Host functions</a></p>
 <p>6.3.2.&nbsp;&nbsp;<a href="#6.3.2.">Optimizations</a></p>
-<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full table of contents</a> &rsaquo;</p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="toc.html">full table of contents</a> &rsaquo;</p>
 <p>&nbsp;</p>
 <p><tt>#fload</tt>&nbsp;&nbsp;&nbsp;<a href="#fload">6.1.2.</a></p>
 <p><tt>main</tt>&nbsp;&nbsp;&nbsp;<a href="#main">6.1.4.</a></p>
 <p><tt>%include</tt>&nbsp;&nbsp;&nbsp;<a href="#include">6.2.</a></p>
 <p><tt>%definition</tt>&nbsp;&nbsp;&nbsp;<a href="#definition">6.2.</a></p>
 <p><tt>%localdef</tt>&nbsp;&nbsp;&nbsp;<a href="#definition">6.2.</a></p>
-<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full index</a> &rsaquo;</p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="ioe.html">full index</a> &rsaquo;</p>
 </div>
 
 <div style="width: 30pc;">
 
 
-<a id="6."/><h1>6.&nbsp;&nbsp;&nbsp;&nbsp;Compilation</h1>
+<a id="6."></a><h1>6.&nbsp;&nbsp;&nbsp;&nbsp;Compilation</h1>
 
 <p>#F compiler translates #F source code into C code. #F supports separate
 compilation and provides a way to specify dependencies between source
@@ -72,7 +72,7 @@ MIT Scheme [<a href="http://citeseer.ist.psu.edu/feeley97compiling.html">Feeley9
 
 The parts of the C code inserted by the compiler conform to ANSI C standard [C89].</p>
 
-<a id="6.1."/><h2>6.1.&nbsp;&nbsp;&nbsp;&nbsp;Compilation units</h2>
+<a id="6.1."></a><h2>6.1.&nbsp;&nbsp;&nbsp;&nbsp;Compilation units</h2>
 
 <p>#F compiler translates #F <em>compilation unit</em> into C. 
 A #F compilation unit is a single file, conventionally ending in <tt>.sf</tt>,
@@ -80,7 +80,7 @@ that contains #F source code. The result of the translation is a
 single C file with the same base name as the #F file and the  
 extension <tt>.c</tt>, located in the same directory as the original.</p>
 
-<a id="6.1.1."/><h3>6.1.1.&nbsp;&nbsp;&nbsp;&nbsp;Global namespace</h3>
+<a id="6.1.1."></a><h3>6.1.1.&nbsp;&nbsp;&nbsp;&nbsp;Global namespace</h3>
 
 <p>#F has a simplistic model of the global namespace (top level environment), 
 borrowed from C and traditional Scheme. All top-level bindings occupy a single 
@@ -99,7 +99,7 @@ keywords, e.g.:</p>
 
 <p>Note that the original long names will still be visible.</p>
 
-<a id="6.1.2."/><h3>6.1.2.&nbsp;&nbsp;&nbsp;&nbsp;Unit dependencies</h3>
+<a id="6.1.2."></a><h3>6.1.2.&nbsp;&nbsp;&nbsp;&nbsp;Unit dependencies</h3>
 
 <p>A compilation unit may depend on other compilation units in two ways.
 First, it may use macros defined in other units. Second, it can contain
@@ -112,7 +112,7 @@ on units B and C, it should contain explicit <em>processing instructions</em>,
 telling the compiler to <em>visit</em> B and C before compiling A, and
 arrange the initialization order so that A is initialized after B and C.</p>
 
-<a id="fload" />
+<a id="fload"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>#fload "<abbr>filename</abbr>"</code></td><td align="right">processing instruction</td></tr>
 </table>
@@ -124,7 +124,7 @@ its contents were present at the point of the instruction {<em>what happens to n
 All processing instructions for unit dependencies should precede any
 regular #F forms in the unit.</p>
 
-<a id="6.1.3."/><h3>6.1.3.&nbsp;&nbsp;&nbsp;&nbsp;Linkage</h3>
+<a id="6.1.3."></a><h3>6.1.3.&nbsp;&nbsp;&nbsp;&nbsp;Linkage</h3>
 
 <p>When a compilation unit is translated into C, each variable bound by a top level 
 <tt>define</tt>, assigned to via <tt>set!</tt>, or simply referred to in the code
@@ -146,13 +146,13 @@ allows the compiler to perform single assignment analysis, opening possibilities
 for inline substitution and call sequence optimizations.</p>
 
 
-<a id="6.1.4."/><h3>6.1.4.&nbsp;&nbsp;&nbsp;&nbsp;Main entry point</h3>
+<a id="6.1.4."></a><h3>6.1.4.&nbsp;&nbsp;&nbsp;&nbsp;Main entry point</h3>
 
 <p>When the compiled units are linked together to form an executable
 program, there has to be a way to specify an entry point for the program.
 #F compiler adopted the C model of identifying the entry point by name.</p>
 
-<a id="main" />
+<a id="main"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>(main <abbr>argv</abbr>)</code></td><td align="right">entry point procedure</td></tr>
 </table>
@@ -180,7 +180,7 @@ default values (false). In practice, failure to <tt>#fload</tt> a module
 often causes the program to crash when a procedure from that module is
 invoked.</p>
 
-<a id="6.2."/><h2>6.2.&nbsp;&nbsp;&nbsp;&nbsp;Including C code</h2>
+<a id="6.2."></a><h2>6.2.&nbsp;&nbsp;&nbsp;&nbsp;Including C code</h2>
 
 <p>Since the compiler emits C code, it can allow the programmer to inject
 pieces of C code into the output an no extra cost. This functionality is
@@ -189,7 +189,7 @@ the top level of a unit. All three forms do not allow expressions as
 arguments and have no value. In other respects they behave as regular
 forms and can be produced as the result of macroexpansion.</p>
 
-<a id="include" />
+<a id="include"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>(%include "<abbr>filename</abbr>")</code></td><td align="right">syntax</td></tr>
 <tr><td><code>(%include &lt;<abbr>filename</abbr>&gt;)</code></td><td align="right">syntax</td></tr>
@@ -202,7 +202,7 @@ adds includes for <tt>stdio.h</tt>, <tt>stddef.h</tt>, <tt>stdlib.h</tt>,
 and <tt>assert.h</tt> by default, so those need not to be included 
 explicitly.</p>
 
-<a id="definition" />
+<a id="definition"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>(%definition "<abbr>code</abbr>")</code></td><td align="right">syntax</td></tr>
 <tr><td><code>(%localdef "<abbr>code</abbr>")</code></td><td align="right">syntax</td></tr>
@@ -228,7 +228,7 @@ forms should provide a run-time implementation of strings (or lists for
 that matter). Only parts of the surface syntax of #F program that are
 manipulated at run time need a runtime implementation.</p>
 
-<a id="6.3."/><h2>6.3.&nbsp;&nbsp;&nbsp;&nbsp;Compilation technique</h2>
+<a id="6.3."></a><h2>6.3.&nbsp;&nbsp;&nbsp;&nbsp;Compilation technique</h2>
 
 <p>The compiler follows a simple strategy for implementing full tail recursion
 and unrestricted continuations while compiling into portable C. All #F
@@ -246,7 +246,7 @@ this procedure with the control point as argument. It is the responsibility
 of the host function to transfer the control within itself so that the execution
 continues from the correct statement.</p>
 
-<a id="6.3.1."/><h2>6.3.1.&nbsp;&nbsp;&nbsp;&nbsp;Host functions</h2>
+<a id="6.3.1."></a><h2>6.3.1.&nbsp;&nbsp;&nbsp;&nbsp;Host functions</h2>
 
 <p>Host functions receive a run-time representation of control point
 within the host and return a run-time representation of a control point
@@ -272,7 +272,7 @@ environment back to global variables and returns the failed case to the
 host function&rsquo;s caller, where the control is transferred to another
 host and the process is repeated.</p>
 
-<a id="6.3.2."/><h2>6.3.2.&nbsp;&nbsp;&nbsp;&nbsp;Optimizations</h2>
+<a id="6.3.2."></a><h2>6.3.2.&nbsp;&nbsp;&nbsp;&nbsp;Optimizations</h2>
 
 <p>#F compiler attempts to improve on the general mechanism described
 above by trying to generate <em>helper functions</em> and making 

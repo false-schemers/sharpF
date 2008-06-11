@@ -1,0 +1,108 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>5. Definitions</title>
+<style type="text/css">
+body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
+#menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
+* html #menu { position: absolute; }
+#menu p { font-size: 9pt; line-height: 14pt; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 14pt; margin: 0; padding: 0;  }
+a:visited, a { text-decoration: none; color: #1D5CA5; }
+a:hover { text-decoration: underline; color: #1D5CA5; }
+body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
+tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
+abbr, var { font-style: italic; }
+q { font-style: italic; text-decoration: none; }
+pre { margin-top: 1.5ex; margin-bottom: 0; }
+p { line-height: 3ex; font-size: 10pt; margin-top: 1.5ex; margin-bottom: 0; padding: 0; text-align: justify; }
+p.note { font-size: 9pt; }
+p.note tt, code, pre { font-size: 10.5pt; }
+h1 { margin-top: 0; margin-bottom: 0; font-size: 17pt; border-top: 1.5ex solid white; }
+h2 { margin-top: 0; margin-bottom: 0; font-size: 13pt; border-top: 3ex solid white; }
+h3 { margin-top: 0; margin-bottom: 0; font-size: 11pt; border-top: 3ex solid white; }
+h4 { margin-top: 0; margin-bottom: 0; font-size: 10pt; border-top: 1.5ex solid white; }
+table.proto { margin-top: 0; margin-bottom: 0; border: 0; border-spacing: 0; padding: 0; border-top: 3ex solid white;}
+table.proto td { font-size: 10pt; line-height: 3ex; }
+</style>
+<!--[if lte IE 6]>
+   <style type="text/css">
+   /*<![CDATA[*/ 
+html { overflow-x: auto; overflow-y: hidden; }
+   /*]]>*/
+   </style>
+<![endif]-->
+</head>
+<body>
+
+<div id="menu">
+<p>5.&nbsp;&nbsp;<a href="#">Definitions</a></p>
+<p>5.1.&nbsp;&nbsp;<a href="#5.1.">Top level definitions</a></p>
+<p>5.2.&nbsp;&nbsp;<a href="#5.2.">Internal definitions</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="toc.html">full table of contents</a> &rsaquo;</p>
+<p>&nbsp;</p>
+<p><tt>define</tt>&nbsp;&nbsp;&nbsp;<a href="#5.">5.</a></p>
+<p><tt>define-syntax</tt>&nbsp;&nbsp;&nbsp;<a href="#5.">5.</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="ioe.html">full index</a> &rsaquo;</p>
+</div>
+
+<div style="width: 30pc;">
+
+<a id="5."></a><h1>5.&nbsp;&nbsp;&nbsp;&nbsp;Definitions</h1>
+
+<p>Modern Schemes feature a complicated mechanism of assembling a set of top-level or
+local bindings by transforming a <abbr>program</abbr> or a <abbr>body</abbr>
+into a sequence of global assignments or mutually recursive bindings. This transformation
+is too complex to be performed by a <tt>syntax-rules</tt> based macroexpander, so a minimal
+set of constructs for scopes and definitions is provided in the core language.</p>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(define <abbr>variable</abbr> <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+<tr><td><code>(define-syntax <abbr>keyword</abbr> <abbr>datum</abbr>)</code></td><td align="right">syntax</td></tr>
+<tr><td><code>(begin <abbr>definition</abbr> &hellip;)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>Definitions are valid in some, but not all, contexts where expressions are allowed. They are valid 
+only at the top level of a compilation unit and at the beginning of a <tt>syntax-lambda</tt> form.
+A definition is not an expression and has no value.</p>
+
+<a id="5.1."></a><h2>5.1.&nbsp;&nbsp;&nbsp;&nbsp;Top level definitions</h2>
+
+<p>At the top level of a compilation unit, a definition</p>
+<pre>
+   (define <abbr>variable</abbr> <abbr>expression</abbr>)
+</pre>
+<p>has essentially the same effect as the assignment expression</p>
+<pre>
+   (set! <abbr>variable</abbr> <abbr>expression</abbr>)
+</pre>
+<p>if <abbr>variable</abbr> is bound in the compilation unit. If <abbr>variable</abbr>
+is not bound, then the definition will bind <abbr>variable</abbr> to a new location
+before performing the assignment. In #F, all compilation units share a single
+global namespace, so variables bound at the top-level in one unit are visible in
+all other units. It is an error to bind a variable in more than one compilation unit
+of the program. It is also an error to reference a variable which is not bound in
+any compilation units constituting a program.</p>
+
+<p>During the macroexpansion of the program a top level definition of the form</p>
+<pre>
+   (define-syntax <abbr>keyword</abbr> <abbr>datum</abbr>)
+</pre>
+<p>extends the top-level syntactic environment by binding <abbr>keyword</abbr>
+(an identifier) to the result of the expansion of <abbr>datum</abbr> in the
+original syntactic environment.</p>
+
+
+<a id="5.2."></a><h2>5.2.&nbsp;&nbsp;&nbsp;&nbsp;Internal definitions</h2>
+
+<p>Definitions may Adjacent definitions at the beginning of a <tt>syntax-lambda</tt> ...</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>All traditional forms with <em>implicit body</em> are constructed as macros which
+use <tt>syntax-lambda</tt> to scope definitions. Traditional forms are available in base library.</p>
+
+
+
+</div>
+</body>
+</html>

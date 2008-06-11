@@ -2,15 +2,15 @@
 <html xmlns="http://www.w3.org/1999/xhtml" >
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-<title>3. Notation and terminology</title>
+<title>3. Expressions</title>
 <style type="text/css">
 body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
 #menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
 * html #menu { position: absolute; }
-#menu p { font-size: 9pt; line-height: 3ex; margin: 0; padding: 0;  }
-#menu p.tt { font-size: 11pt; line-height: 2.8ex; margin: 0; padding: 0;  }
-#menu a:visited, #menu a { text-decoration: none; color: #1D5CA5; }
-#menu a:hover { text-decoration: underline; color: #1D5CA5; }
+#menu p { font-size: 9pt; line-height: 14pt; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 14pt; margin: 0; padding: 0;  }
+a:visited, a { text-decoration: none; color: #1D5CA5; }
+a:hover { text-decoration: underline; color: #1D5CA5; }
 body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
 tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
 abbr, var { font-style: italic; }
@@ -37,75 +37,268 @@ html { overflow-x: auto; overflow-y: hidden; }
 <body>
 
 <div id="menu">
-<p>3.&nbsp;&nbsp;<a href="#3.">Notation and terminology</a></p>
-<p>3.1.&nbsp;&nbsp;<a href="#3.1.">Entry format</a></p>
-<p>3.2.&nbsp;&nbsp;<a href="#3.2.">Evaluation examples</a></p>
-<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full table of contents</a> &rsaquo;</p>
+<p>3.&nbsp;&nbsp;<a href="#">Expressions</a></p>
+<p>3.1.&nbsp;&nbsp;<a href="#3.1.">Variable references</a></p>
+<p>3.2.&nbsp;&nbsp;<a href="#3.2.">Procedure calls</a></p>
+<p>3.3.&nbsp;&nbsp;<a href="#3.3.">Procedures</a></p>
+<p>3.4.&nbsp;&nbsp;<a href="#3.4.">Conditionals</a></p>
+<p>3.5.&nbsp;&nbsp;<a href="#3.5.">Assignments</a></p>
+<p>3.6.&nbsp;&nbsp;<a href="#3.6.">Continuations</a></p>
+<p>3.7.&nbsp;&nbsp;<a href="#3.7.">Sequencing</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="toc.html">full table of contents</a> &rsaquo;</p>
 <p>&nbsp;</p>
-<p><tt>sfc</tt>&nbsp;&nbsp;&nbsp;<a href="#sfc">7.1.</a></p>
-<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full index</a> &rsaquo;</p>
+<!-- p><abbr>variable</abbr>&nbsp;&nbsp;&nbsp;<a href="#3.">3.</a></p>
+<p><abbr>procedure call</abbr>&nbsp;&nbsp;&nbsp;<a href="#3.2.">3.2.</a></p -->
+<p><tt>lambda</tt>&nbsp;&nbsp;&nbsp;<a href="#3.3.">3.3.</a></p>
+<p><tt>if</tt>&nbsp;&nbsp;&nbsp;<a href="#3.4.">3.4.</a></p>
+<p><tt>set!</tt>&nbsp;&nbsp;&nbsp;<a href="#3.5.">3.5.</a></p>
+<p><tt>letcc</tt>&nbsp;&nbsp;&nbsp;<a href="#3.6.">3.6.</a></p>
+<p><tt>withcc</tt>&nbsp;&nbsp;&nbsp;<a href="#3.6.">3.6.</a></p>
+<p><tt>sequence</tt>&nbsp;&nbsp;&nbsp;<a href="#3.7.">3.7.</a></p>
+<p><tt>begin</tt>&nbsp;&nbsp;&nbsp;<a href="#3.7.">3.7.</a>&nbsp;&nbsp;<a href="#3.7.">3.7.</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="ioe.html">full index</a> &rsaquo;</p>
 </div>
 
 <div style="width: 30pc;">
 
 
-<a id="3."/><h1>3.&nbsp;&nbsp;&nbsp;&nbsp;Notation and terminology</h1>
+<a id="3."></a><h1>3.&nbsp;&nbsp;&nbsp;&nbsp;Expressions</h1>
 
-<a id="3.1."/><h2>3.1.&nbsp;&nbsp;&nbsp;&nbsp;Entry format</h2>
+<p>This chapter describes the set of core expression types available in the #F’s 
+<em>default environment</em>. These expression types, together with macro
+forms [<a href="ch4.html">ch.4</a>], definitions [<a href="ch5.html">ch.5</a>], 
+and system interface constructs [7.] provide all necessary machinery
+for bulding a larger language (or languages) in a modular and controlled manner. 
+#F system comes with a set of pre-built libraries which provide most of the features
+expected of a reasonably complete Scheme system. These libraries are built on top of the
+core language described here and each other; from the compiler’s point of view, the libraries
+are no different from any other #F source file.</p>
 
-<p>The chapters describing bindings in the standard environment,
-system interface, and command-line interface are organized into
-entries. Each entry begins with a header line that usually includes 
-the name of the form or a feature in <tt>monospace</tt> font within 
-a template for its use. The names of the arguments or syntactic 
-components of the form are <abbr>italicized.</abbr> A notation such as</p>
+<p>The core language provides a set of basic Scheme expressions, aimed at representing
+non-redundant features of Scheme. A smaller set could be devised, but this one is 
+sufficiently small for practical purposes (that is to give the compiler something
+to chew on).</p>
 
-<p style="margin-left: 1pc;"><abbr>thing<sub>1</sub></abbr> &hellip;</p>
+<a id="3.1."></a><h2>3.1&nbsp;&nbsp;&nbsp;&nbsp;Variable references</h2>
 
-<p>indicates zero or more occurences of <abbr>thing</abbr>. Thus</p>
-
-<p style="margin-left: 1pc;"><abbr>thing<sub>1</sub></abbr> <abbr>thing<sub>2</sub></abbr> &hellip;</p>
-
-<p>indicates at least one <abbr>thing</abbr>. At the right of the header 
-line one of the following categories will appear:</p>
-
-<table class="proto" style="border-top: 0;" width="100%" cellpadding="0" cellspacing="0">
-<tr><td></td><td align="right">syntax</td></tr>
-<tr><td></td><td align="right">procedure</td></tr>
-<tr><td></td><td align="right">standard prelude typedef</td></tr>
-<tr><td></td><td align="right">standard prelude #define</td></tr>
-<tr><td></td><td align="right">runtime host variable</td></tr>
-<tr><td></td><td align="right">command line utility</td></tr>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><abbr>variable</abbr></td><td align="right">syntax</td></tr>
 </table>
 
-<p>An entry of a &ldquo;syntax&rdquo; category describes a syntactic
-class of forms, usually identified by a keyword. The header line for
-a syntactic class gives a template for the use of the form, with the
-components of the form designated by syntactic variables. Syntactic
-variables should be understood to denote other forms.</p>
+<p>An expression consisting of a variable (an identifier which is not a syntactic keyword)
+is a variable reference. The value of the variable reference is the value stored in the 
+location to which the variable is bound. It is an error to reference an unbound variable.</p>
 
-<p>If the category of an entry is &ldquo;procedure&rdquo;, then the
-entry describes a procedure, and the header line gives a template
-for a call to the procedure. The italicized names in the template
-denote the arguments to the procedure.</p>
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>(define x 28)
+x &rArr; 28
+</pre>
+
+<a id="3.2."></a><h2>3.2.&nbsp;&nbsp;&nbsp;&nbsp;Procedure calls</h2>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(<abbr>operator</abbr> <abbr>operand<sub>1</sub></abbr> &hellip;)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>A procedure call consists of expressions for the procedure to be called and the arguments 
+to be passed to it, with enclosing parentheses. A form in an expression context is a 
+procedure call if macroexpansion of <abbr>operator</abbr> does not produce a macro transformer 
+(see section ?.? Macro uses).</p>
+
+<p>When a procedure call is evaluated, the operator and operand expressions are evaluated 
+(in an unspecified order) and the resulting procedure is passed the resulting arguments.</p>
+
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>(+ 3 4) &rArr; 7
+((if #f + *) 3 4) &rArr; 12
+</pre>
+
+<a id="3.3."></a><h2>3.3.&nbsp;&nbsp;&nbsp;&nbsp;Procedures</h2>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(lambda (<abbr>variable<sub>1</sub></abbr> &hellip;) <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>A lambda expression evaluates to a procedure. The environment in effect when the lambda 
+expression was evaluated is remembered as part of the procedure. When the procedure is later 
+called with some actual arguments, the environment in which the lambda expression was evaluated 
+will be extended by binding the variables in the formal argument list to fresh locations, 
+the corresponding actual argument values will be stored in those locations, and the 
+expression in the body of the lambda expression will be evaluated in the extended environment. 
+The result(s) of the body expression will be returned as the result(s) of the procedure call.
+</p>
+
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>(lambda (x) (+ x x))              &rArr;  <q>a procedure</q>
+((lambda (x) (+ x x)) 4)          &rArr;  8
+
+(define reverse-subtract
+  (lambda (x y) (- y x)))
+(reverse-subtract 7 10)           &rArr;  3
+
+(define add4
+  ((lambda (x)
+     (lambda (y) (+ x y)))
+   4))
+(add4 6)                          &rArr;  10
+</pre>
+
+<p>It is an error for a <abbr>variable</abbr> to appear more than once in 
+the formal argument list.</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>In contrast to other dialects of Scheme, #F does not support
+sequences of definitions and expressions as primitive syntax of lambda expressions. 
+Improper argument lists are also not considered primitive. Both features can
+be introduced by extending the primitive form (as exemplified by definitions
+provided in base library).</p>
+
+<p><em>Note:&nbsp;&nbsp;</em>#F does not require each procedure created as the result of 
+evaluating a lambda expression to be (conceptually) tagged with a unique storage 
+location. Two computationally equivalent procedures may share a single storage
+location even if they were created by two distinct lambda expressions.</p>
+
+<a id="3.4."></a><h2>3.4.&nbsp;&nbsp;&nbsp;&nbsp;Conditionals</h2>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(if <abbr>test</abbr> <abbr>consequent</abbr> <abbr>alternate</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>An <tt>if</tt> expression is evaluated as follows: first, <abbr>test</abbr> is evaluated. 
+If it yields a true value (see section ?.?), then <abbr>consequent</abbr> is evaluated 
+and its value(s) is(are) returned. Otherwise <abbr>alternate</abbr> is evaluated and 
+its value(s) is(are) returned. <abbr>Test</abbr>, <abbr>consequent</abbr>, and
+<abbr>alternate</abbr> may be arbitrary expressions.</p>
+
+<p>The following example assumes the base math library has been imported:</p>
+
+<pre>(if (> 3 2) 'yes 'no)             &rArr;  yes
+(if (> 2 3) 'yes 'no)             &rArr;  no
+(if (> 3 2)
+    (- 3 2)
+    (+ 3 2))                      &rArr;  1
+</pre>    
+
+<p><em>Note:&nbsp;&nbsp;</em>In contrast to other dialects of Scheme, #F does not support
+one-armed <tt>if</tt> form as primitive. This feature can be added by extending 
+the primitive form (and can be imported from base library).</p>
+
+<a id="3.5."></a><h2>3.5.&nbsp;&nbsp;&nbsp;&nbsp;Assignments</h2>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(set! <abbr>variable</abbr> <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p><abbr>Expression</abbr> is evaluated, and the resulting value is stored in the location 
+to which <abbr>variable</abbr> is bound. <abbr>Variable</abbr> must be bound either in 
+some region enclosing the <tt>set!</tt> expression or at top level of the current compilation
+unit. The result of the <tt>set!</tt> expression is unspecified.</p>
+
+<pre>(define x 2)
+(+ x 1)                           &rArr;  3
+(set! x 4)                        &rArr;  <q>unspecified</q>
+(+ x 1)                           &rArr;  5
+</pre>
+
+<p><em>Note:&nbsp;&nbsp;</em>#F does not allow the same top-level variable to be assigned from more 
+than one compilation unit.</p>
 
 
+<a id="3.6."></a><h2>3.6.&nbsp;&nbsp;&nbsp;&nbsp;Continuations</h2>
 
-<a id="3.2."/><h2>3.2.&nbsp;&nbsp;&nbsp;&nbsp;Evaluation examples</h2>
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(letcc <abbr>variable</abbr> <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
 
-<p>...</p>
+<p>A <tt>letcc</tt> expression is evaluated as follows: first, the continuation for the <tt>letcc</tt>
+expression being evaluated is captured in a form of a procedure. Then, the environment in which the <tt>letcc</tt> 
+expression is evaluated is extended by binding <abbr>variable</abbr> to a fresh location, the continuation
+procedure is stored in this location, and <abbr>expression</abbr> is evaluated in the extended 
+environment. The result(s) of the expression is(are) returned.</p>
 
-<!-- 
-@misc{ feeley97compiling,
-  author = "M. Feeley and J. Miller and G. Rozas and J. Wilson",
-  title = "Compiling Higher-Order Languages into Fully Tail-Recursive Portable C",
-  text = "M. Feeley, J. Miller, G. Rozas, and J. Wilson. Compiling Higher-Order Languages
-    into Fully Tail-Recursive Portable C. Technical Report 1078, D'epartement
-    d'informatique et de recherche op'erationelle, Universit'e de Montr'eal,
-    1997.",
-  year = "1997",
-  url = "citeseer.ist.psu.edu/feeley97compiling.html" }
--->
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(withcc <abbr>continuation</abbr> <abbr>expression</abbr>)</code></td><td align="right">syntax</td></tr>
+</table>
+
+<p>When a <tt>withcc</tt> expression is evaluated, <abbr>continuation</abbr> is evaluated and
+the resulting procedure is used as the continuation for evaluation of <abbr>expression</abbr>.
+The result(s) of the expression is(are) returned directly to the supplied continuation procedure
+in a tail-recursive manner. The continuation used to evaluate <tt>withcc</tt> form is ignored.</p>
+
+<p class="note"><em>Rationale: </em> #F’s special-form interface to continuations is chosen for three reasons.
+First, it allows for a more precise syntactic characterization of the proper tail-recursive
+behavior in presence of continuations: if <tt>letcc</tt> or <tt>withcc</tt> form is in tail 
+position, its body expression is also in tail position. Second, Scheme’s traditional <tt>call/cc</tt> 
+interface does not allow passing the values of an application to a continuation procedure
+in a tail-recursive manner (both direct application and <tt>call-with-values</tt> have to
+add an extra control frame because of the procedural nature of the interface). Third, the
+<tt>letcc</tt>&thinsp;/&thinsp;<tt>withcc</tt> pair is not encumbered by dynamic contexts and translates
+to CPS in a straightforward manner (and allows reverse translation for CPS form with no
+restrictions on the use of continuation-bound identifiers). Traditional Scheme interface
+built upon these two forms can be imported from base library.</p>
+
+<a id="3.7."></a><h2>3.7.&nbsp;&nbsp;&nbsp;&nbsp;Sequencing</h2>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(sequence <abbr>expression<sub>1</sub></abbr> <abbr>expression<sub>2</sub></abbr>)</code></td><td align="right">prototype syntax</td></tr>
+</table>
+
+<p>The <tt>sequence</tt> expression is one of #F’s “stub” or “prototype” syntax forms which
+have a suggested semantics but are not implemented in the core language itself. The raison d'être
+for such forms is to pass as many implementation decisions as possible to library authors in cases
+when the related “surface” syntax has to be supported, but cannot be implemented as a macro.</p>
+
+<p>The suggested semantics for the <tt>sequence</tt> expression is first to evaluate 
+<abbr>expression<sub>1</sub></abbr>, discarding its return values in an implementation-dependent
+manner. Then, <abbr>expression<sub>2</sub></abbr> is to be evaluated tail-recursively and its 
+result(s) is(are) returned.</p>
+
+<p>Sequence expressions can be written explicitly or appear as intermediate forms during
+expansion of some <tt>begin</tt>, <tt>syntax-lambda</tt>, top-level and derived forms featuring
+implicit sequencing (in a form of a “body” or a “sequence of commands”). If any such form is used
+in the program, a syntax transformer for the <tt>sequence</tt> form should be provided.</p>
+
+<table class="proto" width="100%" cellpadding="0" cellspacing="0">
+<tr><td><code>(begin <abbr>expression<sub>1</sub></abbr> <abbr>expression<sub>2</sub></abbr> &hellip;)</code></td><td align="right">derived syntax</td></tr>
+</table>
+
+<p>The <tt>begin</tt> expression provides one of several ways to request sequencing of
+side effects (the other being implicit body of a <tt>syntax-lambda</tt> form and 
+top-level of a compilation unit). The semantics of <tt>begin</tt> expressions is fully
+defined by their transformation into nested <tt>sequence</tt> expressions, as if <tt>begin</tt>
+were defined as follows:</p>
+
+<pre>
+(define-syntax begin 
+  (syntax-rules ()
+    ((begin exp1 exp2) 
+     (sequence exp1 exp2))
+    ((begin exp1 exp2 . more)
+     (sequence exp1 (begin exp2 . more)))))
+</pre>
+
+<p>In reality, <tt>begin</tt>’s transformer has to handle the use of <tt>begin</tt> as
+a definition form (see ?.?) and a splicing top-level form (see ?.?). #F’s macro definition
+mechanism is not expressive enough to handle overloaded syntax forms, so they are handled 
+by built-in syntax transformers.</p>
+
+<p>Examples:</p>
+
+<pre>(define x 1)
+(begin (set! x 4) 5)          &rArr;  <q>error: sequence is not defined</q>
+
+(define-syntax sequence 
+  (syntax-rules ()
+    ((sequence exp1 exp2)
+     ((lambda (ignore) exp1) 
+      exp2))))
+(begin (set! x 4) 5)          &rArr;  5
+x                             &rArr;  4
+(begin (letcc k (k 1 2)) 5)   &rArr;  <q>error: too many values</q>
+</pre>
+
 </div>
 </body>
 </html>

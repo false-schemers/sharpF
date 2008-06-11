@@ -1,0 +1,168 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>Introduction</title>
+<style type="text/css">
+body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
+#menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
+* html #menu { position: absolute; }
+#menu p { font-size: 9pt; line-height: 3ex; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 2.8ex; margin: 0; padding: 0;  }
+a:visited, a { text-decoration: none; color: #1D5CA5; }
+a:hover { text-decoration: underline; color: #1D5CA5; }
+body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
+tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
+abbr, var { font-style: italic; }
+q { font-style: italic; text-decoration: none; }
+pre { margin-top: 1.5ex; margin-bottom: 0; }
+p { line-height: 3ex; font-size: 10pt; margin-top: 1.5ex; margin-bottom: 0; padding: 0; text-align: justify; }
+p.note { font-size: 9pt; }
+p.note tt, code, pre { font-size: 10.5pt; }
+h1 { margin-top: 0; margin-bottom: 0; font-size: 17pt; border-top: 1.5ex solid white; }
+h2 { margin-top: 0; margin-bottom: 0; font-size: 13pt; border-top: 3ex solid white; }
+h3 { margin-top: 0; margin-bottom: 0; font-size: 11pt; border-top: 3ex solid white; }
+h4 { margin-top: 0; margin-bottom: 0; font-size: 10pt; border-top: 1.5ex solid white; }
+table.proto { margin-top: 0; margin-bottom: 0; border: 0; border-spacing: 0; padding: 0; border-top: 3ex solid white;}
+table.proto td { font-size: 10pt; line-height: 3ex; }
+</style>
+<!--[if lte IE 6]>
+   <style type="text/css">
+   /*<![CDATA[*/ 
+html { overflow-x: auto; overflow-y: hidden; }
+   /*]]>*/
+   </style>
+<![endif]-->
+</head>
+<body>
+
+<div id="menu">
+<p><a href="#">INTRODUCTION</a></p>
+<p><a href="#i.1.">Backround</a></p>
+<p><a href="#i.2.">Libraries and FFIs</a></p>
+<p><a href="#i.3.">Portability</a></p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="toc.html">full table of contents</a> &rsaquo;</p>
+<p>&nbsp;</p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="ioe.html">full index</a> &rsaquo;</p>
+</div>
+
+<div style="width: 30pc;">
+
+
+<a id="i."></a><h1 style="text-align: center; font-variant: small-caps;">introduction</h1>
+
+<p>#F (False Scheme) is a minimalist Scheme implementation tailored to
+the needs of practical programmers comfortable with both Scheme and C and
+willing to spend some additional effort in order to build a system that
+fits their needs better than any existing Scheme with an FFI interface. 
+The implementation is based on a (reduced)Scheme-to-C compiler with no 
+knowledge of any data types and a stripped down set of syntactic forms,
+that includes a few basic expression types, a flexible mechanism for
+extending the language by combining fragments of C code, and an extended
+version of R<sup>5</sup>RS macro system which doubles as a compiler
+backend.</p>
+
+<a id="i.1."></a><h2>Backround</h2>
+<p>Henry Baker in his <em>Critique of DIN Kernel Lisp Definition Version 1.2</em> 
+[<a href="http://www.springerlink.com/content/t20403j8v7471892/">1</a>] 
+laid down the desiderata for a Kernel language:</p>
+
+<p style="margin-left: 1pc; margin-right: 1pc;">
+Presumably, a <em>kernel</em> language is a <em>minimal</em> language on top 
+of which a larger language can be built. <em>Since its primary function 
+is being an implementation language for function libraries and a target language 
+for macros,</em> a Kernel language need not be particularly &ldquo;user-friendly&rdquo; 
+or provide a lot of flexibility in its interface. Although it is desirable, 
+a Kernel language does not have to be a strict subset of the full language, 
+since some of its features may not be visible in the full language. 
+A Kernel language should be simpler and more efficient to implement than 
+the full language, however, to avoid an <em>abstraction inversion,</em> 
+in which a simpler notion is defined in terms of more complex notions.</p>
+
+<p>Later, he adds:</p>
+
+<p style="margin-left: 1pc; margin-right: 1pc;">
+Preserving a <em>small definition</em> for DKLisp requires that the standard 
+ruthlessly eliminate non-primitive notions to focus on simple, efficient, 
+modular primitives from which the rest of a Lisp system can be easily and 
+efficiently constructed. In other words, DKLisp primitives must be chosen 
+not for their ability keep a user program small, but for their ability to 
+keep an implementation small and fast.</p>
+
+<p>Baker's 15-year-old program echoes the central design principle of Scheme 
+(&ldquo;removing the weaknesses and restrictions&hellip;&rdquo;) but goes 
+farther, arguing for a smaller language with greater emphasis on implementation 
+efficiency and language cleanliness. This approach harmonizes with the modern 
+trend toward smaller domain-specific languages (DSLs) which do one specific thing
+but do it well. Building a DSL atop of a kernel language allows the designer 
+to concentrate on what is needed for the task at hand, eliminating 
+excess baggage.</p>
+
+<a id="i.2."></a><h2>Libraries and FFIs</h2>
+
+<p>In recent years it became more and more obvious that in order to be
+able to construct a large system around a simple kernel, the kernel has
+to provide an access to low-level system interfaces and libraries. It is
+no longer reasonable to expect that every new language will get its own
+implementation of regular expressions, an XML parser, a PDF writer, even
+though all of them can be implemented from scratch on top of a minimal
+number/string/list set of primitives. The situation is even worse when
+it comes to system interfaces (interprocess comunications, networking
+etc.) &mdash; they can only be built on top of a <em>foreign 
+function interface</em> (FFI).</p> 
+
+<p>FFIs, as they are implemented in traditional Lisp/Scheme systems,
+rely on a complex set of data conversion rules, dynamic code generation
+and other platform-specific methods of getting access to the underlying <em>application
+binary interface</em> (ABI). Although a lot of effort has been spent on
+hiding the internal complexity of the interface from the user and handling
+platform-dependent calling conventions, FFIs remain fragile because many
+programmatic interfaces are are portable only on a source code level
+(and thus should be qualified as APIs, not ABIs).</p>
+
+<p>What an ideal FFI can look like is demonstrated by C++. All that
+is needed to call C functions from C++ is to wrap their prototypes in 
+<tt>extern</tt> <tt>"C"</tt> <tt>{}</tt> to prevent name mangling. The 
+resulting C++ program is (almost) as portable as if it were written in 
+C directly.</p>
+
+<p>#F, being built around a Scheme-to-C compiler, is able to provide an 
+FFI of comparable simplicity by allowing the programmer to write C code 
+fragments to be included verbatim into the output code. As an extreme example
+of this practice, here is a complete #F source code for the ubiquitous
+&ldquo;Hello World&rdquo; program:</p>
+
+<pre>
+(%include &lt;stdio.h&gt;)
+
+(define main 
+  (lambda (argv)
+    (%prim! "void(printf(\"Hello, World!\\n\"))")))
+</pre>
+
+<p><em>Note:&nbsp;&nbsp;</em>This &ldquo;Scheme&rdquo; program does
+not use any Scheme data types, so none have to be defined. The resulting
+C file is <tt>7</tt>KB long and it includes a complete run-time system
+needed to execute the code.</p>
+
+<a id="i.3."></a><h2>Portability</h2>
+
+<p><i>You are in a maze of twisty little <tt>#ifdef</tt>s, all different.</i><br />
+&mdash; Anon.</p>
+
+<!-- wikipedia quote (http://en.wikipedia.org/wiki/ANSI_C) 
+ANSI C is now supported by almost all the widely used compilers. 
+Most of the C code being written nowadays is based on ANSI C. 
+Any program written only in standard C and without any hardware 
+dependent assumptions is virtually guaranteed to compile correctly 
+on any platform with a conforming C implementation. Without such 
+precautions, most programs may compile only on a certain platform 
+or with a particular compiler, due, for example, to the use of 
+non-standard libraries, such as GUI libraries, or to the reliance 
+on compiler- or platform-specific attributes such as the exact 
+size of certain data types and byte endianness.
+-->
+
+</div>
+</body>
+</html>

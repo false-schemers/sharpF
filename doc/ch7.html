@@ -7,10 +7,10 @@
 body { color: #333333; margin-top: 4pc; margin-left: 10pc; }
 #menu { display: block; top: 3pc; left: 45pc; width: 15pc; position: fixed; border: 0; padding: 0; text-align: left; }
 * html #menu { position: absolute; }
-#menu p { font-size: 9pt; line-height: 3ex; margin: 0; padding: 0;  }
-#menu p.tt { font-size: 11pt; line-height: 2.8ex; margin: 0; padding: 0;  }
-#menu a:visited, #menu a { text-decoration: none; color: #1D5CA5; }
-#menu a:hover { text-decoration: underline; color: #1D5CA5; }
+#menu p { font-size: 9pt; line-height: 14pt; margin: 0; padding: 0;  }
+#menu p.tt { font-size: 11pt; line-height: 14pt; margin: 0; padding: 0;  }
+a:visited, a { text-decoration: none; color: #1D5CA5; }
+a:hover { text-decoration: underline; color: #1D5CA5; }
 body, p, h1, h2, h3, h4, abbr, var, q { font-family: Georgia, "Times New Roman"; font-size: 10pt; }
 tt, code, pre, p.tt { font-family: Consolas, "Courier New"; font-size: 11pt; }
 abbr, var { font-style: italic; }
@@ -45,7 +45,7 @@ html { overflow-x: auto; overflow-y: hidden; }
 <p>7.2.&nbsp;&nbsp;<a href="#7.2.">Garbage collection</a></p>
 <p>7.2.1.&nbsp;&nbsp;<a href="#7.2.1.">Allocation of obj blocks</a></p>
 <p>7.2.2.&nbsp;&nbsp;<a href="#7.2.2.">Allocation of native blocks</a></p>
-<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full table of contents</a> &rsaquo;</p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="toc.html">full table of contents</a> &rsaquo;</p>
 <p>&nbsp;</p>
 <p><tt>obj</tt>&nbsp;&nbsp;&nbsp;<a href="#obj">7.1.</a></p>
 <p><tt>cxtype_t</tt>&nbsp;&nbsp;&nbsp;<a href="#cxtype_t">7.1.1.</a></p>
@@ -60,13 +60,13 @@ html { overflow-x: auto; overflow-y: hidden; }
 <p><tt>hbsz</tt>&nbsp;&nbsp;&nbsp;<a href="#hbsz">7.2.1.</a></p>
 <p><tt>hendblk</tt>&nbsp;&nbsp;&nbsp;<a href="#hendblk">7.2.1.</a></p>
 <p><tt>hpushptr</tt>&nbsp;&nbsp;&nbsp;<a href="#hpushptr">7.2.2.</a></p>
-<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="#">full index</a> &rsaquo;</p>
+<p style="margin-top: 1ex; font-variant: small-caps">&lsaquo; <a href="ioe.html">full index</a> &rsaquo;</p>
 </div>
 
 <div style="width: 30pc;">
 
 
-<a id="7."/><h1>7.&nbsp;&nbsp;&nbsp;&nbsp;Runtime system</h1>
+<a id="7."></a><h1>7.&nbsp;&nbsp;&nbsp;&nbsp;Runtime system</h1>
 
 <p>#F system provides a simple and fairly portable framework for creating
 a custom runtime system. The framework does not cover every aspect of
@@ -74,9 +74,9 @@ runtime representation, but lays down a set of basic rules relied upon
 by the compiler. Since the compiler's target language is ANSI C, the
 rules are described in C terms (types, calling conventions etc.)</p>
 
-<a id="7.1."/><h2>7.1.&nbsp;&nbsp;&nbsp;&nbsp;Object representation</h2>
+<a id="7.1."></a><h2>7.1.&nbsp;&nbsp;&nbsp;&nbsp;Object representation</h2>
 
-<a id="obj"/>
+<a id="obj"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>obj</code></td><td align="right">standard prelude typedef</td></tr>
 </table>
@@ -99,7 +99,7 @@ are well-known counterexamples).</p>
 <p><em>Note:&nbsp;&nbsp;</em>When support for C99 standard becomes more widespread,
 #F will switch to more portable <tt>intptr_t</tt> type for pointer-sized integers.</p>
 
-<a id="7.1.1."/><h3>7.1.1.&nbsp;&nbsp;&nbsp;&nbsp;Partitioning of obj values</h3>
+<a id="7.1.1."></a><h3>7.1.1.&nbsp;&nbsp;&nbsp;&nbsp;Partitioning of obj values</h3>
 
 <p>#F maintains a collectible object heap for dynamically allocated objects subject
 to garbage collection. All pointers that point outside the collectible heap are also
@@ -125,7 +125,7 @@ or-ed with <tt>1</tt> to make it look like an immediate value for the garbage
 collector. The header for the native block is a pointer to a static structure
 of the type <tt>cxtype_t</tt> defined as follows:</p>
 
-<a id="cxtype_t"/>
+<a id="cxtype_t"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>cxtype_t</code></td><td align="right">standard prelude typedef</td></tr>
 </table>
@@ -158,7 +158,7 @@ following table:</p>
 <p>#F&rsquo;s standard <em>runtime prelude</em> (C code automatically included in every
 output file) provides basic macros to check the partition of a given <tt>obj</tt>:</p>
 
-<a id="notobjptr"/><a id="isobjptr"/><a id="notaptr"/><a id="isaptr"/>
+<a id="notobjptr"></a><a id="isobjptr"></a><a id="notaptr"></a><a id="isaptr"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>notobjptr(o)</code></td><td align="right">standard prelude #define</td></tr>
 <tr><td><code>isobjptr(o)</code></td><td align="right">standard prelude #define</td></tr>
@@ -177,7 +177,7 @@ that <tt>#f</tt> is NULL pointer, not an immediate quantity). Its inverse is
 <p>Obj blocks can be inspected with the help of the following
 macros in the standard prelude:</p>
 
-<a id="hblklen"/><a id="hblkref"/>
+<a id="hblklen"></a><a id="hblkref"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>hblklen(p)</code></td><td align="right">standard prelude #define</td></tr>
 <tr><td><code>hblkref(p, i)</code></td><td align="right">standard prelude #define</td></tr>
@@ -189,7 +189,7 @@ If <tt>p</tt> is a pointer to an obj block and <tt>i</tt> is any non-negative <t
 less than the number of elements in the block, <tt>hblklen(p, i)</tt> will return
 a reference to ith element of the block (an <tt>obj*</tt> pointer).</p>
 
-<a id="7.1.2."/><h3>7.1.2.&nbsp;&nbsp;&nbsp;&nbsp;Representation of procedures</h3>
+<a id="7.1.2."></a><h3>7.1.2.&nbsp;&nbsp;&nbsp;&nbsp;Representation of procedures</h3>
 
 <p>#F compiler needs to standardize the representation of two types
 of objects actively used in the generated code &mdash; procedures and locations.</p>
@@ -214,7 +214,7 @@ of the block to store external pointers.</p>
 of the obj block to hold an immediate type tag or a pointer to another obj
 block serving as a type descriptor.</p>
 
-<a id="7.1.3."/><h3>7.1.3.&nbsp;&nbsp;&nbsp;&nbsp;Representation of locations</h3>
+<a id="7.1.3."></a><h3>7.1.3.&nbsp;&nbsp;&nbsp;&nbsp;Representation of locations</h3>
 
 <p>In Scheme semantics, a <em>location</em> is allocated each time a variable
 is bound to store the value of the variable. Locations are needed to allow any
@@ -229,7 +229,7 @@ the #F semantics. Since there is no way to get access to a location itself
 as a first class object, there is no need to distinguish them from first
 class objects.</p>
 
-<a id="7.2."/><h2>7.2.&nbsp;&nbsp;&nbsp;&nbsp;Garbage collection</h2>
+<a id="7.2."></a><h2>7.2.&nbsp;&nbsp;&nbsp;&nbsp;Garbage collection</h2>
 
 <p>#F system uses Cheney's stop-and-copy garbage collector to manage
 its gc heap. At any given moment, the system maintains two heaps 
@@ -241,7 +241,7 @@ Scheme variables and a small set of <em>live registers</em> holding
 temporary values. The details on the organization of the global
 data and execution of the compiled code are provided in section [?].</p>
 
-<a id="hp"/>
+<a id="hp"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>hp</code></td><td align="right">runtime host variable</td></tr>
 </table>
@@ -260,9 +260,9 @@ element (usually a pointer returned by <tt>malloc</tt>) and the
 header (a pointer to native descriptor). These steps are performed
 with the help of the standard prelude macros described below.</p>
 
-<a id="7.2.1."/><h3>7.2.1.&nbsp;&nbsp;&nbsp;&nbsp;Allocation of obj blocks</h3>
+<a id="7.2.1."></a><h3>7.2.1.&nbsp;&nbsp;&nbsp;&nbsp;Allocation of obj blocks</h3>
 
-<a id="hreserve"/>
+<a id="hreserve"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>hreserve(n, l)</code></td><td align="right">standard prelude #define</td></tr>
 </table>
@@ -273,7 +273,7 @@ room, a garbage collection is triggered, and the new space is allocated
 as needed. The <tt>l</tt> parameter specifies the number of live
 registers, needed by the collector. Both parameters are <tt>int</tt>s.</p>
 
-<a id="hbsz"/>
+<a id="hbsz"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>hbsz(n)</code></td><td align="right">standard prelude #define</td></tr>
 </table>
@@ -282,7 +282,7 @@ registers, needed by the collector. Both parameters are <tt>int</tt>s.</p>
 needed to allocate an obj block of size <tt>n</tt>. This macro is defined
 as <tt>((n) + 1)</tt>.</p>
  
-<a id="hendblk"/>
+<a id="hendblk"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>hendblk(n)</code></td><td align="right">standard prelude #define</td></tr>
 </table>
@@ -321,9 +321,9 @@ taken from the original version of the compiler's own runtime:</p>
 <p>Note that the heap grows downwards and that one <tt>hreserve</tt>
 can reserve heap space for more than one obj block.</p>
 
-<a id="7.2.2."/><h3>7.2.2.&nbsp;&nbsp;&nbsp;&nbsp;Allocation of native blocks</h3>
+<a id="7.2.2."></a><h3>7.2.2.&nbsp;&nbsp;&nbsp;&nbsp;Allocation of native blocks</h3>
 
-<a id="hpushptr"/>
+<a id="hpushptr"></a>
 <table class="proto" width="100%" cellpadding="0" cellspacing="0">
 <tr><td><code>hpushptr(p, pt, l)</code></td><td align="right">standard prelude #define</td></tr>
 </table>
@@ -346,6 +346,8 @@ allocation of native blocks:</p>
     char *p = strdup("Hello, World!");
     r[3] = hpushptr(p, &cxt_string, 3); 
 </pre>
+
+
 
 
 </div>
