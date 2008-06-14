@@ -167,6 +167,8 @@
                    last-form
                    (r-error "randomness after form after dot"
                      another-form port)))]
+            [(reader-token? form)
+             (r-error "error inside list --" (cdr form) port)]
             [else (cons form (recur (sub-read port)))])))))
 
 (define (sub-read-list-paren c port)
