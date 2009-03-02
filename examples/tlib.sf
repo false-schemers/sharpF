@@ -1,0 +1,236 @@
+
+; we'll need more realistic syntax, so let's extend the minimalistic core set of 
+; simpilfied begin, define, define-syntax, if, lambda, quote, set!, syntax-rules, 
+; and syntax-lambda 
+
+(define-syntax let-syntax
+  (syntax-rules ()
+    [(_ ([kw init] ...)) (begin)]
+    [(_ ([kw init] ...) . body) ((syntax-lambda (kw ...) . body) init ...)]))
+
+(define-syntax letrec-syntax
+  (let-syntax ([let-syntax let-syntax] [define-syntax define-syntax])
+    (syntax-rules ()
+      [(_ ([kw init] ...) . body)
+       (let-syntax () (define-syntax kw init) ... (let-syntax () . body))])))
+
+(define-syntax lambda
+  (let-syntax ([old-lambda lambda])
+    (syntax-rules () [(_ args . body) (old-lambda args (let-syntax () . body))])))
+
+(define-syntax define
+  (let-syntax ([old-define define])
+    (letrec-syntax
+      ([new-define
+        (syntax-rules ()
+          [(_ exp) (old-define exp)]
+          [(_ (var-or-prototype . args) . body)
+           (new-define var-or-prototype (lambda args . body))]
+          [(_ . other) (old-define . other)])])
+     new-define)))
+
+(define-syntax let
+  (syntax-rules ()
+    [(_ ([var init] ...) . body)
+     ((lambda (var ...) . body) init ...)]
+    [(_ name ([var init] ...) . body)
+     ((letrec ([name (lambda (var ...) . body)])
+        name)
+      init ...)]))
+
+(define-syntax letrec
+  (syntax-rules ()
+    [(_ ([var init] ...) . body)
+     (let () (define var init) ... (let () . body))]))
+
+(define-syntax and
+  (syntax-rules ()
+    [(_) #t]
+    [(_ test) (let () test)]
+    [(_ test . tests) (if test (and . tests) #f)]))
+
+(define-syntax or
+  (syntax-rules ()
+    [(_) #f]
+    [(_ test) (let () test)]
+    [(_ test . tests) (let ([x test]) (if x x (or . tests)))]))
+
+; extra syntax to simplify primitive definitions
+
+(define-syntax define-inline
+  (syntax-rules ()
+    [(_ (op . ll) . body)
+     (define-syntax op (lambda ll . body))]
+    [(_ op val)
+     (define-syntax op val)]))
+
+(define-syntax define-integrable
+  (syntax-rules ()
+    [(_ (op . ll) . body)
+     (define-syntax op 
+       (%quote (letrec ([op (lambda ll . body)]) op)))]))
+
+(define-syntax define-rule
+  (syntax-rules ()
+    [(_ (op . pat) . body)
+     (define-syntax op (syntax-rule pat . body))]))
+
+(define-syntax %prim*/rev
+  (letrec-syntax
+    ([loop
+      (syntax-rules ()
+        [(_ prim () args)
+         (%prim* prim . args)]
+        [(_ prim (arg . more) args) 
+         (loop prim more (arg . args))])])
+    (syntax-rules ()
+      [(_ prim arg ...) 
+       (loop prim (arg ...) ())])))
+
+
+; SFC's immediate objects have 7-bit tag followed by 24 bits of data
+; subtype bits follow lsb which is 1 in non-pointer objects 
+
+(%definition "/* immediate object representation */")
+(%definition "#define isimm(o, t) (((o) & 0xff) == (((t) << 1) | 1))")
+(%definition "#define getimmu(o, t) (int)(((o) >> 8) & 0xffffff)")
+(%definition "#define getimms(o, t) (int)(((((o) >> 8) & 0xffffff) ^ 0x800000) - 0x800000)")
+(%definition "#define mkimm(o, t) ((((o) & 0xffffff) << 8) | ((t) << 1) | 1)")
+
+
+; SFC's tagged blocks are heap blocks with immediate object as 0th element
+; (disjoint from closures which have a pointer as 0th element)
+
+(%localdef "int istagged(obj o, int t) {
+  return isobjptr(o) && hblklen(o) >= 1 && hblkref(o, 0) == obj_from_size(t);
+}")
+
+(%definition "extern int istagged(obj o, int t);")
+(%definition "#define cktagged(o, t) (o)")
+(%definition "#define taggedlen(o, t) (hblklen(o)-1) ")
+(%definition "#define taggedref(o, t, i) (&hblkref(o, (i)+1))")
+
+
+; booleans
+; #f is hardwired as (obj)0; let's represent #t as immediate 0 with tag 0
+; this layout is compatible with C conventions (0 = false, 1 = true)
+; note that any obj but #f is counted as true in conditionals
+
+(%definition "/* booleans */")
+(%definition "#define TRUE_ITAG 0")  
+(%definition "typedef int bool_t;")
+(%definition "#define is_bool_obj(o) (!((o) & ~(obj)1))")  
+(%definition "#define is_bool_bool(b) ((b), 1)")  
+(%definition "#define void_from_bool(b) (void)(b)")
+(%definition "#define obj_from_bool(b) ((b) ? mkimm(0, TRUE_ITAG) : 0)")
+
+; boolean literals 
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (boolean)
+      [(_ boolean "0") (%prim "bool(0)")] 
+      [(_ boolean "1") (%prim "bool(1)")] 
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+; some functions we might need, inlined for speed
+(define-inline (not x) (%prim "bool(!bool_from_$arg)" x))
+
+; fixnums
+; let's represent fixnums as (24-bit) immediates with tag 1
+
+(%definition "/* fixnums */")
+(%definition "#define FIXNUM_ITAG 1")  
+(%definition "typedef int fixnum_t;")
+(%definition "#define is_fixnum_obj(o) (isimm(o, FIXNUM_ITAG))")
+(%definition "#define is_fixnum_fixnum(i) ((i), 1)")
+(%definition "#define fixnum_from_obj(o) (getimms(o, FIXNUM_ITAG))")
+(%definition "#define fixnum_from_fixnum(i) (i)")
+(%definition "#define void_from_fixnum(i) (void)(i)")
+(%definition "#define obj_from_fixnum(i) mkimm(i, FIXNUM_ITAG)")
+(%definition "#define FIXNUM_MIN -8388608")
+(%definition "#define FIXNUM_MAX 8388607")
+
+; fixnum literals
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (exact-integer + -)
+      [(_ exact-integer 8 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 8 - n) (%prim ("fixnum(-" n ")"))] 
+      [(_ exact-integer 16 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 16 - n) (%prim ("fixnum(-" n ")"))]
+      [(_ exact-integer 24 + n) (%prim ("fixnum(" n ")"))] 
+      [(_ exact-integer 24 - n) (%prim ("fixnum(-" n ")"))]
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+; functions we will need for tak, inlined for speed
+(define-inline (+ x y) (%prim "fixnum(fixnum_from_$arg + fixnum_from_$arg)" x y))
+(define-inline (- x y) (%prim "fixnum(fixnum_from_$arg - fixnum_from_$arg)" x y))
+(define-inline (* x y) (%prim "fixnum(fixnum_from_$arg * fixnum_from_$arg)" x y))
+(define-inline (< x y) (%prim "bool(fixnum_from_$arg < fixnum_from_$arg)" x y))
+(define-inline (= x y) (%prim "bool(fixnum_from_$arg == fixnum_from_$arg)" x y))
+
+
+; null
+; () is immediate 0 with immediate tag 2 (singular null object)
+
+(%definition "/* null */")
+(%definition "#define NULL_ITAG 2")  
+(%definition "#define mknull() mkimm(0, NULL_ITAG)")  
+(%definition "#define isnull(o) ((o) == mkimm(0, NULL_ITAG))")  
+
+; null literal
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (null)
+      [(_ null) (%prim "obj(mknull())")] 
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+(define-inline (null? x) (%prim "bool(isnull(obj_from_$arg))" x))
+
+
+; pairs and lists
+; pairs are represented as tagged blocks with tag 1
+
+(%definition "/* pairs and lists */")
+(%definition "#define PAIR_BTAG 1")  
+(%definition "#define ispair(o) istagged(o, PAIR_BTAG)")  
+(%definition "#define car(o) *taggedref(o, PAIR_BTAG, 0)")  
+(%definition "#define cdr(o) *taggedref(o, PAIR_BTAG, 1)")  
+
+(define-inline (pair? o) (%prim "bool(ispair(obj_from_$arg))" o))
+(define-inline (car p) (%prim? "obj(car(obj_from_$arg))" p))
+(define-inline (cdr p) (%prim? "obj(cdr(obj_from_$arg))" p))
+
+(define-inline (cons a d) 
+  (%prim* "{ /* cons */ 
+    hreserve(hbsz(3), $live); /* $live live regs */
+    *--hp = obj_from_$arg;
+    *--hp = obj_from_$arg;
+    *--hp = obj_from_size(PAIR_BTAG); 
+    $return obj(hendblk(3)); }" d a))
+
+(define-rule (list i ...)
+  (%prim*/rev "{ /* list */
+    obj p = mknull();
+    hreserve(hbsz(3)*$argc, $live); /* $live live regs */
+    ${*--hp = p; *--hp = obj_from_$arg;
+    *--hp = obj_from_size(PAIR_BTAG); p = hendblk(3);
+    $}$return obj(p); }" i ...))
+
+; pair/list literals
+(define-syntax %const
+  (let-syntax ([old-%const %const])
+    (syntax-rules (pair list)
+      [(_ pair x y) (cons x y)] 
+      [(_ list x ...) (list x ...)] 
+      [(_ arg ...) (old-%const arg ...)]))) 
+
+
+; minimalistic i/o, also inlined
+(define-inline (write x) (%prim! "void(printf(\"%d\", fixnum_from_$arg))" x)) 
+(define-inline (newline) (%prim! "void(putchar('\\n'))"))
+
+(define-integrable (sum a b) (+ a b))
+
+(define-integrable (sumlist l s)
+  (if (null? l) s (sumlist (cdr l) (sum s (car l)))))

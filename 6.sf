@@ -512,7 +512,8 @@ void MODULE(void)
 obj *cxg_heap = NULL;
 cxoint_t cxg_hmask = 0;
 obj *cxg_hp = NULL;
-cxroot_t *cxg_rootp = NULL;
+static cxroot_t cxg_root = { 0, NULL, NULL };
+cxroot_t *cxg_rootp = &cxg_root;
 obj cxg_regs[REGS_SIZE];
 #ifndef NDEBUG
 int cxg_rc = 0;

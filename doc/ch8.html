@@ -70,7 +70,9 @@ this regard</p>
 
 <p>An inline C expressions consists of a keyword identifying the expression, 
 followed by a <em>code template</em> and zero or more argument expressions. 
-There are eight keywords 
+Keywords encode the information of side effects and allocation performed
+by the code in the template, allowing the compiler to classify the resulting
+expressions for code optimization phases.
 </p>
 
 <a id="prim"></a>
@@ -86,8 +88,59 @@ There are eight keywords
 </table>
 
 <p>A code template is either a literal string enclosed in double quotes or a
-parenthesized sequence of code templates.
+parenthesized sequence of code templates. A parenthesized sequence is equivalent
+to a string obtained by the concatenation of its content strings; it is supported
+to simplify generation of primitive forms by macroexpansion.
 </p>
+
+<p>Keywords of inline C expressions encode a combination of three properties:</p>
+
+<table style="margin-left: 1pc; margin-top: 2ex;" cellpadding="2ex;">
+<tr><td><tt>*</tt></td><td>allocates from garbage-collectible heap</td></tr>
+<tr><td><tt>!</tt></td><td>has side effects other than allocation</td></tr>
+<tr><td><tt>?</tt></td><td>observes side effects</td></tr>
+</table>
+
+<p>In a mutable vector library, <tt>make-vector</tt> could serve as a good example
+of <tt>*</tt> primitive (allocates from the heap), <tt>vector-set!</tt> as 
+<tt>!</tt> primitive (produces side effects thet might affect the results
+and/or effects of other expressions), and <tt>vector-ref</tt> as <tt>?</tt> 
+primitive (does not allocate or produce side effects, but its result is affected
+by other expressions that may modify the vector). Primitive code can
+exibit any combination of these properties, so there are eight keywords
+to cover all possible combinations.</p>
+
+<p>#F compiler classifies primitives into categories based on their
+referential transparency, ability to cause garbage collection, and
+suitability for dead code elimination.</p>
+
+<p>The <tt>%prim</tt> keywords marks the referentially transparent code; 
+referentially transparent (RT) expressions always produce the same value 
+given the same arguments, allowing for many compiler optimizations. 
+All other keywords mark the code as not referentially transparent:</p>
+
+<table style="margin-left: 1pc; margin-top: 2ex;" cellpadding="4ex;">
+<tr><td style="width: 10ex"><em>RT</em></td><td><tt>%prim</tt></td></tr>
+<tr><td><em>not RT</em></td><td><tt>%prim* %prim? %prim!<br />%prim?! %prim*? %prim*! %prim*?!</tt></td></tr>
+</table>
+
+<p>Primitives that never allocate from garbage-collected heap do not
+trigger garbage collection (GC), opening possibilities for some 
+interesting compiler optimizations (#F compiler can use C calling
+mechanism for certain GC-safe procedures). Primitives that have no
+side effects and which values are not used are subject to dead code 
+elimination (DCE). The keywords for inline C expressions are
+split between these categories as follows:</p>
+
+<table style="margin-left: 1pc; margin-top: 2ex;" cellpadding="4ex;">
+<tr><td style="width: 10ex">&nbsp;</td><td><em>DCE safe</em></td><td><em>DCE unsafe</em></td></tr>
+<tr><td><em>GC safe</em></td><td><tt>%prim&nbsp;&nbsp;%prim?&nbsp;</tt></td><td><tt>%prim!&nbsp;&nbsp;%prim?!</tt></td></tr>
+<tr><td><em>GC unsafe</em></td><td><tt>%prim*&nbsp;%prim*?&nbsp;</tt></td><td><tt>%prim*!&nbsp;%prim*?!</tt></td></tr>
+</table>
+
+<p><em>Note:&nbsp;&nbsp;</em>inline C code that reads from files should
+be tagged by <tt>%prim?!</tt> keyword because such code affects the file 
+read pointer and depends on the effects of previous reads.</p> 
 
 
 <!--

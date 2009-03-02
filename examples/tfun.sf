@@ -1,0 +1,43 @@
+
+#fload "tlib.sf"
+
+; fixnum tak
+
+(define (tak x y z)
+  (if (< y x)
+      (tak (tak (- x 1) y z)
+           (tak (- y 1) z x)
+           (tak (- z 1) x y))
+       z))
+
+
+; list tak
+
+(define (listn n)
+  (if (= 0 n)
+      '()
+      (cons n (listn (- n 1)))) )
+
+(define (length l) 
+  (define (length-aux l n) 
+    (if (pair? l) 
+        (length-aux (cdr l) (+ n 1)) 
+        n))
+  (length-aux l 0))
+
+(define (shorterp x y)
+  (and (pair? y)
+       (or (null? x)
+           (shorterp (cdr x) (cdr y)))))
+
+(define l18 (listn 18))
+(define l12 (listn 12))
+(define  l6 (listn 6))
+
+(define (ltak x y z)
+  (if (not (shorterp y x))
+      z
+      (ltak (ltak (cdr x) y z)
+            (ltak (cdr y) z x)
+            (ltak (cdr z) x y))))
+    

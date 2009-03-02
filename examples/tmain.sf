@@ -1,0 +1,18 @@
+#fload "tlib.sf"
+#fload "tfun.sf"
+
+(define (runtak n r)
+   (if (= n 0)
+       r
+       (runtak (- n 1) (+ r (tak 18 12 6)))))
+
+(define (runltak n r)
+  (if (= n 0)
+      r
+      (runltak (- n 1) (+ r (length (ltak l18 l12 l6))))))
+
+(define (main argv)
+  (write (runtak 1000 0))
+  (newline)
+  (write (runltak 1000 0))
+  (newline))
