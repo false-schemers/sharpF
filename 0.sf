@@ -456,6 +456,39 @@ void *getnative(obj o, cxtype_t *tp) {
   (syntax-rules ()
     [(_ x y) (%prim "fixnum(fixnum_from_$arg % fixnum_from_$arg)" x y)]))
 
+(define-syntax fxlogand
+  (syntax-rules ()
+    [(_) (%prim "fixnum(-1)")]
+    [(_ x) x]
+    [(_ x y) (%prim "fixnum(fixnum_from_$arg & fixnum_from_$arg)" x y)]
+    [(_ x y z ...) (fxlogand x (fxlogand y z ...))]))
+
+(define-syntax fxlogor
+  (syntax-rules ()
+    [(_) (%prim "fixnum(0)")]
+    [(_ x) x]
+    [(_ x y) (%prim "fixnum(fixnum_from_$arg | fixnum_from_$arg)" x y)]
+    [(_ x y z ...) (fxlogor x (fxlogor y z ...))]))
+
+(define-syntax fxlogxor
+  (syntax-rules ()
+    [(_) (%prim "fixnum(0)")]
+    [(_ x) x]
+    [(_ x y) (%prim "fixnum(fixnum_from_$arg ^ fixnum_from_$arg)" x y)]
+    [(_ x y z ...) (fxlogxor x (fxlogxor y z ...))]))
+
+(define-syntax fxlognot
+  (syntax-rules ()
+    [(_ x) (%prim "fixnum(~fixnum_from_$arg)" y)]))
+
+(define-syntax fxsll  ; shift left, logical
+  (syntax-rules ()
+    [(_ x y) (%prim "fixnum(fixnum_from_$arg << fixnum_from_$arg)" x y)]))
+
+(define-syntax fxsrl  ; shift right, logical
+  (syntax-rules ()
+    [(_ x y) (%prim "fixnum(fixnum_from_$arg >> fixnum_from_$arg)" x y)]))
+
 (define-syntax fx=?
   (syntax-rules ()
     [(_ x y) (%prim "bool(fixnum_from_$arg == fixnum_from_$arg)" x y)]
@@ -1570,10 +1603,10 @@ void *getnative(obj o, cxtype_t *tp) {
 
 (define-inline (procedure? o)
   (%prim "{ /* procedure? */
-    obj o = obj_from_$arg, h;
+    obj o = obj_from_$arg;
     if (!isobjptr(o)) $return bool(0);
-    h = objptr_from_obj(o)[-1];
-    $return bool(notaptr(h) && size_from_obj(h) >= 1 && isaptr(hblkref(o, 0))); }" o))
+    else { obj h = objptr_from_obj(o)[-1];
+    $return bool(notaptr(h) && size_from_obj(h) >= 1 && isaptr(hblkref(o, 0))); } }" o))
 
 ; delay & force
 

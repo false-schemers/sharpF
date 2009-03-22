@@ -1138,10 +1138,10 @@ gs_write_2F3: /* k x d? p */
     goto gs_write_2F3;
   } else {
     { /* procedure? */
-    obj o = (r[1]), h;
+    obj o = r[1];  
     if (!isobjptr(o)) r[4] = obj_from_bool(0);
-    h = objptr_from_obj(o)[-1];
-    r[4] = obj_from_bool(notaptr(h) && size_from_obj(h) >= 1 && isaptr(hblkref(o, 0))); }
+    else { obj h = objptr_from_obj(o)[-1];
+    r[4] = obj_from_bool(notaptr(h) && size_from_obj(h) >= 1 && isaptr(hblkref(o, 0))); } }
   if (bool_from_obj(r[4])) {
     r[4] = obj_from_void(fputs(stringchars((cx__23158)), oportdata((r[3]))));
   } else {
