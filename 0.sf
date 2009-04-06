@@ -2076,8 +2076,9 @@ void *getnative(obj o, cxtype_t *tp) {
 (define-inline (argv->list argv)
   (let loop ([r '()] [i (%prim "fixnum(0)")])
     (let ([arg (argv-ref argv i)])
-      (if arg (loop (cons arg r) (fx+ i (%prim "fixnum(1)")))
-	  (reverse! r)))))
+      (if arg 
+          (loop (cons arg r) (fx+ i (%prim "fixnum(1)")))
+          (reverse! r)))))
 
 
 ; errors

@@ -35,16 +35,17 @@
 ; errors
 
 (define (r-error* reason args)
-  (newline)
-  (display "Reader error: ")
-  (display reason)
-  (for-each 
-    (lambda (arg) 
-      (write-char #\space)
-      (if (string? arg) (display arg) (write arg))) 
-    args)
-  (newline)
-  (reset))
+  (let ([ep (current-error-port)])
+    (newline ep)
+    (display "Reader error: " ep)
+    (display reason ep)
+    (for-each 
+      (lambda (arg) 
+        (write-char #\space ep)
+        (if (string? arg) (display arg ep) (write arg ep))) 
+      args)
+    (newline ep)
+    (reset)))
   
 (define-syntax r-error
   (syntax-rules () [(_ r a ...) (r-error* r (list a ...))]))

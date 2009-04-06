@@ -39,15 +39,16 @@
 ; errors
 
 (define (x-error* reason args)
-  (newline)
-  (display "Syntax error: ")
-  (display reason)
-  (for-each 
-    (lambda (arg) 
-      (if (string? arg) (display arg) (write (unwrap-vecs arg)))) 
-    args)
-  (newline)
-  (reset))
+  (let ([ep (current-error-port)])
+    (newline ep)
+    (display "Syntax error: " ep)
+    (display reason ep)
+    (for-each 
+      (lambda (arg) 
+        (if (string? arg) (display arg ep) (write (unwrap-vecs arg) ep))) 
+      args)
+    (newline ep)
+    (reset)))
 
 (define-syntax x-error
   (syntax-rules () [(_ r a ...) (x-error* r (list a ...))]))

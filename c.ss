@@ -81,6 +81,8 @@
 
 (define (argv->list argv) argv)
 
+(define current-error-port current-output-port)
+
 (define (sfc . args)
   (main (cons "sfc-bootstrap" args)))
 

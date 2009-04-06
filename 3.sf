@@ -16,12 +16,13 @@
 ; errors
 
 (define (c-error* reason args)
-  (newline)
-  (display "Compiler error: ")
-  (display reason)
-  (for-each (lambda (arg) (display " ") (write arg)) args)
-  (newline)
-  (reset))
+  (let ([ep (current-error-port)])
+    (newline ep)
+    (display "Compiler error: " ep)
+    (display reason ep)
+    (for-each (lambda (arg) (display " " ep) (write arg ep)) args)
+    (newline ep)
+    (reset)))
 
 (define-syntax c-error
   (syntax-rules () [(_ r a ...) (c-error* r (list a ...))]))
@@ -250,12 +251,12 @@
 
 ; core expressions, stored directly as abstract syntax tree nodes
 
-(define-variant var-exp (id))                         ; variable reference  
-(define-variant varassign-exp (id exp))               ; variable assignment 
-(define-variant if-exp (test-exp then-exp else-exp))  ; conditional         
-(define-variant primapp-exp (effect prim rands))      ; primitive application        
-(define-variant app-exp (rator rands))                ; application         
-(define-variant lambda-exp (ids body))                ; lambda expression   
+(define-variant var-exp (id))                         ; variable reference
+(define-variant varassign-exp (id exp))               ; variable assignment
+(define-variant if-exp (test-exp then-exp else-exp))  ; conditional
+(define-variant primapp-exp (effect prim rands))      ; primitive application
+(define-variant app-exp (rator rands))                ; application
+(define-variant lambda-exp (ids body))                ; lambda expression
 
 (define-variant fix-exp (ids lams body))              ; lambda-only letrec
 (define-variant letcc-exp (id body))                  ; reify continuation
@@ -508,7 +509,7 @@
     goto jump;")
 
 (define-integrable (halt-exp exp) 
-  ; program (module init) ends here, returning exp        
+  ; program (module init) ends here, returning exp
   (primapp-exp (*?!-effect) the-halt-prim (list exp)))
 
 (define-integrable (halt-exp? exp) 

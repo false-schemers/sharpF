@@ -214,7 +214,6 @@ extern obj isassoc(obj x, obj l);
 
 /* cx globals */
 extern obj cx__2Acurrent_2Derror_2Dport_2A; /* *current-error-port* */
-extern obj cx__2Acurrent_2Doutput_2Dport_2A; /* *current-output-port* */
 extern obj cx_c_2Dargref_2Dctype; /* c-argref-ctype */
 extern obj cx_c_2Dundecorate_2Dalvar; /* c-undecorate-alvar */
 extern obj cx_fixnum_2D_3Estring; /* fixnum->string */
@@ -264,72 +263,72 @@ obj cx_var_2Dreferenced_2Din_2Dexp_3F; /* var-referenced-in-exp? */
 obj cx_var_2Dunboxed_2Dctype_2Din_2Dexp; /* var-unboxed-ctype-in-exp */
 obj cx_var_2Duse_2Dunboxed_2Dctype; /* var-use-unboxed-ctype */
 obj cx_var_2Duses_2Din_2Dexp; /* var-uses-in-exp */
-static obj cx__231009; /* constant #1009 */
-static obj cx__231038; /* constant #1038 */
-static obj cx__231066; /* constant #1066 */
-static obj cx__231077; /* constant #1077 */
+static obj cx__231010; /* constant #1010 */
+static obj cx__231039; /* constant #1039 */
+static obj cx__231067; /* constant #1067 */
 static obj cx__231078; /* constant #1078 */
-static obj cx__231095; /* constant #1095 */
-static obj cx__2311; /* constant #11 */
-static obj cx__231100; /* constant #1100 */
-static obj cx__231115; /* constant #1115 */
-static obj cx__231140; /* constant #1140 */
-static obj cx__231210; /* constant #1210 */
-static obj cx__231250; /* constant #1250 */
-static obj cx__231272; /* constant #1272 */
-static obj cx__231289; /* constant #1289 */
-static obj cx__231307; /* constant #1307 */
-static obj cx__231329; /* constant #1329 */
+static obj cx__231079; /* constant #1079 */
+static obj cx__231096; /* constant #1096 */
+static obj cx__231101; /* constant #1101 */
+static obj cx__231116; /* constant #1116 */
+static obj cx__231141; /* constant #1141 */
+static obj cx__2312; /* constant #12 */
+static obj cx__231211; /* constant #1211 */
+static obj cx__231251; /* constant #1251 */
+static obj cx__231273; /* constant #1273 */
+static obj cx__231290; /* constant #1290 */
+static obj cx__231308; /* constant #1308 */
+static obj cx__231330; /* constant #1330 */
 static obj cx__231362; /* constant #1362 */
 static obj cx__231365; /* constant #1365 */
 static obj cx__231367; /* constant #1367 */
 static obj cx__231371; /* constant #1371 */
-static obj cx__23169; /* constant #169 */
+static obj cx__23170; /* constant #170 */
 static obj cx__231711; /* constant #1711 */
-static obj cx__2318; /* constant #18 */
-static obj cx__23183; /* constant #183 */
-static obj cx__23203; /* constant #203 */
-static obj cx__23239; /* constant #239 */
-static obj cx__23333; /* constant #333 */
-static obj cx__23390; /* constant #390 */
-static obj cx__23713; /* constant #713 */
-static obj cx__23748; /* constant #748 */
-static obj cx__23754; /* constant #754 */
-static obj cx__23780; /* constant #780 */
-static obj cx__23803; /* constant #803 */
-static obj cx__23821; /* constant #821 */
-static obj cx__23837; /* constant #837 */
-static obj cx__23864; /* constant #864 */
-static obj cx__23893; /* constant #893 */
-static obj cx__23922; /* constant #922 */
-static obj cx__23951; /* constant #951 */
-static obj cx__23980; /* constant #980 */
+static obj cx__23184; /* constant #184 */
+static obj cx__2319; /* constant #19 */
+static obj cx__23204; /* constant #204 */
+static obj cx__23240; /* constant #240 */
+static obj cx__23334; /* constant #334 */
+static obj cx__23391; /* constant #391 */
+static obj cx__23714; /* constant #714 */
+static obj cx__23749; /* constant #749 */
+static obj cx__23755; /* constant #755 */
+static obj cx__23781; /* constant #781 */
+static obj cx__23804; /* constant #804 */
+static obj cx__23822; /* constant #822 */
+static obj cx__23838; /* constant #838 */
+static obj cx__23865; /* constant #865 */
+static obj cx__23894; /* constant #894 */
+static obj cx__23923; /* constant #923 */
+static obj cx__23952; /* constant #952 */
+static obj cx__23981; /* constant #981 */
 static obj cx_keep_231408; /* constant keep#1408 */
 
 /* helper functions */
-/* global-id-constant?#247 */
-static obj cxs_global_2Did_2Dconstant_3F_23247(obj v249_id)
+/* global-id-constant?#248 */
+static obj cxs_global_2Did_2Dconstant_3F_23248(obj v250_id)
 { 
-    return ((fixnum_from_obj(car((cdr((cdr((v249_id))))))) < (0)) ? (car((cdr((cdr((cdr((v249_id))))))))) : obj_from_bool(0));
+    return ((fixnum_from_obj(car((cdr((cdr((v250_id))))))) < (0)) ? (car((cdr((cdr((cdr((v250_id))))))))) : obj_from_bool(0));
 }
 
-/* global-id-private-constant?#266 */
-static obj cxs_global_2Did_2Dprivate_2Dconstant_3F_23266(obj v268_id)
+/* global-id-private-constant?#267 */
+static obj cxs_global_2Did_2Dprivate_2Dconstant_3F_23267(obj v269_id)
 { 
-    return ((fixnum_from_obj(car((cdr((cdr((v268_id))))))) < (0)) ? obj_from_bool((car((cdr((cdr((cdr((v268_id))))))))) == (mksymbol(internsym("private")))) : obj_from_bool(0));
+    return ((fixnum_from_obj(car((cdr((cdr((v269_id))))))) < (0)) ? obj_from_bool((car((cdr((cdr((cdr((v269_id))))))))) == (mksymbol(internsym("private")))) : obj_from_bool(0));
 }
 
-/* label-id?#301 */
-static obj cxs_label_2Did_3F_23301(obj v303_id)
+/* label-id?#302 */
+static obj cxs_label_2Did_3F_23302(obj v304_id)
 { 
-    return ((!(fixnum_from_obj(car((cdr((cdr((v303_id))))))) < (0))) ? obj_from_bool((car((cdr((cdr((cdr((v303_id))))))))) == obj_from_bool(1)) : obj_from_bool(0));
+    return ((!(fixnum_from_obj(car((cdr((cdr((v304_id))))))) < (0))) ? obj_from_bool((car((cdr((cdr((cdr((v304_id))))))))) == obj_from_bool(1)) : obj_from_bool(0));
 }
 
-/* lookupicate#616 */
-static obj cxs_lookupicate_23616(obj v619_sym, obj v618_env)
+/* lookupicate#617 */
+static obj cxs_lookupicate_23617(obj v620_sym, obj v619_env)
 { 
-  s_lookupicate_23616:
-  if ((isnull((v618_env)))) {
+  s_lookupicate_23617:
+  if ((isnull((v619_env)))) {
     return obj_from_bool(0);
   } else {
   { /* let */
@@ -337,21 +336,21 @@ static obj cxs_lookupicate_23616(obj v619_sym, obj v618_env)
   { /* let */
     obj v2089_tmp;
   { /* let */
-    obj v623_x = (car((v618_env)));
-    v2089_tmp = (car((cdr((v623_x)))));
+    obj v624_x = (car((v619_env)));
+    v2089_tmp = (car((cdr((v624_x)))));
   }
-    v2086_tmp = obj_from_bool((v2089_tmp) == (v619_sym));
+    v2086_tmp = obj_from_bool((v2089_tmp) == (v620_sym));
   }
   if (bool_from_obj(v2086_tmp)) {
-    return (car((v618_env)));
+    return (car((v619_env)));
   } else {
   { /* let */
-    obj v2088_tmp = (cdr((v618_env)));
-    obj v2087_tmp = (v619_sym);
+    obj v2088_tmp = (cdr((v619_env)));
+    obj v2087_tmp = (v620_sym);
     /* tail call */
-    v619_sym = (v2087_tmp);
-    v618_env = (v2088_tmp);
-    goto s_lookupicate_23616;
+    v620_sym = (v2087_tmp);
+    v619_env = (v2088_tmp);
+    goto s_lookupicate_23617;
   }
   }
   }
@@ -388,32 +387,32 @@ static obj cxs_let_2Dexp_3F_231830(obj v1832_exp)
 }
 
 /* posq */
-static obj cxs_posq(obj v70_x, obj v69_lst)
+static obj cxs_posq(obj v71_x, obj v70_lst)
 { 
   { /* letrec */
-    obj v73_lst;
-    obj v72_i;
+    obj v74_lst;
+    obj v73_i;
   { /* let */
     obj v2083_tmp = obj_from_fixnum(0);
-    obj v2082_tmp = (v69_lst);
+    obj v2082_tmp = (v70_lst);
     /* tail call */
-    v73_lst = (v2082_tmp);
-    v72_i = (v2083_tmp);
+    v74_lst = (v2082_tmp);
+    v73_i = (v2083_tmp);
     goto s_loop;
   }
   s_loop:
-  if ((isnull((v73_lst)))) {
+  if ((isnull((v74_lst)))) {
     return obj_from_bool(0);
   } else {
-  if (((car((v73_lst))) == (v70_x))) {
-    return (v72_i);
+  if (((car((v74_lst))) == (v71_x))) {
+    return (v73_i);
   } else {
   { /* let */
-    obj v2081_tmp = obj_from_fixnum(fixnum_from_obj(v72_i) + (1));
-    obj v2080_tmp = (cdr((v73_lst)));
+    obj v2081_tmp = obj_from_fixnum(fixnum_from_obj(v73_i) + (1));
+    obj v2080_tmp = (cdr((v74_lst)));
     /* tail call */
-    v73_lst = (v2080_tmp);
-    v72_i = (v2081_tmp);
+    v74_lst = (v2080_tmp);
+    v73_i = (v2081_tmp);
     goto s_loop;
   }
   }
@@ -422,16 +421,16 @@ static obj cxs_posq(obj v70_x, obj v69_lst)
 }
 
 /* labelapp-exp? */
-static obj cxs_labelapp_2Dexp_3F(obj v294_exp)
+static obj cxs_labelapp_2Dexp_3F(obj v295_exp)
 { 
-  if (bool_from_obj((isvector((v294_exp))) ? (((vectorlen((v294_exp))) == (3)) ? obj_from_bool((vectorref((v294_exp), (0))) == (mksymbol(internsym("app-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
+  if (bool_from_obj((isvector((v295_exp))) ? (((vectorlen((v295_exp))) == (3)) ? obj_from_bool((vectorref((v295_exp), (0))) == (mksymbol(internsym("app-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
   { /* let */
     obj v2079_tmp;
   { /* let */
-    obj v318_object = (vectorref((v294_exp), (1)));
-    v2079_tmp = ((isvector((v318_object))) ? (((vectorlen((v318_object))) == (2)) ? obj_from_bool((vectorref((v318_object), (0))) == (mksymbol(internsym("var-exp")))) : obj_from_bool(0)) : obj_from_bool(0));
+    obj v319_object = (vectorref((v295_exp), (1)));
+    v2079_tmp = ((isvector((v319_object))) ? (((vectorlen((v319_object))) == (2)) ? obj_from_bool((vectorref((v319_object), (0))) == (mksymbol(internsym("var-exp")))) : obj_from_bool(0)) : obj_from_bool(0));
   }
-    return (bool_from_obj(v2079_tmp) ? (cxs_label_2Did_3F_23301((vectorref((vectorref((v294_exp), (1))), (1))))) : obj_from_bool(0));
+    return (bool_from_obj(v2079_tmp) ? (cxs_label_2Did_3F_23302((vectorref((vectorref((v295_exp), (1))), (1))))) : obj_from_bool(0));
   }
   } else {
     return obj_from_bool(0);
@@ -439,46 +438,46 @@ static obj cxs_labelapp_2Dexp_3F(obj v294_exp)
 }
 
 /* <literal>? */
-static obj cxs__3Cliteral_3E_3F(obj v434_x)
+static obj cxs__3Cliteral_3E_3F(obj v435_x)
 { 
-    return ((is_fixnum_obj(v434_x)) ? obj_from_bool(is_fixnum_obj(v434_x)) : obj_from_bool(is_bool_obj(v434_x)));
+    return ((is_fixnum_obj(v435_x)) ? obj_from_bool(is_fixnum_obj(v435_x)) : obj_from_bool(is_bool_obj(v435_x)));
 }
 
 /* string-forest-length */
-static obj cxs_string_2Dforest_2Dlength(obj v467_x)
+static obj cxs_string_2Dforest_2Dlength(obj v468_x)
 { 
-  if ((isstring((v467_x)))) {
-    return obj_from_fixnum(stringlen((v467_x)));
+  if ((isstring((v468_x)))) {
+    return obj_from_fixnum(stringlen((v468_x)));
   } else {
-  if ((isnull((v467_x)))) {
+  if ((isnull((v468_x)))) {
     return obj_from_fixnum(0);
   } else {
-  if ((ispair((v467_x)))) {
-    return obj_from_fixnum(fixnum_from_obj(cxs_string_2Dforest_2Dlength((car((v467_x))))) + fixnum_from_obj(cxs_string_2Dforest_2Dlength((cdr((v467_x))))));
+  if ((ispair((v468_x)))) {
+    return obj_from_fixnum(fixnum_from_obj(cxs_string_2Dforest_2Dlength((car((v468_x))))) + fixnum_from_obj(cxs_string_2Dforest_2Dlength((cdr((v468_x))))));
   } else {
   { /* letrec */
-    obj v472_i;
-    obj v471_sum;
+    obj v473_i;
+    obj v472_sum;
   { /* let */
     obj v2078_tmp = obj_from_fixnum(0);
     obj v2077_tmp = obj_from_fixnum(0);
     /* tail call */
-    v472_i = (v2077_tmp);
-    v471_sum = (v2078_tmp);
+    v473_i = (v2077_tmp);
+    v472_sum = (v2078_tmp);
     goto s_loop;
   }
   s_loop:
-  if ((fixnum_from_obj(v472_i) < (vectorlen((v467_x))))) {
+  if ((fixnum_from_obj(v473_i) < (vectorlen((v468_x))))) {
   { /* let */
-    obj v2076_tmp = obj_from_fixnum(fixnum_from_obj(v471_sum) + fixnum_from_obj(cxs_string_2Dforest_2Dlength((vectorref((v467_x), fixnum_from_obj(v472_i))))));
-    obj v2075_tmp = obj_from_fixnum(fixnum_from_obj(v472_i) + (1));
+    obj v2076_tmp = obj_from_fixnum(fixnum_from_obj(v472_sum) + fixnum_from_obj(cxs_string_2Dforest_2Dlength((vectorref((v468_x), fixnum_from_obj(v473_i))))));
+    obj v2075_tmp = obj_from_fixnum(fixnum_from_obj(v473_i) + (1));
     /* tail call */
-    v472_i = (v2075_tmp);
-    v471_sum = (v2076_tmp);
+    v473_i = (v2075_tmp);
+    v472_sum = (v2076_tmp);
     goto s_loop;
   }
   } else {
-    return (v471_sum);
+    return (v472_sum);
   }
   }
   }
@@ -504,46 +503,46 @@ static obj *globv[] = {
   &cx_last_2Did_2Dtimestamp,
   &cx_the_2Dhalt_2Dprim,
   &cx_var_2Duses_2Din_2Dexp,
-  &cx__231009,
-  &cx__231038,
-  &cx__231066,
-  &cx__231077,
+  &cx__231010,
+  &cx__231039,
+  &cx__231067,
   &cx__231078,
-  &cx__231095,
-  &cx__2311,
-  &cx__231100,
-  &cx__231115,
-  &cx__231140,
-  &cx__231210,
-  &cx__231250,
-  &cx__231272,
-  &cx__231289,
-  &cx__231307,
-  &cx__231329,
+  &cx__231079,
+  &cx__231096,
+  &cx__231101,
+  &cx__231116,
+  &cx__231141,
+  &cx__2312,
+  &cx__231211,
+  &cx__231251,
+  &cx__231273,
+  &cx__231290,
+  &cx__231308,
+  &cx__231330,
   &cx__231362,
   &cx__231365,
   &cx__231367,
   &cx__231371,
-  &cx__23169,
+  &cx__23170,
   &cx__231711,
-  &cx__2318,
-  &cx__23183,
-  &cx__23203,
-  &cx__23239,
-  &cx__23333,
-  &cx__23390,
-  &cx__23713,
-  &cx__23748,
-  &cx__23754,
-  &cx__23780,
-  &cx__23803,
-  &cx__23821,
-  &cx__23837,
-  &cx__23864,
-  &cx__23893,
-  &cx__23922,
-  &cx__23951,
-  &cx__23980,
+  &cx__23184,
+  &cx__2319,
+  &cx__23204,
+  &cx__23240,
+  &cx__23334,
+  &cx__23391,
+  &cx__23714,
+  &cx__23749,
+  &cx__23755,
+  &cx__23781,
+  &cx__23804,
+  &cx__23822,
+  &cx__23838,
+  &cx__23865,
+  &cx__23894,
+  &cx__23923,
+  &cx__23952,
+  &cx__23981,
 };
 
 static cxroot_t root = {
@@ -615,15 +614,15 @@ static obj host(obj pc)
   switch (case_from_obj(pc)) {
 
 case 0: /* load module */
-    cx__2311 = (hpushstr(0, newstring(" ")));
-    cx__2318 = (hpushstr(0, newstring("Compiler error: ")));
-    cx__23169 = (hpushstr(0, newstring(".")));
-    cx__23183 = (hpushstr(0, newstring(":")));
-    cx__23203 = (hpushstr(0, newstring("::")));
+    cx__2312 = (hpushstr(0, newstring(" ")));
+    cx__2319 = (hpushstr(0, newstring("Compiler error: ")));
+    cx__23170 = (hpushstr(0, newstring(".")));
+    cx__23184 = (hpushstr(0, newstring(":")));
+    cx__23204 = (hpushstr(0, newstring("::")));
     { static char s[] = { 36, 0 };
-    cx__23239 = (hpushstr(0, newstring(s))); }
+    cx__23240 = (hpushstr(0, newstring(s))); }
     { static char s[] = { 114, 91, 36, 108, 105, 118, 101, 43, 48, 93, 32, 61, 32, 114, 91, 48, 93, 59, 10, 32, 32, 32, 32, 112, 99, 32, 61, 32, 48, 59, 32, 47, 42, 32, 101, 120, 105, 116, 32, 102, 114, 111, 109, 32, 109, 111, 100, 117, 108, 101, 32, 105, 110, 105, 116, 32, 42, 47, 10, 32, 32, 32, 32, 114, 91, 36, 108, 105, 118, 101, 43, 49, 93, 32, 61, 32, 111, 98, 106, 95, 102, 114, 111, 109, 95, 36, 97, 114, 103, 59, 10, 32, 32, 32, 32, 114, 32, 43, 61, 32, 36, 108, 105, 118, 101, 59, 32, 47, 42, 32, 115, 104, 105, 102, 116, 32, 114, 101, 103, 32, 119, 110, 100, 32, 42, 47, 10, 32, 32, 32, 32, 97, 115, 115, 101, 114, 116, 40, 114, 99, 32, 61, 32, 50, 41, 59, 10, 32, 32, 32, 32, 103, 111, 116, 111, 32, 106, 117, 109, 112, 59, 0 };
-    cx__23333 = (hpushstr(0, newstring(s))); }
+    cx__23334 = (hpushstr(0, newstring(s))); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -731,9 +730,9 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("begin")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23390 = (hendblk(3)); }
-    cx__23713 = (hpushstr(0, newstring("#")));
-    cx__23748 = (hpushstr(0, newstring("")));
+    cx__23391 = (hendblk(3)); }
+    cx__23714 = (hpushstr(0, newstring("#")));
+    cx__23749 = (hpushstr(0, newstring("")));
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -769,7 +768,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("letrec")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23754 = (hendblk(3)); }
+    cx__23755 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -787,9 +786,9 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("define")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23780 = (hendblk(3)); }
-    cx__23803 = (hpushstr(0, newstring("void(0)")));
-    cx__23821 = (hpushstr(0, newstring("syntax error in expression")));
+    cx__23781 = (hendblk(3)); }
+    cx__23804 = (hpushstr(0, newstring("void(0)")));
+    cx__23822 = (hpushstr(0, newstring("syntax error in expression")));
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -807,7 +806,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("*")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23837 = (hendblk(3)); }
+    cx__23838 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -831,7 +830,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim*?!")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23864 = (hendblk(3)); }
+    cx__23865 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -855,7 +854,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim*!")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23893 = (hendblk(3)); }
+    cx__23894 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -879,7 +878,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim*?")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23922 = (hendblk(3)); }
+    cx__23923 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -903,7 +902,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim?!")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23951 = (hendblk(3)); }
+    cx__23952 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -927,7 +926,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim!")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__23980 = (hendblk(3)); }
+    cx__23981 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -951,7 +950,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim?")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231009 = (hendblk(3)); }
+    cx__231010 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -975,7 +974,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim*")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231038 = (hendblk(3)); }
+    cx__231039 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -999,8 +998,8 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231066 = (hendblk(3)); }
-    cx__231077 = (hpushstr(0, newstring("unsupported constant syntax")));
+    cx__231067 = (hendblk(3)); }
+    cx__231078 = (hpushstr(0, newstring("unsupported constant syntax")));
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1018,7 +1017,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%const")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231078 = (hendblk(3)); }
+    cx__231079 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1030,7 +1029,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%prim")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231095 = (hendblk(3)); }
+    cx__231096 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1042,7 +1041,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("%quote")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231100 = (hendblk(3)); }
+    cx__231101 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1060,7 +1059,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("withcc")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231115 = (hendblk(3)); }
+    cx__231116 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1078,7 +1077,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("letcc")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231140 = (hendblk(3)); }
+    cx__231141 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1120,7 +1119,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("letrec")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231210 = (hendblk(3)); }
+    cx__231211 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1150,7 +1149,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("lambda")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231250 = (hendblk(3)); }
+    cx__231251 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1168,7 +1167,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("begin")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231272 = (hendblk(3)); }
+    cx__231273 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1186,7 +1185,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("set!")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231289 = (hendblk(3)); }
+    cx__231290 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1204,7 +1203,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("if")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231307 = (hendblk(3)); }
+    cx__231308 = (hendblk(3)); }
     { /* cons */ 
     hreserve(hbsz(3), 0); /* 0 live regs */
     *--hp = (mknull());
@@ -1228,7 +1227,7 @@ case 0: /* load module */
     *--hp = r[0];  
     *--hp = (mksymbol(internsym("if")));
     *--hp = obj_from_size(PAIR_BTAG); 
-    cx__231329 = (hendblk(3)); }
+    cx__231330 = (hendblk(3)); }
     { static char s[] = { 46, 10, 0 };
     cx__231362 = (hpushstr(0, newstring(s))); }
     cx__231365 = (hpushstr(0, newstring("no clause matches ~s")));
@@ -1271,10 +1270,10 @@ case 0: /* load module */
     { static obj c[] = { obj_from_case(31) }; cx_id_2D_3Euname = (obj)c; }
     { static obj c[] = { obj_from_case(32) }; cx_labelapp_2Dexp = (obj)c; }
     { static obj c[] = { obj_from_case(33) }; cx_labelapp_2Dexp_3F = (obj)c; }
-    cx_the_2Dhalt_2Dprim = (cx__23333);
+    cx_the_2Dhalt_2Dprim = (cx__23334);
     { static obj c[] = { obj_from_case(34) }; cx_memoizate_2Dexp_2Dattribute = (obj)c; }
     { static obj c[] = { obj_from_case(37) }; cx_memoizate_2Dvar_2Dattribute = (obj)c; }
-    cx_keywords = (cx__23390);
+    cx_keywords = (cx__23391);
     { static obj c[] = { obj_from_case(41) }; cx__3Cid_3E_3F = (obj)c; }
     { static obj c[] = { obj_from_case(42) }; cx__3Cliteral_3E_3F = (obj)c; }
     { static obj c[] = { obj_from_case(43) }; cx_string_2Dforest_3F = (obj)c; }
@@ -1387,20 +1386,22 @@ case 4: /* c-error* k reason args */
     assert(rc == 4);
     r += 1; /* shift reg. wnd */
 gs_c_2Derror_2A: /* k reason args */
-    (void)(fputc('\n', oportdata((cx__2Acurrent_2Doutput_2Dport_2A))));
-    hreserve(hbsz(3+1), 3); /* 3 live regs */
+    r[3] = (cx__2Acurrent_2Derror_2Dport_2A);
+    (void)(fputc('\n', oportdata((r[3]))));
+    hreserve(hbsz(4+1), 4); /* 4 live regs */
+    *--hp = r[3];  
     *--hp = r[0];  
     *--hp = r[2];  
     *--hp = r[1];  
     *--hp = obj_from_case(5);
-    r[3] = (hendblk(3+1));
-    r[4+0] = (cx_write_2F3);
-    pc = objptr_from_obj(r[4+0])[0];
-    r[4+1] = r[3];  
-    r[4+2] = (cx__2318);
-    r[4+3] = obj_from_bool(1);
-    r[4+4] = (cx__2Acurrent_2Doutput_2Dport_2A);
-    r += 4; /* shift reg wnd */
+    r[4] = (hendblk(4+1));
+    r[5+0] = (cx_write_2F3);
+    pc = objptr_from_obj(r[5+0])[0];
+    r[5+1] = r[4];  
+    r[5+2] = (cx__2319);
+    r[5+3] = obj_from_bool(1);
+    r[5+4] = r[3];  
+    r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
     assert(rc = 5);
     goto jump;
@@ -1410,20 +1411,22 @@ case 5: /* clo ek  */
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1];
     r[1+3] = p[2];
-    r[1+4] = p[3]; }
+    r[1+4] = p[3];
+    r[1+5] = p[4]; }
     r += 1; /* shift reg. wnd */
-    /* ek  reason args k */
-    hreserve(hbsz(2+1), 5); /* 5 live regs */
+    /* ek  reason args k ep */
+    hreserve(hbsz(3+1), 6); /* 6 live regs */
+    *--hp = r[5];  
     *--hp = r[4];  
     *--hp = r[3];  
     *--hp = obj_from_case(6);
-    r[5] = (hendblk(2+1));
+    r[6] = (hendblk(3+1));
     r[0] = (cx_write_2F3);
     pc = objptr_from_obj(r[0])[0];
-    r[1] = r[5];  
+    r[1] = r[6];  
     /* r[2] */    
     r[3] = obj_from_bool(1);
-    r[4] = (cx__2Acurrent_2Doutput_2Dport_2A);
+    r[4] = r[5];  
     rreserve(MAX_LIVEREGS);
     assert(rc = 5);
     goto jump;
@@ -1432,49 +1435,55 @@ case 6: /* clo ek  */
     assert(rc == 3);
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1];
-    r[1+3] = p[2]; }
+    r[1+3] = p[2];
+    r[1+4] = p[3]; }
     r += 1; /* shift reg. wnd */
-    /* ek  args k */
-    hreserve(hbsz(1+1), 4); /* 4 live regs */
+    /* ek  args k ep */
+    hreserve(hbsz(2+1), 5); /* 5 live regs */
+    *--hp = r[4];  
     *--hp = r[3];  
     *--hp = obj_from_case(10);
-    r[4] = (hendblk(1+1));
-    r[0] = r[4];  
+    r[5] = (hendblk(2+1));
+    r[0] = r[5];  
     r[1] = r[2];  
+    r[2] = r[4];  
     goto s_loop;
 
 case 7: /* clo k id */
     assert(rc == 3);
+    { obj* p = objptr_from_obj(r[0]);
+    r[1+2] = p[1]; }
     r += 1; /* shift reg. wnd */
-s_loop: /* k id */
+s_loop: /* k id ep */
   if ((isnull((r[1])))) {
-    r[2+0] = r[0];  
-    pc = objptr_from_obj(r[2+0])[0];
-    r[2+1] = obj_from_ktrap();
-    r[2+2] = ((0) ? obj_from_bool(0) : obj_from_void(0));
-    r += 2; /* shift reg wnd */
+    /* r[0] */    
+    pc = objptr_from_obj(r[0])[0];
+    r[1] = obj_from_ktrap();
+    r[2] = ((0) ? obj_from_bool(0) : obj_from_void(0));
     rreserve(MAX_LIVEREGS);
     assert(rc = 3);
     goto jump;
   } else {
-    r[2] = (car((r[1])));
-    hreserve(hbsz(0+1), 3); /* 3 live regs */
+    r[3] = (car((r[1])));
+    hreserve(hbsz(1+1), 4); /* 4 live regs */
+    *--hp = r[2];  
     *--hp = obj_from_case(7);
-    r[3] = (hendblk(0+1));
-    hreserve(hbsz(4+1), 4); /* 4 live regs */
+    r[4] = (hendblk(1+1));
+    hreserve(hbsz(5+1), 5); /* 5 live regs */
     *--hp = r[0];  
     *--hp = r[1];  
+    *--hp = r[4];  
     *--hp = r[3];  
     *--hp = r[2];  
     *--hp = obj_from_case(8);
-    r[3] = (hendblk(4+1));
-    r[4+0] = (cx_write_2F3);
-    pc = objptr_from_obj(r[4+0])[0];
-    r[4+1] = r[3];  
-    r[4+2] = (cx__2311);
-    r[4+3] = obj_from_bool(1);
-    r[4+4] = (cx__2Acurrent_2Doutput_2Dport_2A);
-    r += 4; /* shift reg wnd */
+    r[4] = (hendblk(5+1));
+    r[5+0] = (cx_write_2F3);
+    pc = objptr_from_obj(r[5+0])[0];
+    r[5+1] = r[4];  
+    r[5+2] = (cx__2312);
+    r[5+3] = obj_from_bool(1);
+    r[5+4] = r[2];  
+    r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
     assert(rc = 5);
     goto jump;
@@ -1486,21 +1495,23 @@ case 8: /* clo ek  */
     r[1+2] = p[1];
     r[1+3] = p[2];
     r[1+4] = p[3];
-    r[1+5] = p[4]; }
+    r[1+5] = p[4];
+    r[1+6] = p[5]; }
     r += 1; /* shift reg. wnd */
-    /* ek  arg loop id k */
-    hreserve(hbsz(3+1), 6); /* 6 live regs */
+    /* ek  ep arg loop id k */
+    hreserve(hbsz(3+1), 7); /* 7 live regs */
+    *--hp = r[6];  
     *--hp = r[5];  
     *--hp = r[4];  
-    *--hp = r[3];  
     *--hp = obj_from_case(9);
-    r[6] = (hendblk(3+1));
-    r[0] = (cx_write_2F3);
-    pc = objptr_from_obj(r[0])[0];
-    r[1] = r[6];  
-    /* r[2] */    
-    r[3] = obj_from_bool(0);
-    r[4] = (cx__2Acurrent_2Doutput_2Dport_2A);
+    r[7] = (hendblk(3+1));
+    r[8+0] = (cx_write_2F3);
+    pc = objptr_from_obj(r[8+0])[0];
+    r[8+1] = r[7];  
+    r[8+2] = r[3];  
+    r[8+3] = obj_from_bool(0);
+    r[8+4] = r[2];  
+    r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
     assert(rc = 5);
     goto jump;
@@ -1524,10 +1535,11 @@ case 9: /* clo ek  */
 case 10: /* clo ek  */
     assert(rc == 3);
     { obj* p = objptr_from_obj(r[0]);
-    r[1+2] = p[1]; }
+    r[1+2] = p[1];
+    r[1+3] = p[2]; }
     r += 1; /* shift reg. wnd */
-    /* ek  k */
-    (void)(fputc('\n', oportdata((cx__2Acurrent_2Doutput_2Dport_2A))));
+    /* ek  k ep */
+    (void)(fputc('\n', oportdata((r[3]))));
     r[0] = (cx_reset);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
@@ -2073,7 +2085,7 @@ case 31: /* id->uname k id */
     assert(rc == 3);
     r += 1; /* shift reg. wnd */
     /* k id */
-  if (bool_from_obj(cxs_global_2Did_2Dprivate_2Dconstant_3F_23266((r[1])))) {
+  if (bool_from_obj(cxs_global_2Did_2Dprivate_2Dconstant_3F_23267((r[1])))) {
     r[2] = (cdr((r[1])));
     r[2] = (car((r[2])));
     r[3+0] = r[0];  
@@ -2085,11 +2097,11 @@ case 31: /* id->uname k id */
     assert(rc = 3);
     goto jump;
   } else {
-  if (bool_from_obj(cxs_global_2Did_2Dconstant_3F_23247((r[1])))) {
+  if (bool_from_obj(cxs_global_2Did_2Dconstant_3F_23248((r[1])))) {
     { /* cons */ 
     hreserve(hbsz(3), 2); /* 2 live regs */
     *--hp = (mknull());
-    *--hp = (cx__23239);
+    *--hp = (cx__23240);
     *--hp = obj_from_size(PAIR_BTAG); 
     r[2] = (hendblk(3)); }
     r[3] = (cdr((r[1])));
@@ -2139,7 +2151,7 @@ case 31: /* id->uname k id */
     { /* cons */ 
     hreserve(hbsz(3), 3); /* 3 live regs */
     *--hp = r[2];  
-    *--hp = (cx__23203);
+    *--hp = (cx__23204);
     *--hp = obj_from_size(PAIR_BTAG); 
     r[2] = (hendblk(3)); }
     r[3] = (cdr((r[1])));
@@ -2154,7 +2166,7 @@ case 31: /* id->uname k id */
     { /* cons */ 
     hreserve(hbsz(3), 3); /* 3 live regs */
     *--hp = r[2];  
-    *--hp = (cx__23169);
+    *--hp = (cx__23170);
     *--hp = obj_from_size(PAIR_BTAG); 
     r[2] = (hendblk(3)); }
     r[3] = (cdr((r[1])));
@@ -2186,7 +2198,7 @@ case 31: /* id->uname k id */
     { /* cons */ 
     hreserve(hbsz(3), 3); /* 3 live regs */
     *--hp = r[2];  
-    *--hp = (cx__23183);
+    *--hp = (cx__23184);
     *--hp = obj_from_size(PAIR_BTAG); 
     r[2] = (hendblk(3)); }
     r[3] = (cdr((r[1])));
@@ -2213,7 +2225,7 @@ case 31: /* id->uname k id */
     { /* cons */ 
     hreserve(hbsz(3), 3); /* 3 live regs */
     *--hp = r[2];  
-    *--hp = (cx__23169);
+    *--hp = (cx__23170);
     *--hp = obj_from_size(PAIR_BTAG); 
     r[2] = (hendblk(3)); }
     r[3] = (cdr((r[1])));
@@ -3322,7 +3334,7 @@ case 63: /* clo k sym e */
     r[1+3] = p[1]; }
     r += 1; /* shift reg. wnd */
     /* k sym e global-e */
-    r[4] = (cxs_lookupicate_23616((r[1]), (r[2])));
+    r[4] = (cxs_lookupicate_23617((r[1]), (r[2])));
   if (bool_from_obj(r[4])) {
     /* r[0] */    
     pc = objptr_from_obj(r[0])[0];
@@ -3333,7 +3345,7 @@ case 63: /* clo k sym e */
     goto jump;
   } else {
     r[5] = (objptr_from_obj(r[3])[0]);
-    r[5] = (cxs_lookupicate_23616((r[1]), (r[5])));
+    r[5] = (cxs_lookupicate_23617((r[1]), (r[5])));
   if (bool_from_obj(r[5])) {
     /* r[0] */    
     pc = objptr_from_obj(r[0])[0];
@@ -3561,7 +3573,7 @@ case 68: /* clo k c */
     *--hp = obj_from_case(73);
     r[5] = (hendblk(2+1));
     r[6+0] = r[5];  
-    r[6+1] = (cx__23754);
+    r[6+1] = (cx__23755);
     r[6+2] = r[1];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
@@ -3619,7 +3631,7 @@ case 70: /* clo ek r */
     { /* cons */ 
     hreserve(hbsz(3), 9); /* 9 live regs */
     *--hp = r[8];  
-    *--hp = (cx__23713);
+    *--hp = (cx__23714);
     *--hp = obj_from_size(PAIR_BTAG); 
     r[8] = (hendblk(3)); }
     { /* cons */ 
@@ -3754,7 +3766,7 @@ case 73: /* clo ek r */
     r[0] = r[3];  
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
-    r[2] = (cx__23748);
+    r[2] = (cx__23749);
     rreserve(MAX_LIVEREGS);
     assert(rc = 3);
     goto jump;
@@ -3832,7 +3844,7 @@ s_loop_v4594: /* k prog exps psexp make-id e */
     *--hp = obj_from_case(76);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__23780);
+    r[1] = (cx__23781);
     r[2] = r[6];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -3962,7 +3974,7 @@ case 79: /* clo ek r */
     { /* vector */
     hreserve(hbsz(4+1), 4); /* 4 live regs */
     *--hp = (mknull());
-    *--hp = (cx__23803);
+    *--hp = (cx__23804);
     *--hp = (mksymbol(internsym("no-effect")));
     *--hp = (mksymbol(internsym("primapp-exp")));
     *--hp = obj_from_size(VECTOR_BTAG);
@@ -4113,7 +4125,7 @@ s_p: /* k x liftc psexp make-id e */
     *--hp = obj_from_case(84);
     r[6] = (hendblk(7+1));
     r[7+0] = r[6];  
-    r[7+1] = (cx__231329);
+    r[7+1] = (cx__231330);
     r[7+2] = r[1];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
@@ -4161,7 +4173,7 @@ case 84: /* clo ek r */
     *--hp = obj_from_case(88);
     r[9] = (hendblk(7+1));
     r[0] = r[9];  
-    r[1] = (cx__231307);
+    r[1] = (cx__231308);
     r[2] = r[7];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -4283,7 +4295,7 @@ case 88: /* clo ek r */
     *--hp = obj_from_case(91);
     r[9] = (hendblk(7+1));
     r[0] = r[9];  
-    r[1] = (cx__231289);
+    r[1] = (cx__231290);
     r[2] = r[7];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -4321,7 +4333,7 @@ case 90: /* clo ek r */
     { /* vector */
     hreserve(hbsz(4+1), 4); /* 4 live regs */
     *--hp = (mknull());
-    *--hp = (cx__23803);
+    *--hp = (cx__23804);
     *--hp = (mksymbol(internsym("no-effect")));
     *--hp = (mksymbol(internsym("primapp-exp")));
     *--hp = obj_from_size(VECTOR_BTAG);
@@ -4384,7 +4396,7 @@ case 91: /* clo ek r */
     *--hp = obj_from_case(94);
     r[9] = (hendblk(7+1));
     r[0] = r[9];  
-    r[1] = (cx__231272);
+    r[1] = (cx__231273);
     r[2] = r[7];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -4470,7 +4482,7 @@ case 94: /* clo ek r */
     *--hp = obj_from_case(100);
     r[9] = (hendblk(7+1));
     r[0] = r[9];  
-    r[1] = (cx__231250);
+    r[1] = (cx__231251);
     r[2] = r[7];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -4553,7 +4565,7 @@ case 97: /* clo ek r */
     { /* vector */
     hreserve(hbsz(4+1), 4); /* 4 live regs */
     *--hp = (mknull());
-    *--hp = (cx__23803);
+    *--hp = (cx__23804);
     *--hp = (mksymbol(internsym("no-effect")));
     *--hp = (mksymbol(internsym("primapp-exp")));
     *--hp = obj_from_size(VECTOR_BTAG);
@@ -4687,7 +4699,7 @@ case 100: /* clo ek r */
     *--hp = obj_from_case(105);
     r[9] = (hendblk(7+1));
     r[0] = r[9];  
-    r[1] = (cx__231210);
+    r[1] = (cx__231211);
     r[2] = r[7];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -4883,7 +4895,7 @@ case 105: /* clo ek r */
     *--hp = obj_from_case(117);
     r[9] = (hendblk(7+1));
     r[0] = r[9];  
-    r[1] = (cx__231140);
+    r[1] = (cx__231141);
     r[2] = r[6];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -5309,7 +5321,7 @@ case 117: /* clo ek r */
     *--hp = obj_from_case(120);
     r[9] = (hendblk(6+1));
     r[0] = r[9];  
-    r[1] = (cx__231115);
+    r[1] = (cx__231116);
     r[2] = r[8];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -5448,7 +5460,7 @@ case 120: /* clo ek r */
     *--hp = obj_from_case(123);
     r[8] = (hendblk(6+1));
     r[0] = r[8];  
-    r[1] = (cx__231100);
+    r[1] = (cx__231101);
     r[2] = r[6];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -5521,7 +5533,7 @@ case 123: /* clo ek r */
     *--hp = obj_from_case(124);
     r[9] = (hendblk(4+1));
     r[0] = r[9];  
-    r[1] = (cx__231095);
+    r[1] = (cx__231096);
     r[2] = r[8];  
     goto gs_sexp_2Dmatch_3F;
   } else {
@@ -5534,7 +5546,7 @@ case 123: /* clo ek r */
     *--hp = obj_from_case(127);
     r[8] = (hendblk(5+1));
     r[0] = r[8];  
-    r[1] = (cx__231078);
+    r[1] = (cx__231079);
     r[2] = r[7];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -5647,7 +5659,7 @@ case 127: /* clo ek r */
     *--hp = obj_from_size(PAIR_BTAG); 
     r[7] = (hendblk(3)); }
     r[0] = r[6];  
-    r[1] = (cx__231077);
+    r[1] = (cx__231078);
     r[2] = r[7];  
     goto gs_c_2Derror_2A;
   } else {
@@ -5660,7 +5672,7 @@ case 127: /* clo ek r */
     *--hp = obj_from_case(128);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__231066);
+    r[1] = (cx__231067);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -5697,7 +5709,7 @@ case 128: /* clo ek r */
     *--hp = obj_from_case(133);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__231038);
+    r[1] = (cx__231039);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -5842,7 +5854,7 @@ case 133: /* clo ek r */
     *--hp = obj_from_case(138);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__231009);
+    r[1] = (cx__231010);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -5987,7 +5999,7 @@ case 138: /* clo ek r */
     *--hp = obj_from_case(143);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__23980);
+    r[1] = (cx__23981);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -6132,7 +6144,7 @@ case 143: /* clo ek r */
     *--hp = obj_from_case(148);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__23951);
+    r[1] = (cx__23952);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -6277,7 +6289,7 @@ case 148: /* clo ek r */
     *--hp = obj_from_case(153);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__23922);
+    r[1] = (cx__23923);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -6422,7 +6434,7 @@ case 153: /* clo ek r */
     *--hp = obj_from_case(158);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__23893);
+    r[1] = (cx__23894);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -6567,7 +6579,7 @@ case 158: /* clo ek r */
     *--hp = obj_from_case(163);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__23864);
+    r[1] = (cx__23865);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -6712,7 +6724,7 @@ case 163: /* clo ek r */
     *--hp = obj_from_case(168);
     r[7] = (hendblk(5+1));
     r[0] = r[7];  
-    r[1] = (cx__23837);
+    r[1] = (cx__23838);
     r[2] = r[5];  
     goto gs_sexp_2Dmatch_3F;
   }
@@ -7001,7 +7013,7 @@ case 173: /* clo ek r */
     *--hp = obj_from_size(PAIR_BTAG); 
     r[6] = (hendblk(3)); }
     r[0] = r[5];  
-    r[1] = (cx__23821);
+    r[1] = (cx__23822);
     r[2] = r[6];  
     goto gs_c_2Derror_2A;
   }
