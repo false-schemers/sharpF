@@ -1762,9 +1762,9 @@ gs_decompose_2Dliteral: /* k x */
   if ((isstring((r[1])))) {
     { /* string->list */
     int c = (stringlen((r[1])));
-    char *s; obj l = mknull();
+    unsigned char *s; obj l = mknull();
     hreserve(hbsz(3)*c, 2); /* 2 live regs */
-    s = stringchars((r[1])); /* gc-safe */
+    s = (unsigned char *)stringchars((r[1])); /* gc-safe */
     while (c-- > 0) { *--hp = l; *--hp = obj_from_char(s[c]);
     *--hp = obj_from_size(PAIR_BTAG); l = hendblk(3); }
     r[2] = (l); }
@@ -1782,9 +1782,9 @@ gs_decompose_2Dliteral: /* k x */
     r[2] = (hpushstr(2, newstring(symbolname(getsymbol((r[1]))))));
     { /* string->list */
     int c = (stringlen((r[2])));
-    char *s; obj l = mknull();
+    unsigned char *s; obj l = mknull();
     hreserve(hbsz(3)*c, 3); /* 3 live regs */
-    s = stringchars((r[2])); /* gc-safe */
+    s = (unsigned char *)stringchars((r[2])); /* gc-safe */
     while (c-- > 0) { *--hp = l; *--hp = obj_from_char(s[c]);
     *--hp = obj_from_size(PAIR_BTAG); l = hendblk(3); }
     r[3] = (l); }
@@ -3931,7 +3931,7 @@ gs_symloc_2D_3Evar: /* k sym */
   if (bool_from_obj(r[3])) {
     { char_t v8523_tmp;
     r[3] = (objptr_from_obj(r[2])[0]);
-    v8523_tmp = (*stringref((r[3]), (0)));
+    v8523_tmp = (*(unsigned char*)stringref((r[3]), (0)));
     r[3] = obj_from_bool((95) == (v8523_tmp)); }
   } else {
     r[3] = obj_from_bool(0);

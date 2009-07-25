@@ -1263,7 +1263,7 @@ s_loop_v577: /* k i p x */
     assert(rc = 3);
     goto jump;
   } else {
-    { const char_t v714_c = (*stringref((r[3]), (v713_i)));
+    { const char_t v714_c = (*(unsigned char*)stringref((r[3]), (v713_i)));
     (void)((((v714_c) == (34)) || ((v714_c) == (92))) ? (void)(fputc((92), oportdata((r[2])))) : (void)(0));
     (void)(fputc((v714_c), oportdata((r[2])))); } 
     /* r[0] */    
@@ -1367,9 +1367,9 @@ case 24: /* fprintf* k port fstr olst */
     /* k port fstr olst */
     { /* string->list */
     int c = (stringlen((r[2])));
-    char *s; obj l = mknull();
+    unsigned char *s; obj l = mknull();
     hreserve(hbsz(3)*c, 4); /* 4 live regs */
-    s = stringchars((r[2])); /* gc-safe */
+    s = (unsigned char *)stringchars((r[2])); /* gc-safe */
     while (c-- > 0) { *--hp = l; *--hp = obj_from_char(s[c]);
     *--hp = obj_from_size(PAIR_BTAG); l = hendblk(3); }
     r[4] = (l); }

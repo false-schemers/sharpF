@@ -1322,9 +1322,9 @@ case 19: /* clo ek  */
     r[2] = (hpushstr(2, d)); }
     { /* string->list */
     int c = (stringlen((r[2])));
-    char *s; obj l = mknull();
+    unsigned char *s; obj l = mknull();
     hreserve(hbsz(3)*c, 3); /* 3 live regs */
-    s = stringchars((r[2])); /* gc-safe */
+    s = (unsigned char *)stringchars((r[2])); /* gc-safe */
     while (c-- > 0) { *--hp = l; *--hp = obj_from_char(s[c]);
     *--hp = obj_from_size(PAIR_BTAG); l = hendblk(3); }
     r[2] = (l); }
@@ -1993,7 +1993,7 @@ s_loop_v2652: /* k l i port */
     int i, c = (v2978_tmp); 
     obj o = hpushstr(7, allocstring(c, ' ')); /* 7 live regs */
     obj l = r[6];   /* gc-safe */
-    char *s = stringchars(o);
+    unsigned char *s = (unsigned char *)stringchars(o);
     for (i = 0; i < c; ++i, l = cdr(l)) s[i] = char_from_obj(car(l));
     r[6] = (o); } }
     r[7+0] = r[0];  
@@ -2422,7 +2422,7 @@ case 55: /* clo ek r */
     int i, c = (v2976_tmp); 
     obj o = hpushstr(10, allocstring(c, ' ')); /* 10 live regs */
     obj l = r[9];   /* gc-safe */
-    char *s = stringchars(o);
+    unsigned char *s = (unsigned char *)stringchars(o);
     for (i = 0; i < c; ++i, l = cdr(l)) s[i] = char_from_obj(car(l));
     r[9] = (o); } }
     r[0] = (cx_string_2D_3Efixnum);
@@ -3416,7 +3416,7 @@ s_loop_v2366: /* k l n port */
     int i, c = (v2972_tmp); 
     obj o = hpushstr(7, allocstring(c, ' ')); /* 7 live regs */
     obj l = r[6];   /* gc-safe */
-    char *s = stringchars(o);
+    unsigned char *s = (unsigned char *)stringchars(o);
     for (i = 0; i < c; ++i, l = cdr(l)) s[i] = char_from_obj(car(l));
     r[6] = (o); } }
     r[7+0] = r[0];  
@@ -3494,7 +3494,7 @@ s_loop_v2366: /* k l n port */
     int i, c = (v2970_tmp); 
     obj o = hpushstr(8, allocstring(c, ' ')); /* 8 live regs */
     obj l = r[7];   /* gc-safe */
-    char *s = stringchars(o);
+    unsigned char *s = (unsigned char *)stringchars(o);
     for (i = 0; i < c; ++i, l = cdr(l)) s[i] = char_from_obj(car(l));
     r[7] = (o); } }
     r[8+0] = r[0];  
@@ -3568,7 +3568,7 @@ case 93: /* parse-token k string port */
     assert(rc == 4);
     r += 1; /* shift reg. wnd */
 gs_parse_2Dtoken: /* k string port */
-    { const char_t v2968_c = (*stringref((r[1]), (0)));
+    { const char_t v2968_c = (*(unsigned char*)stringref((r[1]), (0)));
     r[3] = obj_from_bool((isdigit((v2968_c))) || (((v2968_c) == (43)) || (((v2968_c) == (45)) || ((v2968_c) == (46))))); } 
   if (bool_from_obj(r[3])) {
     hreserve(hbsz(3+1), 3); /* 3 live regs */
@@ -3669,10 +3669,10 @@ s_l_v2349: /* ek r port string k */
     goto jump;
   } else {
   if (((stringlen((r[3]))) >= (2))) {
-    { const char_t v2967_tmp = (*stringref((r[3]), (0)));
+    { const char_t v2967_tmp = (*(unsigned char*)stringref((r[3]), (0)));
     r[5] = obj_from_bool((v2967_tmp) == (45)); } 
   if (bool_from_obj(r[5])) {
-    { const char_t v2966_tmp = (*stringref((r[3]), (1)));
+    { const char_t v2966_tmp = (*(unsigned char*)stringref((r[3]), (1)));
     r[5] = obj_from_bool((v2966_tmp) == (62)); } 
   } else {
     r[5] = obj_from_bool(0);
@@ -3793,7 +3793,7 @@ case 100: /* reverse-list->string k l n */
     int i, c = (v2964_tmp); 
     obj o = hpushstr(4, allocstring(c, ' ')); /* 4 live regs */
     obj l = r[3];   /* gc-safe */
-    char *s = stringchars(o);
+    unsigned char *s = (unsigned char *)stringchars(o);
     for (i = 0; i < c; ++i, l = cdr(l)) s[i] = char_from_obj(car(l));
     r[3] = (o); } }
     r[4+0] = r[0];  

@@ -985,7 +985,7 @@ void *getnative(obj o, cxtype_t *tp) {
 (define-rule (string c ...)
   (%prim* "{ /* string */
     obj o = hpushstr($live, allocstring($argc, ' '));
-    char *s = stringchars(o);
+    unsigned char *s = (unsigned char *)stringchars(o);
     ${*s++ = char_from_$arg;
     $}$return obj(o); }" c ...))
 
@@ -993,7 +993,7 @@ void *getnative(obj o, cxtype_t *tp) {
   (%prim "fixnum(stringlen(obj_from_$arg))" s))
 
 (define-inline (string-ref s k)
-  (%prim? "char(*stringref(obj_from_$arg, fixnum_from_$arg))" s k))
+  (%prim? "char(*(unsigned char*)stringref(obj_from_$arg, fixnum_from_$arg))" s k))
 
 (define-inline (string-set! s k c)
   (%prim! "void(*stringref(obj_from_$arg, fixnum_from_$arg) = char_from_$arg)" s k c))
@@ -1580,16 +1580,16 @@ void *getnative(obj o, cxtype_t *tp) {
     int i, c = fixnum_from_$arg; 
     obj o = hpushstr($live, allocstring(c, ' ')); /* $live live regs */
     obj l = obj_from_$arg; /* gc-safe */
-    char *s = stringchars(o);
+    unsigned char *s = (unsigned char *)stringchars(o);
     for (i = 0; i < c; ++i, l = cdr(l)) s[i] = char_from_obj(car(l));
     $return obj(o); }" (length l) l))
 
 (define-inline (string->list s)
   (%prim*? "{ /* string->list */
     int c = fixnum_from_$arg;
-    char *s; obj l = mknull();
+    unsigned char *s; obj l = mknull();
     hreserve(hbsz(3)*c, $live); /* $live live regs */
-    s = stringchars(obj_from_$arg); /* gc-safe */
+    s = (unsigned char *)stringchars(obj_from_$arg); /* gc-safe */
     while (c-- > 0) { *--hp = l; *--hp = obj_from_char(s[c]);
     *--hp = obj_from_size(PAIR_BTAG); l = hendblk(3); }
     $return obj(l); }" (string-length s) s))

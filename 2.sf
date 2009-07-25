@@ -33,6 +33,7 @@
 ;  o  modified to get rid of variadics, not needed for self-compile
 
 #fload "0.sf"
+; also refers to read/1
 
 ;------------------------------------------------------------------------------
 

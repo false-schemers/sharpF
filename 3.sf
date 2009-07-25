@@ -8,7 +8,7 @@
 ; Copyright (C) 2004 by Marc Feeley, All Rights Reserved.
 
 #fload "0.sf"
-; also refers to c-argref-ctype c-undecorate-alvar prim-ctype
+; also refers to prim-ctype c-argref-ctype letrec-exp c-undecorate-alvar
 
 
 ;------------------------------------------------------------------------------
@@ -649,7 +649,7 @@
          (begin result1 result2 ...)
          (sexp-case key clause clauses ...))]))
 
-(define (parse-program lst)
+(define (parse-program lst return) ;=> (return exp known-refs)
   (define (psexp x e)
     (let p ([x x])
       (sexp-case x
@@ -744,7 +744,8 @@
         (let ([id (global-id sym)])
           (set! global-e (cons id global-e))
           id)))
-  (add-lifted-consts (pprog lst '())))
+  (let ([exp (add-lifted-consts (pprog lst '()))])
+    (return exp (map id->symbol global-e))))
 
 
 ;------------------------------------------------------------------------------
