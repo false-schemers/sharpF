@@ -128,8 +128,7 @@
 (define-syntax %const
   (let-syntax ([old-%const %const])
     (syntax-rules (boolean)
-      [(_ boolean "0") (%prim "bool(0)")] 
-      [(_ boolean "1") (%prim "bool(1)")] 
+      [(_ boolean b) (%prim ("bool(" b ")"))] 
       [(_ arg ...) (old-%const arg ...)]))) 
 
 ; some functions we might need, inlined for speed
@@ -150,16 +149,16 @@
 (%definition "#define FIXNUM_MIN -8388608")
 (%definition "#define FIXNUM_MAX 8388607")
 
-; fixnum literals
+; fixnum literals (decimal)
 (define-syntax %const
   (let-syntax ([old-%const %const])
-    (syntax-rules (exact-integer + -)
-      [(_ exact-integer 8 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 8 - n) (%prim ("fixnum(-" n ")"))] 
-      [(_ exact-integer 16 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 16 - n) (%prim ("fixnum(-" n ")"))]
-      [(_ exact-integer 24 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 24 - n) (%prim ("fixnum(-" n ")"))]
+    (syntax-rules (integer + -)
+      [(_ integer 8 + digs 10) (%prim ("fixnum(" digs ")"))] 
+      [(_ integer 16 + digs 10) (%prim ("fixnum(" digs ")"))] 
+      [(_ integer 24 + digs 10) (%prim ("fixnum(" digs ")"))] 
+      [(_ integer 8 - digs 10) (%prim ("fixnum(-" digs ")"))] 
+      [(_ integer 16 - digs 10) (%prim ("fixnum(-" digs ")"))] 
+      [(_ integer 24 - digs 10) (%prim ("fixnum(-" digs ")"))] 
       [(_ arg ...) (old-%const arg ...)]))) 
 
 ; functions we will need for tak, inlined for speed

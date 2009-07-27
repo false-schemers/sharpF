@@ -271,14 +271,14 @@ static obj host(obj pc)
   switch (case_from_obj(pc)) {
 
 case 0: /* load module */
-    cx__2333 = obj_from_flonum(0, 6.0);
-    cx__2334 = obj_from_flonum(0, 1.0);
-    cx__2336 = obj_from_flonum(0, 2.0);
-    cx__2383 = obj_from_flonum(0, 0.0);
-    cx__2385 = obj_from_flonum(0, 0.01);
-    cx__2386 = obj_from_flonum(0, 0.001);
-    cx__2387 = obj_from_flonum(0, 1000.0);
-    cx__2388 = obj_from_flonum(0, 10000.0);
+    cx__2333 = obj_from_flonum(0, 6.0e0);
+    cx__2334 = obj_from_flonum(0, 1.0e0);
+    cx__2336 = obj_from_flonum(0, 2.0e0);
+    cx__2383 = obj_from_flonum(0, 0.0e0);
+    cx__2385 = obj_from_flonum(0, 0.01e0);
+    cx__2386 = obj_from_flonum(0, 0.001e0);
+    cx__2387 = obj_from_flonum(0, 1000.0e0);
+    cx__2388 = obj_from_flonum(0, 10000.0e0);
     { static obj c[] = { obj_from_case(1) }; cx_make_2Dpromise = (obj)c; }
     { static obj c[] = { obj_from_case(4) }; cx_write = (obj)c; }
     { static obj c[] = { obj_from_case(8) }; cx_integrate_2Dsystem = (obj)c; }

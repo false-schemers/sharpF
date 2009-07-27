@@ -1,32 +1,26 @@
 
 ; #F, part 1:  SFC reader 
 
-; Adapted from R6RS reference implementation's Scheme reader.
+; The reader host environment (i.e. the program that calls the reader)
+; is expected to support at least null, pairs, 24-bit fixnums, 8-bit strings, 
+; 8-bit chars, 8-bit symbols, booleans, and eof object. The reader returns 
+; datums which are proper lists with 8-bit symbol car and the rest containing
+; 24-bit fixnums, 8-bit symbols, "safe" 8-bit strings, or, recursively, other 
+; datums. Bit-limits in the above description are maximal capabilities required
+; by the reader; the host environment can have vectors, floats, bignums and 
+; unicode strings, but is not required to.
 
-; Copyright (c) 1993-2006 by Richard Kelsey, Jonathan Rees, and Mike Sperber
-; All rights reserved.
+; if reader's input is needed in S-expr format, (datum->rhe-sexp d) converts
+; datums to S-exprs in the reader host environment, wrapping the ones which
+; are not supported by RHE into (lambda () d). This function depends on the
+; data types derfined in 0.sf
 
-; Redistribution and use in source and binary forms, with or without
-; modification, are permitted provided that the following conditions
-; are met:
-; 1. Redistributions of source code must retain the above copyright
-;    notice, this list of conditions and the following disclaimer.
-; 2. Redistributions in binary form must reproduce the above copyright
-;    notice, this list of conditions and the following disclaimer in the
-;    documentation and/or other materials provided with the distribution.
-; 3. The name of the authors may not be used to endorse or promote products
-;    derived from this software without specific prior written permission.
-; 
-; THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
-; IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-; OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-; IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-; INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-; NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-; DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-; THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-; THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+; Note that the host environment's get-char/peek-char are expected to be 8-bit clean.
+; char->integer is expected to return nonnegative values in some Unicode subrange 
+; [0..N] where N >= 127   
+
+; todo: support #N' syntax for (function (? ...) ...)
+; todo: datum->rhe-sexp should convert some doubles
 
 #fload "0.sf"
 
@@ -34,540 +28,871 @@
 
 ; errors
 
-(define (r-error* reason args)
+(define (r-error* i fmt args)
   (let ([ep (current-error-port)])
     (newline ep)
+    ; todo: use i to keep track of position
     (display "Reader error: " ep)
-    (display reason ep)
-    (for-each 
-      (lambda (arg) 
-        (write-char #\space ep)
-        (if (string? arg) (display arg ep) (write arg ep))) 
-      args)
-    (newline ep)
+    (fprintf* ep fmt args)
+    (display "\n" ep)
     (reset)))
-  
+
 (define-syntax r-error
-  (syntax-rules () [(_ r a ...) (r-error* r (list a ...))]))
+  (syntax-rules () [(_ i fmt a ...) (r-error* i fmt (list a ...))]))
 
 
 ;------------------------------------------------------------------------------
 
-; reader
+; string utils
+
+(define (string-position c str)
+  (let lookup ([pos 0] [end (string-length str)])
+    (and (< pos end)
+         (if (char=? c (string-ref str pos))
+             pos
+             (lookup (+ 1 pos) end))))) 
 
 
-(define *non-symbol-constituents-above-127* 
- '#(128 129 130 131 132 133 134 135 136 137 138 139 140 
-    141 142 143 144 145 146 147 148 149 150 151 152 153 
-    154 155 156 157 158 159 160 171 173 187)) ; 8-bit only
+;------------------------------------------------------------------------------
 
-(define *whitespaces* '#(9 10 11 12 13 32 160)) ; 8-bit only
-
-(define (read/1 port) ;aka get-datum
-  (let loop ()
-    (let ([form (sub-read port)])
-      (cond
-        [(not (reader-token? form)) form]
-        [(eq? form close-paren)
-         (r-error "extraneous right parenthesis" port)]
-        [(eq? form close-bracket)
-         (r-error "discarding extraneous right bracket" port)]
-        [else (r-error "unexpected datum" (cdr form) port)]))))
-
-(define (sub-read-carefully port)
-  (let ([form (sub-read port)])
-    (cond
-      [(eof-object? form)
-       (r-error "unexpected end of file" port)]
-      [(reader-token? form) (r-error "unexpected token" (cdr form) port)]
-      [else form])))
-
-(define reader-token-marker (list 'reader-token))
-
-(define (make-reader-token message)
-  (cons reader-token-marker message))
-
-(define (reader-token? form)
-  (and (pair? form) (eq? (car form) reader-token-marker)))
-
-(define close-paren
-  (make-reader-token "unexpected right parenthesis"))
-
-(define close-bracket
-  (make-reader-token "unexpected right bracket"))
-
-(define dot (make-reader-token "unexpected \" . \""))
+; representation helpers
 
 
-; main dispatch
+(define (codepoint-byte-width x)
+  (cond [(not (fixnum? x)) 'big]
+        [(<= x 255)     8]
+        [(<= x 65535)   16]
+        [(<= x 1114111) 24] ;max legal UNICODE char (#x10FFFF)
+        [else 32])) 
+               
+(define string-safe-codepoint?
+  (lambda (cp)
+    (let ([tilde (char->integer #\~)]
+          [space (char->integer #\space)]
+          [bksl (char->integer #\\)]
+          [apos (char->integer #\')]
+          [quot (char->integer #\")]
+          [dollar (char->integer #\$)])
+      (and (<= cp tilde) (>= cp space)
+           (not (= cp bksl)) (not (= cp apos))
+           (not (= cp quot)) (not (= cp dollar))))))
 
-(define *dispatch-table-limit* 128)
+(define (fold-max base lst)
+  (if (null? lst) base
+      (let ([next (car lst)])
+        (if (not (integer? next)) ;'big
+            next
+            (fold-max (and base next (max base next))
+              (cdr lst))))))
 
-(define read-dispatch-vector
-  (make-vector
-    *dispatch-table-limit*
-    (lambda (c port)
-      (r-error "illegal character read" c port))))
 
-(define read-terminating?-vector
-  (make-vector *dispatch-table-limit* #t))
+; regular datums
 
-(define (set-standard-syntax! char terminating? reader)
-  (vector-set! read-dispatch-vector (char->integer char) reader)
-  (vector-set!
-    read-terminating?-vector (char->integer char) terminating?))
+; (eof)
+; (atmosphere) ; used internally
+; (terminator c) ; used internally
+; (null)
+; (pair d1 d2)
+; (list d ...)
+; (boolean 0-or-1) 
+; (integer repw sign "digits" radix)
+; (decimal rept sign "digits" "frac-digits" esign "exp-digits")
+; (ratio integer1 integer2)
+; (nan sign)
+; (inf sign)
+; (rectangular r1 r2)
+; (polar r1 r2)
+; (inexact z)
+; (exact z)
+; (char sstr1) ; "safe" 1-char string 
+; (char bits cp) ; cp is a positive fixnum
+; (string sstr) ; "safe" string 
+; (string repw cp ...)  ; cp is a positive fixnum
+; (symbol sstr) ; "safe" string
+; (symbol repw cp ...) ; cp is a positive fixnum
+; (vector d ...) 
+; (box d)
+; (foobar ? ...) ; any extension
+ 
+;------------------------------------------------------------------------------
 
-(define (sub-read port)
-  (let ([c (read-char port)])
+; output representation
+
+(define-syntax datum (syntax-rules () [(_ e ...) (list e ...)]))
+(define (make-datum t cc) (cons t cc))
+(define (datum-type d) (car d))
+(define (datum-components d) (cdr d))
+
+; converts d into limited reader's s-expressions used in #.()
+(define (datum->reader-sexp i d)
+  (define (unwrap d)
+    (cond [(and (pair? d) (eq? (car d) 'string) (pair? (cdr d)) 
+                (string? (cadr d)) (null? (cddr d)))
+           (cadr d)]
+          [(and (pair? d) (eq? (car d) 'symbol) (pair? (cdr d)) 
+                (string? (cadr d)) (null? (cddr d)))
+           (string->symbol (cadr d))]
+          [(and (list? d) (= (length d) 5) (eq? (car d) 'integer) 
+                (memv (cadr d) '(8 16 24)) (eq? (caddr d) '+)
+                (string? (cadddr d)) (eqv? (caddr (cddr d)) 10))
+           (string->number (cadddr d))]
+          [(and (pair? d) (eq? (car d) 'null) (null? (cdr d)))
+           '()]
+          [(and (list? d) (= (length d) 3) (eq? (car d) 'pair))
+           (cons (unwrap (cadr d)) (unwrap (caddr d)))]
+          [(and (pair? d) (list? d) (eq? (car d) 'list))
+           (map unwrap (cdr d))]
+          [else (r-error i "illegal datum inside #.() form")]))
+  (unwrap d))
+
+
+; 'verbatim' datum constructor for #.(foo ...) datums
+; check for micro-sexp syntax (symbols, simple strings, non-negative 24-bit ints)
+(define (make-verbatim-datum i d)
+  (let ([lst (datum->reader-sexp i d)])
+    (if (or (null? lst) (not (pair? lst))) 
+        (r-error i "illegal datum following #.: ~s" lst)
+        (let ([type (car lst)])
+          (if (not (symbol? type))
+              (r-error i "illegal datum following #.: ~s" lst)
+              (make-datum type (cdr lst)))))))
+
+; constructor for (decimal rept sign int frac esign exp)
+(define (decimal-datum rept iint ifrac iexp)
+   ; ints are in (integer repw sign str 10) format
+   (list 'decimal rept 
+      (cadr (datum-components iint))
+      (caddr (datum-components iint))
+      (caddr (datum-components ifrac))
+      (cadr (datum-components iexp))
+      (caddr (datum-components iexp))))
+
+ 
+;------------------------------------------------------------------------------
+
+; input abstraction (stream with unlimited lookahead)
+
+(define (make-input port)
+  (let ([c (peek-char port)])
     (if (eof-object? c)
-        c
-        (let ([scalar-value (char->integer c)])
-          (cond
-            [(< scalar-value *dispatch-table-limit*)
-             ((vector-ref read-dispatch-vector (char->integer c))
-              c
-              port)]
-            [(char-alphabetic? c) (sub-read-constituent c port)]
-            [else (r-error "illegal character read" c port)])))))
+        '()
+        (cons c port))))
 
-(let ([sub-read-whitespace 
-       (lambda (c port) ; c is ignored 
-         (sub-read port))])
-  (for-each
-    (lambda (c)
-      (vector-set! read-dispatch-vector c sub-read-whitespace))
-    '(32 9 10 11 12 13)))
+(define inull? null?)
 
-(define (sub-read-constituent c port)
-  (parse-token (sub-read-token c port) port))
+(define (icar i)
+  (if (pair? i)
+      (car i) 
+      (r-error i "unexpected eof")))
 
-(for-each
-  (lambda (c) (set-standard-syntax! c #f sub-read-constituent))
-  (string->list
-    (string-append
-      "!$%&*+-./0123456789:<=>?@^_~ABCDEFGHIJKLM"
-      "NOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")))
-
-(define (set-standard-read-macro! c terminating? proc)
-  (set-standard-syntax! c terminating? proc))
-
-(define (sub-read-list c port close-token)
-  (let ([form (sub-read port)])
-    (if (eq? form dot)
-        (r-error "missing car -- ( immediately followed by ." port)
-        (let recur ([form form])
-          (cond
-            [(eof-object? form)
-             (r-error "eof inside list -- unbalanced parentheses" port)]
-            [(eq? form close-token) '()]
-            [(eq? form dot)
-             (let*
-              ([last-form (sub-read-carefully port)]
-               [another-form (sub-read port)])
-               (if (eq? another-form close-token)
-                   last-form
-                   (r-error "randomness after form after dot"
-                     another-form port)))]
-            [(reader-token? form)
-             (r-error "error inside list --" (cdr form) port)]
-            [else (cons form (recur (sub-read port)))])))))
-
-(define (sub-read-list-paren c port)
-  (sub-read-list c port close-paren))
-
-(define (sub-read-list-bracket c port)
-  (sub-read-list c port close-bracket))
-
-(set-standard-read-macro! #\( #t 
-  sub-read-list-paren)
-
-(set-standard-read-macro! #\[ #t 
-  sub-read-list-bracket)
-
-(set-standard-read-macro! #\) #t 
-  (lambda (c port) c port close-paren))
-
-(set-standard-read-macro! #\] #t
-  (lambda (c port) c port close-bracket))
-
-(set-standard-read-macro! #\' #t
-  (lambda (c port) c (list 'quote (sub-read-carefully port))))
-
-(set-standard-read-macro! #\` #t
-  (lambda (c port) c (list 'quasiquote (sub-read-carefully port))))
-
-(set-standard-read-macro! #\, #t
-  (lambda (c port)
-    c
-    (let*
-     ([next (peek-char port)]
-      [keyword
-       (cond
-         [(eof-object? next)
-          (r-error "end of file after ," port)]
-         [(char=? next #\@) (read-char port) 'unquote-splicing]
-         [else 'unquote])])
-      (list keyword (sub-read-carefully port)))))
-
-(define *nul* (integer->char 0))
-(define *alarm* (integer->char 7))
-(define *backspace* (integer->char 8))
-(define *tab* (integer->char 9))
-(define *linefeed* (integer->char 10))
-(define *vtab* (integer->char 11))
-(define *page* (integer->char 12))
-(define *return* (integer->char 13))
-(define *escape* (integer->char 27))
-(define *delete* (integer->char 127))
-
-(set-standard-read-macro! #\" #t
-  (lambda (c port)
-    c
-    (let loop ([l '()] [i 0])
-      (let ([c (read-char port)])
-        (cond
-          [(eof-object? c)
-           (r-error "end of file within a string" port)]
-          [(char=? c #\\)
-           (cond
-             [(decode-escape port)
-              => (lambda (e) (loop (cons e l) (+ i 1)))]
-             [else (loop l i)])]
-          [(char=? c #\") (reverse-list->string l i)]
-          [else (loop (cons c l) (+ i 1))])))))
-
-(define (decode-escape port)
-  (let ([c (read-char port)])
-    (if (eof-object? c)
-        (r-error "end of file within a string" port))
-    (let ([scalar-value (char->integer c)])
-      (cond
-        [(or (char=? c #\\) (char=? c #\")) c]
-        [(char=? c *linefeed*)
-         (let loop ()
-           (let ([c (peek-char port)])
-             (cond
-               [(eof-object? c)
-                (r-error "end of file within a string" port)]
-               [(char-unicode-whitespace? c)
-                (read-char port) (loop)]
-               [else #f])))]
-        [(char=? c #\a) *alarm*]
-        [(char=? c #\b) *backspace*]
-        [(char=? c #\t) *tab*]
-        [(char=? c #\n) *linefeed*]
-        [(char=? c #\v) *vtab*]
-        [(char=? c #\f) *page*]
-        [(char=? c #\r) *return*]
-        [(char=? c #\e) *escape*]
-        [(char=? c #\x)
-         (let
-          ([d
-            (decode-hex-digits
-              port char-semicolon? "string literal")])
-           (read-char port) d)]
-        [else
-         (r-error "invalid escaped character in string" c port)]))))
-
-(define (char-semicolon? c) (equal? c #\;))
-
-(define (decode-hex-digits port delimiter? desc)
-  (let loop ([rev-digits '()])
-    (let ([c (peek-char port)])
-      (cond
-        [(delimiter? c)
-         (integer->char
-           (string->number (list->string (reverse rev-digits)) 16))]
-        [(eof-object? c)
-         (r-error
-           (string-append
-             "premature end of a scalar-value literal within a "
-             desc)
-           port)]
-        [(not (char-hex-digit? c))
-         (r-error
-           (string-append "invalid hex digit in a " desc) c port)]
-        [else (read-char port) (loop (cons c rev-digits))]))))
-
-(define (char-hex-digit? c)
-  (let ([scalar-value (char->integer c)])
-    (or (and (>= scalar-value 48) (<= scalar-value 57))
-        (and (>= scalar-value 65) (<= scalar-value 70))
-        (and (>= scalar-value 97) (<= scalar-value 102)))))
-
-(set-standard-read-macro!
-  #\; #t (lambda (c port) c (gobble-line port) (sub-read port)))
-
-(define (gobble-line port)
-  (let loop ()
-    (let ([c (read-char port)])
-      (cond
-        [(eof-object? c) c]
-        [(char=? c *linefeed*) #f]
-        [else (loop)]))))
-
-(define *sharp-macros* '())
-
-(define (set-sharp-macro! c proc)
-  (set! *sharp-macros* (cons (cons c proc) *sharp-macros*)))
-
-(set-standard-read-macro!  #\#
-  #f
-  (lambda (c port)
-    c
-    (let*
-     ([c (peek-char port)]
-      [c (if (eof-object? c)
-           (r-error "end of file after #" port)
-           (char-downcase c))]
-      [probe (assq c *sharp-macros*)])
-      (if probe
-          ((cdr probe) c port)
-          (r-error "unknown # syntax" c port)))))
-
-(set-sharp-macro! #\f 
-  (lambda (c port) 
-    (read-char port)
-    ; esl++: #fload hack
-    (let ([c (peek-char port)])
-      (if (and (not (eof-object? c)) (char-alphabetic? c))
-          (let ([name (sub-read-carefully port)])
-            (if (eq? name 'load)
-                (list 'load (sub-read-carefully port))
-                (r-error "unknown syntax #\\f" name port)))
-          #f))))
-
-(set-sharp-macro! #\t 
-  (lambda (c port) 
-    (read-char port) 
-    #t))
-
-(set-sharp-macro! #\'
-  (lambda (c port)
-    (read-char port) 
-    (list 'syntax (sub-read-carefully port))))
-
-(set-sharp-macro! #\`
-  (lambda (c port)
-    (read-char port) 
-    (list 'quasisyntax (sub-read-carefully port))))
-
-(set-sharp-macro! #\,
-  (lambda (c port)
-    (read-char port)
-    (let*
-     ([next (peek-char port)]
-      [keyword
-       (cond
-         [(eof-object? next)
-          (r-error "end of file after ," port)]
-         [(char=? next #\@) (read-char port) 'unsyntax-splicing]
-         [else 'unsyntax])])
-      (list keyword (sub-read-carefully port)))))
-
-; esl++ box reader
-(set-sharp-macro! #\&
-  (lambda (c port)
-    (read-char port)
-    (let ([next (peek-char port)])
-      (if (eof-object? next)
-          (r-error "end of file after &" port)
-          (box (sub-read-carefully port))))))
-
-; esl* - bug fixes
-(set-sharp-macro! #\|
-  (lambda (c port)
-    (read-char port)
-    (let recur () ;starts right after opening #|
-      (let ([next (read-char port)])
-        (cond
-          [(eof-object? next)
-           (r-error "end of file in #| comment" port)]
-          [(char=? next #\|)
-           (let ([next (peek-char port)])
-             (cond
-               [(eof-object? next)
-                (r-error "end of file in #| comment" port)]
-               [(char=? next #\#) (read-char port)]
-               [else (recur)]))]
-          [(char=? next #\#)
-           (let ([next (peek-char port)])
-             (cond
-               [(eof-object? next)
-                (r-error "end of file in #| comment" port)]
-               [(char=? next #\|) (read-char port) (recur) (recur)]
-               [else (recur)]))]
-          [else (recur)])))
-    (sub-read port)))
-
-(set-sharp-macro! #\;
-  (lambda (char port)
-    (read-char port) (sub-read-carefully port) (sub-read port)))
-
-(define *char-name-table*
-  (list
-    (cons 'space #\space)
-    (cons 'nul *nul*)
-    (cons 'alarm *alarm*)
-    (cons 'backspace *backspace*)
-    (cons 'tab *tab*)
-    (cons 'newline *linefeed*) ; not in r6rs draft????
-    (cons 'linefeed *linefeed*)
-    (cons 'vtab *vtab*)
-    (cons 'page *page*)
-    (cons 'esc *escape*)
-    (cons 'delete *delete*)))
-
-(set-sharp-macro! #\\
-  (lambda (c port)
-    (read-char port)
-    (let ([c (peek-char port)])
-      (cond
-        [(eof-object? c)
-         (r-error "end of file after #\\" port)]
-        [(char=? #\x c)
-         (read-char port)
-         (if (delimiter? (peek-char port))
-             c
-             (decode-hex-digits
-               port
-               char-scalar-value-literal-delimiter?
-               "char literal"))]
-        [(char-alphabetic? c)
-         (let ([name (sub-read-carefully port)])
-           (cond
-             [(= (string-length (symbol->string name)) 1) c]
-             [(assq name *char-name-table*) => cdr]
-             [else (r-error "unknown #\\ name" name port)]))]
-        [else (read-char port) c]))))
-
-(define (char-scalar-value-literal-delimiter? c)
-  (or (eof-object? c) (delimiter? c)))
-
-(set-sharp-macro! #\(
-  (lambda (c port)
-    (read-char port)
-    (let ([elts (sub-read-list-paren c port)])
-      (if (proper-list? elts)
-          (list->vector elts)
-          (r-error "dot in #(...)" port)))))
-
-; esl++
-(for-each
-  (lambda (char)
-    (set-sharp-macro! char
-      (lambda (c port)
-        (let loop ([n 0] [c (read-char port)])
-          (if (char-numeric? c)
-              (loop (+ (* n 10) (- (char->integer c) (char->integer #\0)))
-                    (read-char port))
-              (if (char=? c #\')
-                  (list 'function
-                    (do ([i n (- i 1)] [l '() (cons '? l)]) [(zero? i) l])
-                    (sub-read-carefully port))
-                  (r-error "unknown #\\<digits> macro" port)))))))
-  '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9))
+(define (icdr i)
+  (if (pair? i)
+      (let ([icdr (cdr i)])
+        (if (input-port? icdr)
+            (begin
+              (read-char icdr)
+              (let ([icdr (make-input icdr)])
+                (set-cdr! i icdr)
+                icdr))
+            icdr))
+      (r-error i "unexpected eof")))
 
 
-(define (proper-list? x)
-  (cond
-    [(null? x) #t] 
-    [(pair? x) (proper-list? (cdr x))] 
-    [else #f]))
+;------------------------------------------------------------------------------
 
-(let
- ([number-sharp-macro
-   (lambda (c port)
-     (let ([string (sub-read-token #\# port)])
-       (or (string->number string)
-           (r-error "unsupported number syntax" string port))))])
-  (for-each
-    (lambda (c) (set-sharp-macro! c number-sharp-macro))
-    '(#\b #\o #\d #\x #\i #\e)))
+; input utils 
 
-(define (sub-read-token c port)
-  (let loop ([l (list c)] [n 1])
-    (let ([c (peek-char port)])
-      (cond
-        [(eof-object? c)
-         (reverse-list->string l n)]
-        [(char=? c #\\)
-         (read-char port)
-         (let ([c (peek-char port)])
-           (cond
-             [(or (eof-object? c) (not (char=? #\x c)))
-              (r-error
-                "invalid escape sequence in a symbol" c port)]
-             [else
-              (read-char port)
-              (let ([d (decode-hex-digits
-                         port char-semicolon? "symbol literal")])
-                (read-char port) 
-                (loop (cons d l) (+ n 1)))]))]
-        [else
-         (let ([sv (char->integer c)])
-           (if (if (< sv *dispatch-table-limit*)
-                   (vector-ref read-terminating?-vector sv)
-                   (binary-search
-                     *non-symbol-constituents-above-127* sv))
-               (reverse-list->string l n)
-               (begin
-                (read-char port)
-                (loop (cons c l) (+ n 1)))))]))))
+(define (input-prefix-chars i chars =?) 
+  ; => i after prefix or #f
+  (let loop ([i i] [l chars])
+    (cond [(null? l) i]
+          [(inull? i) #f]
+          [(=? (icar i) (car l))
+           (loop (icdr i) (cdr l))]
+          [else #f])))
 
-(define (parse-token string port)
-  (if (let ([c (string-ref string 0)])
-        (or (char-numeric? c)
-            (char=? c #\+)
-            (char=? c #\-)
-            (char=? c #\.)))
-      (cond [(string->number string)]
-            [(member string strange-symbol-names)
-             (string->symbol (make-immutable! string))]
-            [(string=? string ".") 
-             dot]
-            [(and (>= (string-length string) 2)
-                  (char=? (string-ref string 0) #\-)
-                  (char=? (string-ref string 1) #\>))
-             (string->symbol (make-immutable! string))]
-            [else
-             (r-error "unsupported number syntax" string port)])
-      (string->symbol (make-immutable! string))))
+(define (char-delimiter? c)
+  (or (char-whitespace? c)
+      (memv c '(#\( #\) #\[ #\] #\{ #\} #\" #\; #\#))))
+      
+(define (char-initial? c)
+  (string-position c 
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!$%&*/:<=>?^_~"))
 
-(define strange-symbol-names '("+" "-" "..."))
+(define (char-subsequent? c)
+  (string-position c 
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!$%&*/:<=>?^_~0123456789+-.@"))
 
-(define (delimiter? c)
-  (or (char-unicode-whitespace? c)
-      (char=? c #\))
-      (char=? c #\()
-      (char=? c #\])
-      (char=? c #\[)
-      (char=? c #\")
-      (char=? c #\;)))
+(define (char-number-initial? c)
+  (string-position c "0123456789+-."))
+  
+(define (char-digit-value c radix) ; => n or #f
+  (let ([pos (string-position (char-downcase c) "0123456789abcdefghijklmnopqrstuvwxyz")])
+    (if (or (not pos) (>= pos radix)) #f pos)))
 
-(define (char-unicode-whitespace? c)
-  (binary-search *whitespaces* (char->integer c)))
-
-(define (binary-search vec val)
-  (let ([size (vector-length vec)])
-    (let loop ([low 0] [high size])
-      (cond [(< low (- high 1))
-             (let* ([pos (quotient (+ low high) 2)]
-                    [at (vector-ref vec pos)])
-               (cond [(= val at) pos]
-                     [(< val at) (loop low pos)]
-                     [else (loop pos high)]))]
-            [(< low high) 
-             (if (= val (vector-ref vec low)) low #f)]
+(define (char-exponent-marker? c)
+  (string-position (char-downcase c) "esfdl"))
+    
+(define (input-prefix i hstr) ; => i after prefix or #f
+  ; (input-prefix-chars i (string->list hstr) char=?), 
+  ; rewritten for speed
+  (let ([len (string-length hstr)])
+    (let loop ([i i] [ind 0])
+      (cond [(= ind len) i]
+            [(inull? i) #f]
+            [(char=? (icar i) (string-ref hstr ind))
+             (loop (icdr i) (+ ind 1))]
             [else #f]))))
 
-(define (reverse-list->string l n) 
-  (list->string (reverse l)))
+(define (input-prefix-ci i hstr) ; => i after prefix or #f
+  ; (input-prefix-chars i (string->list hstr) char-ci=?),
+  ; rewritten for speed
+  (let ([len (string-length hstr)])
+    (let loop ([i i] [ind 0])
+      (cond [(= ind len) i]
+            [(inull? i) #f]
+            [(char-ci=? (icar i) (string-ref hstr ind))
+             (loop (icdr i) (+ ind 1))]
+            [else #f]))))
 
-(define (make-immutable! x) x)
+(define (input-skip-expected-prefix i hstr) ; => i
+  ; (let ([i (input-prefix-chars i (string->list hstr) char=?)])
+  ;   (or i (r-error i "missing ~a" hstr))),
+  ; rewritten for speed
+  (let ([len (string-length hstr)])
+    (let loop ([i i] [ind 0])
+      (cond [(= ind len) i]
+            [(inull? i) (r-error i "unexpected eof; missing ~a" hstr)]
+            [(char=? (icar i) (string-ref hstr ind))
+             (loop (icdr i) (+ ind 1))]
+            [else (r-error i "missing ~a" hstr)]))))
+
+(define (input-delimited? i)
+  (or (null? i) (char-delimiter? (icar i))))
+
+(define (input-check-delimited i) ; => i
+  (if (input-delimited? i)
+      i
+      (r-error i "missing input delimiter before ~a" (icar i))))
+
+(define (input-delimited-prefix i hstr) ; => i after prefix or #f
+  ; (let ([i (input-prefix-chars i (string->list hstr) char=?)])
+  ;  (and i (if (input-delimited? i) i #f))),
+  ; rewritten for speed  
+  (let ([len (string-length hstr)])
+    (let loop ([i i] [ind 0])
+      (cond [(= ind len) (if (input-delimited? i) i #f)]
+            [(inull? i) #f]
+            [(char=? (icar i) (string-ref hstr ind))
+             (loop (icdr i) (+ ind 1))]
+            [else #f]))))
+
+(define (input-delimited-prefix-ci i hstr) ; => i after prefix or #f
+  ; (let ([i (input-prefix-chars i (string->list hstr) char-ci=?)])
+  ;   (and i (if (input-delimited? i) i #f))),
+  ; rewritten for speed
+  (let ([len (string-length hstr)])
+    (let loop ([i i] [ind 0])
+      (cond [(= ind len) (if (input-delimited? i) i #f)]
+            [(inull? i) #f]
+            [(char-ci=? (icar i) (string-ref hstr ind))
+             (loop (icdr i) (+ ind 1))]
+            [else #f]))))
+
+
+;------------------------------------------------------------------------------
+
+; main reader engine
+
+(define (subread i r return)
+  (let loop ([i i])
+    (r i r 
+      (lambda (d i) 
+        (cond [(eq? (datum-type d) 'atmosphere) (loop i)]
+              [(eq? (datum-type d) 'read-as)
+               (r-error i "invalid context for #!read")]
+              [(eq? (datum-type d) 'terminator)
+               (r-error i "unexpected terminator: ~a" (car (datum-components d)))]
+              [else (return d i)])))))
+
+(define (subread-to-terminator i r tc dotted? rdefs? kons knil return)
+  (let loop ([i i] [r r] [limit #f] [return return])
+    (r i r 
+      (lambda (d i) 
+        (cond [(eq? (datum-type d) 'atmosphere) (loop i r limit return)]
+              [(eq? (datum-type d) 'read-as)
+               (if (not rdefs?)
+                   (r-error i "invalid context for #!read")
+                   (loop i (extend-reader r d i) limit return))]
+              [(and (eq? (datum-type d) 'terminator) dotted? (char=? (car (datum-components d)) #\.))
+               (loop i r 1 return)] 
+              [(and (eq? (datum-type d) 'terminator) (char=? (car (datum-components d)) tc))
+               (if (or (not limit) (zero? limit))
+                   (return knil i)
+                   (r-error i "malformed dotted pair syntax"))]
+              [(eq? (datum-type d) 'terminator)
+               (r-error i "unexpected terminator: ~a (expected ~a)" 
+                 (car (datum-components d)) tc)]
+              [else ; d is normal datum
+               (loop i r (and limit (- limit 1))
+                 (lambda (d1 i1)
+                   (return (if (eqv? limit 1) d (kons d d1)) i1)))])))))
+
+(define (subread-pairs-to-terminator i r tc return)
+  (subread-to-terminator i r tc #t #t 
+    (lambda (d1 d2) (datum 'pair d1 d2)) (datum 'null) return))
+
+(define (subread-top i r return)
+  (let loop ([i i] [r r])
+    (r i r 
+      (lambda (d i) 
+        (cond [(eq? (datum-type d) 'atmosphere) (loop i r)]
+              [(eq? (datum-type d) 'read-as) (loop i (extend-reader r d i))]
+              [(eq? (datum-type d) 'terminator)
+               (r-error i "unexpected terminator: ~a" (car (datum-components d)))]
+              [else (return d i r)])))))
+
+;(define (print-rep-table)
+;  (printf "~%(")
+;  (let nextr ([rl '(16 10 8 2)])
+;    (cond
+;      [(pair? rl)
+;       (printf "~%  (~d" (car rl))
+;       (let loop ([rb 8])
+;         (let ([rb-least (- (expt 2 (- rb 1)))]
+;               [rb-grtst (- (expt 2 (- rb 1)) 1)])
+;           (printf "~%    (~d \"~a\" \"~a\")" rb
+;             (number->string (- rb-least) (car rl)) 
+;             (number->string rb-grtst (car rl)))
+;           (if (< rb 64) (loop (+ rb 8)))))
+;       (printf ")")
+;       (nextr (cdr rl))]
+;      [else (printf "~%)~%")])))
+
+(define integer-representation-table
+'((16
+    (8 "80" "7f")
+    (16 "8000" "7fff")
+    (24 "800000" "7fffff")
+    (32 "80000000" "7fffffff")
+    (40 "8000000000" "7fffffffff")
+    (48 "800000000000" "7fffffffffff")
+    (56 "80000000000000" "7fffffffffffff")
+    (64 "8000000000000000" "7fffffffffffffff"))
+  (10
+    (8 "128" "127")
+    (16 "32768" "32767")
+    (24 "8388608" "8388607")
+    (32 "2147483648" "2147483647")
+    (40 "549755813888" "549755813887")
+    (48 "140737488355328" "140737488355327")
+    (56 "36028797018963968" "36028797018963967")
+    (64 "9223372036854775808" "9223372036854775807"))
+  (8
+    (8 "200" "177")
+    (16 "100000" "77777")
+    (24 "40000000" "37777777")
+    (32 "20000000000" "17777777777")
+    (40 "10000000000000" "7777777777777")
+    (48 "4000000000000000" "3777777777777777")
+    (56 "2000000000000000000" "1777777777777777777")
+    (64 "1000000000000000000000" "777777777777777777777"))
+  (2
+    (8 "10000000" "1111111")
+    (16 "1000000000000000" "111111111111111")
+    (24 "100000000000000000000000" "11111111111111111111111")
+    (32 "10000000000000000000000000000000" "1111111111111111111111111111111")
+    (40 "1000000000000000000000000000000000000000" "111111111111111111111111111111111111111")
+    (48 "100000000000000000000000000000000000000000000000" "11111111111111111111111111111111111111111111111")
+    (56 "10000000000000000000000000000000000000000000000000000000" "1111111111111111111111111111111111111111111111111111111")
+    (64 "1000000000000000000000000000000000000000000000000000000000000000" "111111111111111111111111111111111111111111111111111111111111111"))))
+
+(define (integer-representation-width sign s radix)
+  (define (s<? s1 s2)
+    (let ([l1 (string-length s1)] [l2 (string-length s2)])
+      (cond [(< l1 l2) #t] [(> l1 l2) #f] [else (string<? s1 s2)])))
+  (let loop ([st (cdr (assq radix integer-representation-table))])
+    (cond [(null? st) 'big]
+          [(and (eq? sign '-) (s<? s (cadar st))) (caar st)]
+          [(and (eq? sign '+) (s<? s (caddar st))) (caar st)]
+          [else (loop (cdr st))])))
+    
+(define (subread-number i exactness radix return)
+  (define (integer-datum sign digits)
+    (if (null? digits)
+        (r-error i "no digits in integer representation")
+        (let loop ([dd (reverse digits)])
+          (if (and (pair? dd) (pair? (cdr dd)) (char=? (car dd) #\0))
+              (loop (cdr dd))
+              (let ([s (list->string dd)])
+                (datum 'integer (integer-representation-width sign s radix) 
+                   sign s radix))))))
+  (define (fraction-datum digits)
+    (if (null? digits)
+        (r-error i "no digits in decimal fraction representation")
+        (let loop ([dd digits])
+          (if (and (pair? dd) (pair? (cdr dd)) (char=? (car dd) #\0))
+              (loop (cdr dd))
+              (let ([s (list->string (reverse dd))])
+                (datum 'integer '? '? s '?))))))
+  (define (subread-uinteger i sign return)
+    (let loop ([i i] [digits '()])
+      (cond [(inull? i) (return (integer-datum sign digits) i)]
+            [(char-digit-value (icar i) radix)
+             => (lambda (n) (loop (icdr i) (cons (char-downcase (icar i)) digits)))]
+            [else (return (integer-datum sign digits) i)]))) 
+  (define (subread-decimal-fraction i return)
+    (let loop ([i i] [digits '()])
+      (cond [(inull? i) (return (fraction-datum digits) i)]
+            [(char-digit-value (icar i) 10)
+             => (lambda (n) (loop (icdr i) (cons (icar i) digits)))]
+            [else (return (fraction-datum digits) i)]))) 
+  (define (subread-integer i return)
+    (cond [(input-prefix i "+") => (lambda (i) (subread-uinteger i '+ return))]
+          [(input-prefix i "-") => (lambda (i) (subread-uinteger i '- return))]
+          [else (subread-uinteger i '+ return)]))
+  (define (subread-decimal-suffix d1 d2 i return)
+    (cond [(and (not (inull? i)) (char-exponent-marker? (icar i)))
+           (let ([rept (string->symbol (string (char-downcase (icar i))))])
+             (subread-integer (icdr i) 
+               (lambda (d3 i) (return (decimal-datum rept d1 d2 d3) i))))]
+          [else ; implicit exponent is + 0
+           (return (decimal-datum 'e d1 d2 (datum 'integer 8 '+ "0" 10)) i)])) 
+  (define (subread-decimal d1 i return)
+    (cond [(input-prefix i ".") 
+           => (lambda (i) 
+                (if (and (not (inull? i)) (char-numeric? (icar i)))
+                    (subread-decimal-fraction i 
+                      (lambda (d2 i) (subread-decimal-suffix d1 d2 i return)))
+                    (subread-decimal-suffix d1 (datum 'integer 8 '+ "0" 10) i return)))]
+          [(and (not (inull? i)) (char-exponent-marker? (icar i)))
+           (subread-decimal-suffix d1 (datum 'integer 8 '+ "0" 10) i return)]))
+  (define (subread-real i return)
+    (subread-integer i
+      (lambda (d1 i)
+        (cond [(input-prefix i "/")
+               => (lambda (i) (subread-uinteger i '+ ; no sign expected after /
+                     (lambda (d2 i) (return (datum 'ratio d1 d2) i))))]
+              [(and (= radix 10) (not (inull? i)) (char-exponent-marker? (icar i))) 
+               (subread-decimal d1 i return)]
+              [(and (= radix 10) (input-prefix i ".")) 
+               (subread-decimal d1 i return)]
+              [else (return d1 i)]))))
+  (define (subread-real-naninf i return)
+    (cond [(input-delimited-prefix i "-nan.0") => (lambda (i) (return (datum 'nan '-) i))]
+          [(input-delimited-prefix i "+nan.0") => (lambda (i) (return (datum 'nan '+) i))]
+          [(input-delimited-prefix i "-inf.0") => (lambda (i) (return (datum 'inf '-) i))]
+          [(input-delimited-prefix i "+inf.0") => (lambda (i) (return (datum 'inf '+) i))]
+          [(and (= radix 10) (input-prefix i ".")) 
+           (subread-decimal (datum 'integer 8 '+ "0" 10) i return)]
+          [else (subread-real i return)]))
+  (define (subread-complex i return)
+    (cond [(input-delimited-prefix i "+i")
+           => (lambda (i) 
+                (return (datum 'rectangular (datum 'integer 8 '- "1" 10) (datum 'integer 8 '+ "1" 10)) i))]
+          [(input-delimited-prefix i "-i")
+           => (lambda (i) 
+                (return (datum 'rectangular (datum 'integer 8 '+ "0" 10) (datum 'integer 8 '- "1" 10)) i))]
+          [else 
+           (subread-real-naninf i
+             (lambda (d1 i)
+               (cond [(input-prefix i "@") 
+                      => (lambda (i) (subread-real-naninf i 
+                            (lambda (d2 i) (return (datum 'polar d1 d2) i))))]
+                     [(input-prefix i "i") 
+                      => (lambda (i) (return (datum 'rectangular (datum 'integer 8 '+ "0" 10) d1) i))]
+                     [(or (input-prefix i "+") (input-prefix i "-"))
+                      (subread-real-naninf i 
+                        (lambda (d2 i) (return (datum 'rectangular d1 d2)
+                                          (input-skip-expected-prefix i "i"))))]
+                     [else (return d1 i)])))]))
+  (define (wrap d)
+    (if exactness (datum exactness d) d))
+  (subread-complex i
+    (lambda (d i)
+      (return (if exactness (datum exactness d) d) (input-check-delimited i)))))
+
+(define (subread-hex-value i return)
+  (let loop ([i i] [digits '()])
+    (cond [(and (not (inull? i)) (char-digit-value (icar i) 16))
+           => (lambda (n) (loop (icdr i) (cons (char-downcase (icar i)) digits)))]
+          [else
+           (if (null? digits)
+               (r-error i "no digits in hex sequence")
+               (let loop ([dd (reverse digits)])
+                 (if (and (pair? dd) (pair? (cdr dd)) (char=? (car dd) #\0))
+                     (loop (cdr dd))
+                     (let* ([s (list->string dd)] 
+                            [w (integer-representation-width '+ s 16)])
+                       (return w s i)))))])))
+(define (subread-hex-scalar-value i return)
+  (subread-hex-value i ;=>
+    (lambda (w s i)
+      (if (or (not (integer? w)) (> w 24))
+          (r-error i "character hex scalar value too large: ~a" s)
+          (return (string->number s 16) i)))))
+(define (subread-string-hex-escape i return)
+  (subread-hex-scalar-value i ;=>
+    (lambda (cp i)
+      (cond [(inull? i) (r-error i "unexpected eof in string \\x escape sequence")]
+            [(char=? (icar i) #\;) (return cp (icdr i))]
+            [else (r-error i "missing ; after string \\x escape sequence")])))) 
+(define (subread-string-escape i return) 
+  (if (inull? i) 
+      (r-error i "unexpected eof in string escape sequence")
+      (let ([c (icar i)] [i (icdr i)])
+        (cond [(char=? c #\\) (return (char->integer #\\) i)]  
+              [(char=? c #\") (return (char->integer #\") i)]  
+              [(char=? c #\a) (return 7 i)]
+              [(char=? c #\b) (return 8 i)]
+              [(char=? c #\t) (return 9 i)]
+              [(char=? c #\n) (return 10 i)]
+              [(char=? c #\v) (return 11 i)]
+              [(char=? c #\f) (return 12 i)]
+              [(char=? c #\r) (return 13 i)]
+              [(char=? c #\x) (subread-string-hex-escape i return)]
+              [else (r-error i "unsupported string escape sequence \\~a" c)]))))  
+(define (subread-string i return)
+  (let loop ([i (input-skip-expected-prefix i "\"")] [lst '()])
+    (cond [(inull? i) (r-error i "unexpected eof in string")]
+          [(char=? (icar i) #\") 
+           (let ([bits (fold-max 8 (map codepoint-byte-width lst))])
+             (if (and (eqv? bits 8) (andmap string-safe-codepoint? lst))
+                 (return (datum 'string (list->string (map integer->char (reverse lst)))) (icdr i))
+                 (return (make-datum 'string (cons bits (reverse lst))) (icdr i))))]
+          [(char=? (icar i) #\\) 
+           (subread-string-escape (icdr i) ;=>
+             (lambda (cp i) (loop i (cons cp lst))))]
+          [else (loop (icdr i) (cons (char->integer (icar i)) lst))])))
+
+(define (subread-char i return) 
+  (if (inull? i) 
+      (r-error i "unexpected eof in char syntax")
+      (if (input-delimited? (icdr i))
+          (let* ([cp (char->integer (icar i))] [bits (codepoint-byte-width cp)])
+            (if (and (eqv? bits 8) (string-safe-codepoint? cp))
+                (return (datum 'char (string (icar i))) (icdr i))
+                (return (datum 'char bits cp) (icdr i))))
+          (if (char=? (icar i) #\x)
+              (subread-hex-scalar-value (icdr i) ;=>
+                (lambda (cp i)
+                  (if (input-delimited? i)
+                      (let ([bits (codepoint-byte-width cp)])
+                        (if (and (eqv? bits 8) (string-safe-codepoint? cp))
+                            (return (datum 'char (string (integer->char cp))) i)
+                            (return (datum 'char bits cp) i)))
+                      (r-error i "no delimiter after hex char syntax"))))
+              (let loop ([i i] [lst '()])
+                (if (or (inull? i) (not (char-alphabetic? (icar i))))
+                    (if (not (input-delimited? i)) 
+                        (r-error i "no delimiter after char syntax")
+                        (let ([name (list->string (reverse lst))])
+                          (cond [(string=? name "") 
+                                 (r-error i "invalid char syntax (missing delimiter?)")]
+                                [(string=? name "space")     (return (datum 'char " ") i)]
+                                [(string=? name "alarm")     (return (datum 'char 8 7) i)]
+                                [(string=? name "backspace") (return (datum 'char 8 8) i)]
+                                [(string=? name "tab")       (return (datum 'char 8 9) i)]
+                                [(string=? name "newline")   (return (datum 'char 8 10) i)]
+                                [(string=? name "linefeed")  (return (datum 'char 8 10) i)]
+                                [(string=? name "vtab")      (return (datum 'char 8 11) i)]
+                                [(string=? name "page")      (return (datum 'char 8 12) i)]
+                                [(string=? name "return")    (return (datum 'char 8 13) i)]
+                                ; todo: support R^6RS #\xunicode syntax???
+                                [else (r-error i "invalid char syntax #\\~a" name)]))) 
+                  (loop (icdr i) (cons (icar i) lst))))))))
+    
+(define (initial-reader i r return)
+  (cond [(inull? i) 
+         (return (datum 'eof) i)]
+        [(char-whitespace? (icar i))
+         (let loop ([i (icdr i)])
+           (cond [(inull? i) (return (datum 'eof) i)]
+                 [(not (char-whitespace? (icar i))) (return (datum 'atmosphere) i)]
+                 [else (loop (icdr i))]))]
+        [(char=? (icar i) #\;)
+         (let loop ([i (icdr i)])
+           (cond [(inull? i) (return (datum 'eof) i)]
+                 [(char=? (icar i) #\newline) (return (datum 'atmosphere) (icdr i))]
+                 [else (loop (icdr i))]))]
+        [(char-initial? (icar i)) 
+         (let loop ([i (icdr i)] [lst (list (char->integer (icar i)))])
+           (if (or (inull? i) (not (char-subsequent? (icar i))))
+               (let ([bits (fold-max 8 (map codepoint-byte-width lst))])
+                 (if (and (eqv? bits 8) (andmap string-safe-codepoint? lst))
+                     (return (datum 'symbol (list->string (map integer->char (reverse lst)))) i)
+                     (return (make-datum 'symbol (cons bits (reverse lst))) i)))
+               (loop (icdr i) (cons (char->integer (icar i)) lst))))]
+        [(input-delimited-prefix i ".") => (lambda (i) (return (datum 'terminator #\.) i))]
+        [(input-delimited-prefix i "+")   => (lambda (i) (return (datum 'symbol "+") i))]
+        [(input-delimited-prefix i "-")   => (lambda (i) (return (datum 'symbol "-") i))]
+        [(input-delimited-prefix i "...") => (lambda (i) (return (datum 'symbol "...") i))]
+        [(input-delimited-prefix-ci i "#t")  => (lambda (i) (return (datum 'boolean 1) i))]
+        [(input-delimited-prefix-ci i "#f")  => (lambda (i) (return (datum 'boolean 0) i))]
+        [(input-prefix-ci i "#i#b")  => (lambda (i) (subread-number i 'inexact 2 return))]
+        [(input-prefix-ci i "#i#o")  => (lambda (i) (subread-number i 'inexact 8 return))]
+        [(input-prefix-ci i "#i#d")  => (lambda (i) (subread-number i 'inexact 10 return))]
+        [(input-prefix-ci i "#i#x")  => (lambda (i) (subread-number i 'inexact 16 return))]
+        [(input-prefix-ci i "#e#b")  => (lambda (i) (subread-number i 'exact 2 return))]
+        [(input-prefix-ci i "#e#o")  => (lambda (i) (subread-number i 'exact 8 return))]
+        [(input-prefix-ci i "#e#d")  => (lambda (i) (subread-number i 'exact 10 return))]
+        [(input-prefix-ci i "#e#x")  => (lambda (i) (subread-number i 'exact 16 return))]
+        [(input-prefix-ci i "#b#i")  => (lambda (i) (subread-number i 'inexact 2 return))]
+        [(input-prefix-ci i "#o#i")  => (lambda (i) (subread-number i 'inexact 8 return))]
+        [(input-prefix-ci i "#d#i")  => (lambda (i) (subread-number i 'inexact 10 return))]
+        [(input-prefix-ci i "#x#i")  => (lambda (i) (subread-number i 'inexact 16 return))]
+        [(input-prefix-ci i "#b#e")  => (lambda (i) (subread-number i 'exact 2 return))]
+        [(input-prefix-ci i "#o#e")  => (lambda (i) (subread-number i 'exact 8 return))]
+        [(input-prefix-ci i "#d#e")  => (lambda (i) (subread-number i 'exact 10 return))]
+        [(input-prefix-ci i "#x#e")  => (lambda (i) (subread-number i 'exact 16 return))]
+        [(input-prefix-ci i "#i")  => (lambda (i) (subread-number i 'inexact 10 return))]
+        [(input-prefix-ci i "#e")  => (lambda (i) (subread-number i 'exact 10 return))]
+        [(input-prefix-ci i "#b")  => (lambda (i) (subread-number i #f 2 return))]
+        [(input-prefix-ci i "#o")  => (lambda (i) (subread-number i #f 8 return))]
+        [(input-prefix-ci i "#d")  => (lambda (i) (subread-number i #f 10 return))]
+        [(input-prefix-ci i "#x")  => (lambda (i) (subread-number i #f 16 return))]
+        [(char-number-initial? (icar i)) (subread-number i #f 10 return)]
+        [(input-prefix i "#\\") => (lambda (i) (subread-char i return))]
+        [(char=? (icar i) #\") (subread-string i return)]
+        [(input-prefix i "'")
+         => (lambda (i) (subread i r (lambda (d i) 
+              (return (datum 'list (datum 'symbol "quote") d) i))))]
+        [(input-delimited-prefix i "#fload")
+         => (lambda (i) (subread i r (lambda (d i) 
+              (return (datum 'list (datum 'symbol "load") d) i))))]
+        [(input-delimited-prefix i "#read")
+         => (lambda (i) 
+               (let loop ([i i])
+                 (cond [(inull? i) (r-error i "unexpected eof after #read")]
+                       [(char=? (icar i) #\space) (loop (icdr i))]
+                       [(char=? (icar i) #\tab) (loop (icdr i))]
+                       [else (let loop ([i i] [lst '()])
+                               (cond [(inull? i) (r-error i "unexpected eof after #read")]
+                                     [(not (char-whitespace? (icar i)))
+                                      (loop (icdr i) (cons (icar i) lst))]
+                                     [else (let loop ([i i])
+                                             (cond [(inull? i) 
+                                                    (r-error i "unexpected eof after #read")]
+                                                   [(char=? (icar i) #\space) (loop (icdr i))]
+                                                   [(char=? (icar i) #\tab) (loop (icdr i))]
+                                                   [else
+                                                    (let ([i (input-skip-expected-prefix i "as")])
+                                                      (if (not (input-delimited? i))
+                                                          (r-error i "missing 'as' after #read")
+                                                          (subread i r 
+                                                            (lambda (d i) 
+                                                              (return 
+                                                                (datum 'read-as (reverse lst) d) 
+                                                                i)))))]))]))])))]
+        [(input-prefix i "#;")
+         => (lambda (i) (subread i r (lambda (d i) (return (datum 'atmosphere) i))))]
+        [(input-prefix i "#|")
+         => (lambda (i) 
+              (let loop ([i i] [return return]) ; inside a comment
+                (cond [(inull? i) 
+                       (r-error i "unexpected eof in #||# comment")]
+                      [(input-prefix i "|#") 
+                       => (lambda (i) (return (datum 'atmosphere) i))]
+                      [(input-prefix i "#|") 
+                       => (lambda (i) (loop i (lambda (a i) (loop i return))))]
+                      [else (loop (icdr i) return)])))]
+        [(char=? (icar i) #\)) (return (datum 'terminator #\)) (icdr i))]
+        [(char=? (icar i) #\]) (return (datum 'terminator #\]) (icdr i))]
+        [(char=? (icar i) #\}) (return (datum 'terminator #\}) (icdr i))]
+        [(char=? (icar i) #\() (subread-pairs-to-terminator (icdr i) r #\) return)]
+        [(char=? (icar i) #\[) (subread-pairs-to-terminator (icdr i) r #\] return)]
+        [(input-prefix i "#(")
+         => (lambda (i) (subread-to-terminator i r #\) #f #t cons '()
+                          (lambda (l i) (return (make-datum 'vector l) i))))]
+        [(input-prefix i "#&")
+         => (lambda (i) (subread i r (lambda (d i) 
+              (return (datum 'box d) i))))]
+        [(input-prefix i "#.(")
+         => (lambda (i) (subread-to-terminator i r #\) #t #f 
+                          (lambda (d1 d2) (datum 'pair d1 d2)) (datum 'null)
+                          (lambda (l i) (return (make-verbatim-datum i l) i))))]
+        [(input-prefix i "#")
+         => (lambda (i) (r-error i "unexpected character after #: ~a" (icar i)))] 
+        [else (r-error i "unexpected character: ~a" (icar i))]))
+
+; prefix of list returned by mem{q,v,ber}
+(define (mem-diff lst suffix)
+  (let loop ([lst lst] [prefix '()])
+    (if (eq? lst suffix)
+        (reverse prefix)
+        (loop (cdr lst) (cons (car lst) prefix)))))
+
+(define (reader-template-replace i templ-d sym psym var d)
+  (let loop ([td templ-d])
+    (cond
+      [(equal? td var) d]
+      [(eq? td psym) d] ; parsed inside #.(...)
+      [(eq? td sym) (datum->reader-sexp i d)] ; inside #.(...)
+      [(pair? td) (cons (loop (car td)) (loop (cdr td)))]
+      [else td])))  
+
+(define (param->reader sym i)
+  (case sym
+    [(<datum>) 
+     subread]
+    [(<list>) ; <datum> restricted to proper ()-lists 
+     (lambda (i r return)
+       (subread-to-terminator (input-skip-expected-prefix i "(") r #\)
+         #t #t ; proper list with no internal read-as definitions
+         (lambda (d1 d2) (datum 'pair d1 d2)) (datum 'null) return))]
+    [(<string>) ; <datum> restricted to ""-strings
+     (lambda (i r return) (subread-string i return))]
+    [else (r-error i "invalid parameter in #read: ~a" sym)]))
+    
+(define (param->prefix-reader pfx sym i)
+  (case sym
+    [(<datum>) 
+     (lambda (i) (input-prefix i pfx))]
+    [(<list>)
+     (lambda (i) 
+       (let ([i1 (input-prefix i pfx)])
+         (and i1 (not (null? i1)) (char=? (icar i1) #\() i1)))]
+    [(<string>) 
+     (lambda (i) 
+       (let ([i1 (input-prefix i pfx)])
+         (and i1 (not (null? i1)) (char=? (icar i1) #\") i1)))]
+    [else (r-error i "invalid parameter in #read: ~a" sym)]))
+
+
+; extends reader by processing #read-as datum
+(define (extend-reader reader read-as-datum i)
+  (let ([c* (cadr read-as-datum)] [templ-d (caddr read-as-datum)])
+    (cond
+      [(memv #\< c*) =>
+       (lambda (tail)
+         (let* ([pfx (list->string (mem-diff c* tail))]
+                [str (list->string tail)]
+                [sym (string->symbol str)]
+                [pr (param->reader sym i)]
+                [ip (param->prefix-reader pfx sym i)]
+                [psym (string->symbol (string-append "parsed-" str))]
+                [var (list 'symbol str)])
+           (lambda (i r return)
+             (cond
+               [(ip i)
+                => (lambda (i) (pr i r (lambda (d i) 
+                     (return (reader-template-replace i templ-d sym psym var d) i))))]
+               [else (reader i r return)]))))]
+      [else
+       (let ([pfx (list->string c*)])
+         (lambda (i r return)
+           (cond
+             [(input-delimited-prefix i pfx)
+              => (lambda (i) (return templ-d i))] 
+             [else (reader i r return)])))])))
+         
+
+;------------------------------------------------------------------------------
+
+; convert datum to S-expr of reader host environment
+; if conversion is impossible, wrap d as (lambda () d)
+
+(define-syntax letlist
+  (syntax-rules ()
+    [(_ l (a . d) . body) (let ([v (a . d)]) (letlist l v . body))]
+    [(_ () v . body) (let () . body)]
+    [(_ (x . r) v . body) (let ([x (car v)] [t (cdr v)]) (letlist r t . body))]
+    [(_ t v . body) (let ([t v]) . body)]))
+
+(define (codepoint-8bit? x)
+  (and (integer? x) (>= x 0) (<= x 255)))
+
+(define (datum->rhe-sexp d)
+  (define (sexp d)
+    (if (and (pair? d) (list? (cdr d)))
+        (let ([s (car d)] [l (length (cdr d))])
+          (cond 
+            [(and (eq? s 'eof) (= l 0))
+             (eof-object)]
+            [(and (eq? s 'null) (= l 0))
+             '()]
+            [(and (eq? s 'pair) (= l 2))
+             (cons (sexp (cadr d)) (sexp (caddr d)))]
+            [(eq? s 'list)
+             (map sexp (cdr d))]
+            [(and (eq? s 'boolean) (= l 1))
+             (sexp-boolean d)]
+            [(and (eq? s 'integer) (= l 4))
+             (sexp-integer d)]
+            [(and (eq? s 'string) (>= l 1))
+             (sexp-string d)]
+            [(and (eq? s 'char) (or (= l 1) (= l 2)))
+             (sexp-char d)]    
+            [(and (eq? s 'symbol) (>= l 1))
+             (sexp-symbol d)]
+            [(eq? s 'vector)
+             (list->vector (map sexp (cdr d)))]
+            [(and (eq? s 'box) (= l 1))
+             (box (sexp (cadr d)))]
+            [else (sexp-other d)]))
+        (sexp-other d)))   
+  (define (sexp-boolean d)
+    (letlist (_ b) d
+      (cond [(eqv? b 0) #f]
+            [(eqv? b 1) #t]
+            [else (sexp-other d)])))
+  (define (sexp-integer d)
+    (letlist (_ repw sign digs radix) d
+      (cond
+        [(and (memv repw '(8 16 24)) 
+           (string? digs) (integer? radix)
+           (string->number digs radix)) =>
+         (lambda (n) (* n (if (eq? sign '-) -1 1)))]
+        [else
+         (sexp-other d)])))
+  (define (sexp-string d)
+    (cond
+      [(and (string? (cadr d)) (null? (cddr d)))
+       (cadr d)]
+      [(and (eqv? (cadr d) 8) (andmap codepoint-8bit? (cddr d)))
+       (list->string (map integer->char (cddr d)))]
+      [else
+       (sexp-other d)]))
+  (define (sexp-char d)
+    (cond
+      [(and (string? (cadr d)) 
+         (= 1 (string-length (cadr d))) (null? (cddr d)))
+       (string-ref (cadr d) 0)]
+      [(and (eqv? (cadr d) 8) (pair? (cddr d)) 
+         (codepoint-8bit? (caddr d)))
+       (integer->char (caddr d))]
+      [else
+       (sexp-other d)]))
+  (define (sexp-symbol d)
+    (cond
+      [(and (string? (cadr d)) (null? (cddr d)))
+       (string->symbol (cadr d))]
+      [(and (eqv? (cadr d) 8) (andmap codepoint-8bit? (cddr d)))
+       (string->symbol (list->string (map integer->char (cddr d))))]
+      [else
+       (sexp-other d)]))
+  (define (sexp-other d)
+    (lambda () d))
+  (sexp d))  
+
+(define *current-reader* initial-reader)
+(define (current-reader) *current-reader*)
+(define (set-current-reader! fn) (set! *current-reader* fn))
+
+(define *current-sexp-converter* datum->rhe-sexp)
+(define (current-sexp-converter) *current-sexp-converter*)
+(define (set-current-sexp-converter! fn) (set! *current-sexp-converter* fn))
+
+
+(define (read/1 port)
+  (subread-top (make-input port) (current-reader)
+    (lambda (d i r)
+      (set-current-reader! r)
+      ((current-sexp-converter) d))))
 
 (define-syntax read
   (syntax-rules ()
     [(_) (read/1 (current-input-port))]
     [(_ p) (read/1 p)]))
+
 

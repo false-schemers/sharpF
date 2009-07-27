@@ -187,9 +187,8 @@ void *getnative(obj o, cxtype_t *tp) {
 (define-syntax %const
   (let-syntax ([old-%const %const])
     (syntax-rules (boolean)
-      [(_ boolean "0") (%prim "bool(0)")] 
-      [(_ boolean "1") (%prim "bool(1)")] 
-      [(_ arg ...) (old-%const arg ...)])))
+      [(_ boolean b) (%prim ("bool(" b ")"))] 
+      [(_ arg ...) (old-%const arg ...)]))) 
 
 
 ; 24-bit fixnums with inline ZERO? and binary versions of + - = >
@@ -208,13 +207,13 @@ void *getnative(obj o, cxtype_t *tp) {
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
-    (syntax-rules (exact-integer + -)
-      [(_ exact-integer 8 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 8 - n) (%prim ("fixnum(-" n ")"))] 
-      [(_ exact-integer 16 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 16 - n) (%prim ("fixnum(-" n ")"))]
-      [(_ exact-integer 24 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 24 - n) (%prim ("fixnum(-" n ")"))]
+    (syntax-rules (integer + -)
+      [(_ integer 8 + digs 10) (%prim ("fixnum(" digs ")"))] 
+      [(_ integer 16 + digs 10) (%prim ("fixnum(" digs ")"))] 
+      [(_ integer 24 + digs 10) (%prim ("fixnum(" digs ")"))] 
+      [(_ integer 8 - digs 10) (%prim ("fixnum(-" digs ")"))] 
+      [(_ integer 16 - digs 10) (%prim ("fixnum(-" digs ")"))] 
+      [(_ integer 24 - digs 10) (%prim ("fixnum(-" digs ")"))] 
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-syntax zero?
@@ -262,8 +261,11 @@ void *getnative(obj o, cxtype_t *tp) {
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
-    (syntax-rules (inexact-real)
-      [(_ inexact-real n) (%prim* ("flonum($live, " n ")"))] 
+    (syntax-rules (decimal e + -)
+      [(_ decimal e + idigs fdigs + edigs) (%prim* ("flonum($live, " idigs "." fdigs "e" edigs ")"))]
+      [(_ decimal e + idigs fdigs - edigs) (%prim* ("flonum($live, " idigs "." fdigs "e-" edigs ")"))]
+      [(_ decimal e - idigs fdigs + edigs) (%prim* ("flonum($live, -" idigs "." fdigs "e" edigs ")"))]
+      [(_ decimal e - idigs fdigs - edigs) (%prim* ("flonum($live, -" idigs "." fdigs "e-" edigs ")"))]
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-syntax fl+

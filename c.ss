@@ -83,6 +83,10 @@
 
 (define current-error-port current-output-port)
 
+(define eof-object
+  (let ([eof (read-char (open-input-string ""))])
+    (lambda () eof))) 
+
 (define (sfc . args)
   (main (cons "sfc-bootstrap" args)))
 

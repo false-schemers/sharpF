@@ -374,19 +374,19 @@ static obj cx_setdiffq_231214; /* constant setdiffq#1214 */
 /* let-exp?#88 */
 static obj cxs_let_2Dexp_3F_2388(obj v90_exp)
 { 
-  if (bool_from_obj((isvector((v90_exp))) ? (((vectorlen((v90_exp))) == (3)) ? obj_from_bool((vectorref((v90_exp), (0))) == (mksymbol(internsym("app-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
+  if (bool_from_obj((isvector((v90_exp))) ? (((vectorlen((v90_exp))) == (+3)) ? obj_from_bool((vectorref((v90_exp), (+0))) == (mksymbol(internsym("app-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
   { /* let */
-    obj v94_rator = (vectorref((v90_exp), (1)));
-  if (bool_from_obj((isvector((v94_rator))) ? (((vectorlen((v94_rator))) == (3)) ? obj_from_bool((vectorref((v94_rator), (0))) == (mksymbol(internsym("lambda-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
+    obj v94_rator = (vectorref((v90_exp), (+1)));
+  if (bool_from_obj((isvector((v94_rator))) ? (((vectorlen((v94_rator))) == (+3)) ? obj_from_bool((vectorref((v94_rator), (+0))) == (mksymbol(internsym("lambda-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
   { /* let */
     obj v1777_tmp;
     obj v1776_tmp;
     { /* length */
-    int n; obj l = (vectorref((v90_exp), (2)));
+    int n; obj l = (vectorref((v90_exp), (+2)));
     for (n = 0; l != mknull(); ++n, l = cdr(l)) ;
     v1777_tmp = obj_from_fixnum(n); };
     { /* length */
-    int n; obj l = (vectorref((v94_rator), (1)));
+    int n; obj l = (vectorref((v94_rator), (+1)));
     for (n = 0; l != mknull(); ++n, l = cdr(l)) ;
     v1776_tmp = obj_from_fixnum(n); };
     return obj_from_bool(fixnum_from_obj(v1776_tmp) == fixnum_from_obj(v1777_tmp));
@@ -403,17 +403,17 @@ static obj cxs_let_2Dexp_3F_2388(obj v90_exp)
 /* degenerate-let-exp->body#125 */
 static obj cxs_degenerate_2Dlet_2Dexp_2D_3Ebody_23125(obj v127_exp)
 { 
-    return ((isnull((vectorref((v127_exp), (2))))) ? (vectorref((vectorref((v127_exp), (1))), (2))) : (car((vectorref((v127_exp), (2))))));
+    return ((isnull((vectorref((v127_exp), (+2))))) ? (vectorref((vectorref((v127_exp), (+1))), (+2))) : (car((vectorref((v127_exp), (+2))))));
 }
 
 /* null-let-exp?#151 */
 static obj cxs_null_2Dlet_2Dexp_3F_23151(obj v153_exp)
 { 
-  if (bool_from_obj((isvector((v153_exp))) ? (((vectorlen((v153_exp))) == (3)) ? obj_from_bool((vectorref((v153_exp), (0))) == (mksymbol(internsym("app-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
-  if ((isnull((vectorref((v153_exp), (2)))))) {
+  if (bool_from_obj((isvector((v153_exp))) ? (((vectorlen((v153_exp))) == (+3)) ? obj_from_bool((vectorref((v153_exp), (+0))) == (mksymbol(internsym("app-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
+  if ((isnull((vectorref((v153_exp), (+2)))))) {
   { /* let */
-    obj v157_rator = (vectorref((v153_exp), (1)));
-    return (bool_from_obj((isvector((v157_rator))) ? (((vectorlen((v157_rator))) == (3)) ? obj_from_bool((vectorref((v157_rator), (0))) == (mksymbol(internsym("lambda-exp")))) : obj_from_bool(0)) : obj_from_bool(0)) ? obj_from_bool(isnull((vectorref((v157_rator), (1))))) : obj_from_bool(0));
+    obj v157_rator = (vectorref((v153_exp), (+1)));
+    return (bool_from_obj((isvector((v157_rator))) ? (((vectorlen((v157_rator))) == (+3)) ? obj_from_bool((vectorref((v157_rator), (+0))) == (mksymbol(internsym("lambda-exp")))) : obj_from_bool(0)) : obj_from_bool(0)) ? obj_from_bool(isnull((vectorref((v157_rator), (+1))))) : obj_from_bool(0));
   }
   } else {
     return obj_from_bool(0);
@@ -426,11 +426,11 @@ static obj cxs_null_2Dlet_2Dexp_3F_23151(obj v153_exp)
 /* identity-lambda-exp?#197 */
 static obj cxs_identity_2Dlambda_2Dexp_3F_23197(obj v199_exp)
 { 
-  if (bool_from_obj((isvector((v199_exp))) ? (((vectorlen((v199_exp))) == (3)) ? obj_from_bool((vectorref((v199_exp), (0))) == (mksymbol(internsym("lambda-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
+  if (bool_from_obj((isvector((v199_exp))) ? (((vectorlen((v199_exp))) == (+3)) ? obj_from_bool((vectorref((v199_exp), (+0))) == (mksymbol(internsym("lambda-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
   { /* let */
-    obj v206_body = (vectorref((v199_exp), (2)));
-    obj v207_ids = (vectorref((v199_exp), (1)));
-    return ((ispair((v207_ids))) ? ((isnull((cdr((v207_ids))))) ? (bool_from_obj((isvector((v206_body))) ? (((vectorlen((v206_body))) == (2)) ? obj_from_bool((vectorref((v206_body), (0))) == (mksymbol(internsym("var-exp")))) : obj_from_bool(0)) : obj_from_bool(0)) ? obj_from_bool((car((v207_ids))) == (vectorref((v206_body), (1)))) : obj_from_bool(0)) : obj_from_bool(0)) : obj_from_bool(0));
+    obj v206_body = (vectorref((v199_exp), (+2)));
+    obj v207_ids = (vectorref((v199_exp), (+1)));
+    return ((ispair((v207_ids))) ? ((isnull((cdr((v207_ids))))) ? (bool_from_obj((isvector((v206_body))) ? (((vectorlen((v206_body))) == (+2)) ? obj_from_bool((vectorref((v206_body), (+0))) == (mksymbol(internsym("var-exp")))) : obj_from_bool(0)) : obj_from_bool(0)) ? obj_from_bool((car((v207_ids))) == (vectorref((v206_body), (+1)))) : obj_from_bool(0)) : obj_from_bool(0)) : obj_from_bool(0));
   }
   } else {
     return obj_from_bool(0);
@@ -440,10 +440,10 @@ static obj cxs_identity_2Dlambda_2Dexp_3F_23197(obj v199_exp)
 /* identity-let-exp?#184 */
 static obj cxs_identity_2Dlet_2Dexp_3F_23184(obj v186_exp)
 { 
-  if (bool_from_obj((isvector((v186_exp))) ? (((vectorlen((v186_exp))) == (3)) ? obj_from_bool((vectorref((v186_exp), (0))) == (mksymbol(internsym("app-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
-  if (bool_from_obj(cxs_identity_2Dlambda_2Dexp_3F_23197((vectorref((v186_exp), (1)))))) {
+  if (bool_from_obj((isvector((v186_exp))) ? (((vectorlen((v186_exp))) == (+3)) ? obj_from_bool((vectorref((v186_exp), (+0))) == (mksymbol(internsym("app-exp")))) : obj_from_bool(0)) : obj_from_bool(0))) {
+  if (bool_from_obj(cxs_identity_2Dlambda_2Dexp_3F_23197((vectorref((v186_exp), (+1)))))) {
   { /* let */
-    obj v190_rands = (vectorref((v186_exp), (2)));
+    obj v190_rands = (vectorref((v186_exp), (+2)));
     return ((ispair((v190_rands))) ? obj_from_bool(isnull((cdr((v190_rands))))) : obj_from_bool(0));
   }
   } else {
@@ -466,7 +466,7 @@ static obj cxs_degenerate_2Dlet_2Dexp_3F_23148(obj v150_exp)
 /* void-exp?#879 */
 static obj cxs_void_2Dexp_3F_23879(obj v881_exp)
 { 
-    return (bool_from_obj((isvector((v881_exp))) ? (((vectorlen((v881_exp))) == (4)) ? obj_from_bool((vectorref((v881_exp), (0))) == (mksymbol(internsym("primapp-exp")))) : obj_from_bool(0)) : obj_from_bool(0)) ? obj_from_bool(isequal((vectorref((v881_exp), (2))), (cx__23882))) : obj_from_bool(0));
+    return (bool_from_obj((isvector((v881_exp))) ? (((vectorlen((v881_exp))) == (+4)) ? obj_from_bool((vectorref((v881_exp), (+0))) == (mksymbol(internsym("primapp-exp")))) : obj_from_bool(0)) : obj_from_bool(0)) ? obj_from_bool(isequal((vectorref((v881_exp), (+2))), (cx__23882))) : obj_from_bool(0));
 }
 
 /* gc roots */
@@ -843,10 +843,10 @@ case 1: /* begin-exp?#58 k exp */
     r += 1; /* shift reg. wnd */
 gs_begin_2Dexp_3F_2358: /* k exp */
   if (bool_from_obj(cxs_let_2Dexp_3F_2388((r[1])))) {
-    r[2] = (vectorref((r[1]), (1)));
-    r[2] = (vectorref((r[2]), (1)));
-    r[3] = (vectorref((r[1]), (1)));
-    r[3] = (vectorref((r[3]), (2)));
+    r[2] = (vectorref((r[1]), (+1)));
+    r[2] = (vectorref((r[2]), (+1)));
+    r[3] = (vectorref((r[1]), (+1)));
+    r[3] = (vectorref((r[3]), (+2)));
   if ((ispair((r[2])))) {
     r[4] = (cdr((r[2])));
     r[4] = obj_from_bool(isnull((r[4])));
@@ -913,8 +913,8 @@ case 3: /* curry-exp?#481 k exp */
     r += 1; /* shift reg. wnd */
 gs_curry_2Dexp_3F_23481: /* k exp */
   if ((isvector((r[1])))) {
-  if (((vectorlen((r[1]))) == (3))) {
-    r[2] = (vectorref((r[1]), (0)));
+  if (((vectorlen((r[1]))) == (+3))) {
+    r[2] = (vectorref((r[1]), (+0)));
     r[2] = obj_from_bool((r[2]) == (mksymbol(internsym("lambda-exp"))));
   } else {
     r[2] = obj_from_bool(0);
@@ -923,8 +923,8 @@ gs_curry_2Dexp_3F_23481: /* k exp */
     r[2] = obj_from_bool(0);
   }
   if (bool_from_obj(r[2])) {
-    r[2] = (vectorref((r[1]), (1)));
-    r[3] = (vectorref((r[1]), (2)));
+    r[2] = (vectorref((r[1]), (+1)));
+    r[3] = (vectorref((r[1]), (+2)));
     hreserve(hbsz(3+1), 4); /* 4 live regs */
     *--hp = r[3];  
     *--hp = r[0];  
@@ -959,7 +959,7 @@ case 4: /* clo ek r */
     r += 1; /* shift reg. wnd */
     /* ek r ids k body */
   if (bool_from_obj(r[1])) {
-    r[5] = (vectorref((r[4]), (2)));
+    r[5] = (vectorref((r[4]), (+2)));
     r[0] = r[3];  
     r[1] = r[2];  
     r[2] = r[5];  
@@ -988,8 +988,8 @@ s_loop: /* k ids rands */
   if ((ispair((r[2])))) {
     r[3] = (car((r[2])));
   if ((isvector((r[3])))) {
-  if (((vectorlen((r[3]))) == (2))) {
-    r[4] = (vectorref((r[3]), (0)));
+  if (((vectorlen((r[3]))) == (+2))) {
+    r[4] = (vectorref((r[3]), (+0)));
     r[3] = obj_from_bool((r[4]) == (mksymbol(internsym("var-exp"))));
   } else {
     r[3] = obj_from_bool(0);
@@ -999,7 +999,7 @@ s_loop: /* k ids rands */
   }
   if (bool_from_obj(r[3])) {
     r[3] = (car((r[2])));
-    r[3] = (vectorref((r[3]), (1)));
+    r[3] = (vectorref((r[3]), (+1)));
     r[4] = (car((r[1])));
     r[3] = obj_from_bool((r[3]) == (r[4]));
   if (bool_from_obj(r[3])) {
@@ -1432,8 +1432,8 @@ gs_source: /* k exp */
     goto jump;
   } else {
   if ((isvector((r[1])))) {
-  if (((vectorlen((r[1]))) == (2))) {
-    r[2] = (vectorref((r[1]), (0)));
+  if (((vectorlen((r[1]))) == (+2))) {
+    r[2] = (vectorref((r[1]), (+0)));
     r[2] = obj_from_bool((r[2]) == (mksymbol(internsym("var-exp"))));
   } else {
     r[2] = obj_from_bool(0);
@@ -1442,7 +1442,7 @@ gs_source: /* k exp */
     r[2] = obj_from_bool(0);
   }
   if (bool_from_obj(r[2])) {
-    r[2] = (vectorref((r[1]), (1)));
+    r[2] = (vectorref((r[1]), (+1)));
     r[3+0] = (cx_id_2D_3Euname);
     pc = objptr_from_obj(r[3+0])[0];
     r[3+1] = r[0];  
@@ -1453,8 +1453,8 @@ gs_source: /* k exp */
     goto jump;
   } else {
   if ((isvector((r[1])))) {
-  if (((vectorlen((r[1]))) == (3))) {
-    r[2] = (vectorref((r[1]), (0)));
+  if (((vectorlen((r[1]))) == (+3))) {
+    r[2] = (vectorref((r[1]), (+0)));
     r[2] = obj_from_bool((r[2]) == (mksymbol(internsym("varassign-exp"))));
   } else {
     r[2] = obj_from_bool(0);
@@ -1463,8 +1463,8 @@ gs_source: /* k exp */
     r[2] = obj_from_bool(0);
   }
   if (bool_from_obj(r[2])) {
-    r[2] = (vectorref((r[1]), (1)));
-    r[3] = (vectorref((r[1]), (2)));
+    r[2] = (vectorref((r[1]), (+1)));
+    r[3] = (vectorref((r[1]), (+2)));
     hreserve(hbsz(2+1), 4); /* 4 live regs */
     *--hp = r[0];  
     *--hp = r[2];  
@@ -1475,8 +1475,8 @@ gs_source: /* k exp */
     goto gs_source;
   } else {
   if ((isvector((r[1])))) {
-  if (((vectorlen((r[1]))) == (4))) {
-    r[2] = (vectorref((r[1]), (0)));
+  if (((vectorlen((r[1]))) == (+4))) {
+    r[2] = (vectorref((r[1]), (+0)));
     r[2] = obj_from_bool((r[2]) == (mksymbol(internsym("if-exp"))));
   } else {
     r[2] = obj_from_bool(0);
@@ -1485,9 +1485,9 @@ gs_source: /* k exp */
     r[2] = obj_from_bool(0);
   }
   if (bool_from_obj(r[2])) {
-    r[2] = (vectorref((r[1]), (1)));
-    r[3] = (vectorref((r[1]), (2)));
-    r[4] = (vectorref((r[1]), (3)));
+    r[2] = (vectorref((r[1]), (+1)));
+    r[3] = (vectorref((r[1]), (+2)));
+    r[4] = (vectorref((r[1]), (+3)));
     hreserve(hbsz(3+1), 5); /* 5 live regs */
     *--hp = r[0];  
     *--hp = r[2];  
@@ -1662,17 +1662,17 @@ case 27: /* clo ek r */
     r += 1; /* shift reg. wnd */
     /* ek r source-body k exp */
   if (bool_from_obj(r[1])) {
-    r[5] = (vectorref((r[4]), (1)));
-    r[5] = (vectorref((r[5]), (1)));
-    r[6] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[6]), (2)));
-    r[7] = (vectorref((r[6]), (2)));
+    r[5] = (vectorref((r[4]), (+1)));
+    r[5] = (vectorref((r[5]), (+1)));
+    r[6] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[6]), (+2)));
+    r[7] = (vectorref((r[6]), (+2)));
     r[6] = (car((r[7])));
-    r[6] = (vectorref((r[6]), (2)));
-    r[7] = (vectorref((r[4]), (1)));
-    r[7] = (vectorref((r[7]), (2)));
-    r[8] = (vectorref((r[7]), (1)));
-    r[7] = (vectorref((r[8]), (2)));
+    r[6] = (vectorref((r[6]), (+2)));
+    r[7] = (vectorref((r[4]), (+1)));
+    r[7] = (vectorref((r[7]), (+2)));
+    r[8] = (vectorref((r[7]), (+1)));
+    r[7] = (vectorref((r[8]), (+2)));
     hreserve(hbsz(3+1), 8); /* 8 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -1911,8 +1911,8 @@ case 35: /* clo ek r */
     r[1+5] = p[4]; }
     r += 1; /* shift reg. wnd */
     /* ek r source-body r k exp */
-    r[6] = (vectorref((r[5]), (1)));
-    r[6] = (vectorref((r[6]), (1)));
+    r[6] = (vectorref((r[5]), (+1)));
+    r[6] = (vectorref((r[6]), (+1)));
     hreserve(hbsz(3+1), 7); /* 7 live regs */
     *--hp = r[4];  
     *--hp = r[6];  
@@ -2079,10 +2079,10 @@ case 41: /* clo ek r */
     r += 1; /* shift reg. wnd */
     /* ek r source-body k exp */
   if (bool_from_obj(r[1])) {
-    r[5] = (vectorref((r[4]), (2)));
+    r[5] = (vectorref((r[4]), (+2)));
     r[5] = (car((r[5])));
-    r[6] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[6]), (2)));
+    r[6] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[6]), (+2)));
     hreserve(hbsz(2+1), 7); /* 7 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -2097,11 +2097,11 @@ case 41: /* clo ek r */
     goto jump;
   } else {
   if (bool_from_obj(cxs_let_2Dexp_3F_2388((r[4])))) {
-    r[5] = (vectorref((r[4]), (1)));
-    r[5] = (vectorref((r[5]), (1)));
-    r[6] = (vectorref((r[4]), (2)));
-    r[7] = (vectorref((r[4]), (1)));
-    r[7] = (vectorref((r[7]), (2)));
+    r[5] = (vectorref((r[4]), (+1)));
+    r[5] = (vectorref((r[5]), (+1)));
+    r[6] = (vectorref((r[4]), (+2)));
+    r[7] = (vectorref((r[4]), (+1)));
+    r[7] = (vectorref((r[7]), (+2)));
     hreserve(hbsz(3+1), 8); /* 8 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -2117,8 +2117,8 @@ case 41: /* clo ek r */
     goto jump;
   } else {
   if ((isvector((r[4])))) {
-  if (((vectorlen((r[4]))) == (4))) {
-    r[5] = (vectorref((r[4]), (0)));
+  if (((vectorlen((r[4]))) == (+4))) {
+    r[5] = (vectorref((r[4]), (+0)));
     r[5] = obj_from_bool((r[5]) == (mksymbol(internsym("fix-exp"))));
   } else {
     r[5] = obj_from_bool(0);
@@ -2127,9 +2127,9 @@ case 41: /* clo ek r */
     r[5] = obj_from_bool(0);
   }
   if (bool_from_obj(r[5])) {
-    r[5] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[4]), (2)));
-    r[7] = (vectorref((r[4]), (3)));
+    r[5] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[4]), (+2)));
+    r[7] = (vectorref((r[4]), (+3)));
     hreserve(hbsz(4+1), 8); /* 8 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -2146,8 +2146,8 @@ case 41: /* clo ek r */
     goto jump;
   } else {
   if ((isvector((r[4])))) {
-  if (((vectorlen((r[4]))) == (3))) {
-    r[5] = (vectorref((r[4]), (0)));
+  if (((vectorlen((r[4]))) == (+3))) {
+    r[5] = (vectorref((r[4]), (+0)));
     r[5] = obj_from_bool((r[5]) == (mksymbol(internsym("app-exp"))));
   } else {
     r[5] = obj_from_bool(0);
@@ -2156,8 +2156,8 @@ case 41: /* clo ek r */
     r[5] = obj_from_bool(0);
   }
   if (bool_from_obj(r[5])) {
-    r[5] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[4]), (2)));
+    r[5] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[4]), (+2)));
     hreserve(hbsz(2+1), 7); /* 7 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -2430,8 +2430,8 @@ case 50: /* clo ek r */
     *--hp = obj_from_case(51);
     r[8] = (hendblk(2+1));
   if ((isvector((r[7])))) {
-  if (((vectorlen((r[7]))) == (3))) {
-    r[9] = (vectorref((r[7]), (0)));
+  if (((vectorlen((r[7]))) == (+3))) {
+    r[9] = (vectorref((r[7]), (+0)));
     r[9] = obj_from_bool((r[9]) == (mksymbol(internsym("lambda-exp"))));
   } else {
     r[9] = obj_from_bool(0);
@@ -2440,8 +2440,8 @@ case 50: /* clo ek r */
     r[9] = obj_from_bool(0);
   }
   if (bool_from_obj(r[9])) {
-    r[9] = (vectorref((r[7]), (1)));
-    r[10] = (vectorref((r[7]), (2)));
+    r[9] = (vectorref((r[7]), (+1)));
+    r[10] = (vectorref((r[7]), (+2)));
     hreserve(hbsz(3+1), 11); /* 11 live regs */
     *--hp = r[8];  
     *--hp = r[6];  
@@ -2838,14 +2838,14 @@ case 64: /* clo ek r */
     r += 1; /* shift reg. wnd */
     /* ek r source-body k exp */
   if (bool_from_obj(r[1])) {
-    r[5] = (vectorref((r[4]), (2)));
-    r[5] = (vectorref((r[5]), (1)));
-    r[5] = (vectorref((r[5]), (1)));
-    r[6] = (vectorref((r[4]), (1)));
+    r[5] = (vectorref((r[4]), (+2)));
+    r[5] = (vectorref((r[5]), (+1)));
+    r[5] = (vectorref((r[5]), (+1)));
+    r[6] = (vectorref((r[4]), (+1)));
     { fixnum_t v4576_tmp;
-    r[7] = (vectorref((r[4]), (2)));
-    r[7] = (vectorref((r[7]), (2)));
-    r[8] = (vectorref((r[4]), (1)));
+    r[7] = (vectorref((r[4]), (+2)));
+    r[7] = (vectorref((r[7]), (+2)));
+    r[8] = (vectorref((r[4]), (+1)));
     { /* length */
     int n; obj l = r[8];  
     for (n = 0; l != mknull(); ++n, l = cdr(l)) ;
@@ -2865,8 +2865,8 @@ case 64: /* clo ek r */
     goto s_loop_v4125;
   } else {
   if ((isvector((r[4])))) {
-  if (((vectorlen((r[4]))) == (3))) {
-    r[5] = (vectorref((r[4]), (0)));
+  if (((vectorlen((r[4]))) == (+3))) {
+    r[5] = (vectorref((r[4]), (+0)));
     r[5] = obj_from_bool((r[5]) == (mksymbol(internsym("lambda-exp"))));
   } else {
     r[5] = obj_from_bool(0);
@@ -2875,8 +2875,8 @@ case 64: /* clo ek r */
     r[5] = obj_from_bool(0);
   }
   if (bool_from_obj(r[5])) {
-    r[5] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[4]), (2)));
+    r[5] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[4]), (+2)));
     hreserve(hbsz(2+1), 7); /* 7 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -3212,7 +3212,7 @@ case 76: /* clo ek r */
     r += 1; /* shift reg. wnd */
     /* ek r source-body k exp */
   if (bool_from_obj(r[1])) {
-    r[5] = (vectorref((r[4]), (3)));
+    r[5] = (vectorref((r[4]), (+3)));
     r[5] = (car((r[5])));
     hreserve(hbsz(1+1), 6); /* 6 live regs */
     *--hp = r[3];  
@@ -3272,7 +3272,7 @@ case 78: /* clo ek r */
     r += 1; /* shift reg. wnd */
     /* ek r source-body k exp */
   if (bool_from_obj(r[1])) {
-    r[5] = (vectorref((r[4]), (3)));
+    r[5] = (vectorref((r[4]), (+3)));
     r[5] = (car((r[5])));
     hreserve(hbsz(1+1), 6); /* 6 live regs */
     *--hp = r[3];  
@@ -3332,9 +3332,9 @@ case 80: /* clo ek r */
     r += 1; /* shift reg. wnd */
     /* ek r source-body k exp */
   if (bool_from_obj(r[1])) {
-    r[5] = (vectorref((r[4]), (3)));
+    r[5] = (vectorref((r[4]), (+3)));
     r[5] = (car((r[5])));
-    r[6] = (vectorref((r[4]), (3)));
+    r[6] = (vectorref((r[4]), (+3)));
     r[7] = (cdr((r[6])));
     r[6] = (car((r[7])));
     hreserve(hbsz(2+1), 7); /* 7 live regs */
@@ -3347,8 +3347,8 @@ case 80: /* clo ek r */
     goto gs_source;
   } else {
   if ((isvector((r[4])))) {
-  if (((vectorlen((r[4]))) == (4))) {
-    r[5] = (vectorref((r[4]), (0)));
+  if (((vectorlen((r[4]))) == (+4))) {
+    r[5] = (vectorref((r[4]), (+0)));
     r[5] = obj_from_bool((r[5]) == (mksymbol(internsym("primapp-exp"))));
   } else {
     r[5] = obj_from_bool(0);
@@ -3357,9 +3357,9 @@ case 80: /* clo ek r */
     r[5] = obj_from_bool(0);
   }
   if (bool_from_obj(r[5])) {
-    r[5] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[4]), (2)));
-    r[7] = (vectorref((r[4]), (3)));
+    r[5] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[4]), (+2)));
+    r[7] = (vectorref((r[4]), (+3)));
     hreserve(hbsz(3+1), 8); /* 8 live regs */
     *--hp = r[5];  
     *--hp = r[6];  
@@ -3371,8 +3371,8 @@ case 80: /* clo ek r */
     goto s_loop_v4008;
   } else {
   if ((isvector((r[4])))) {
-  if (((vectorlen((r[4]))) == (3))) {
-    r[5] = (vectorref((r[4]), (0)));
+  if (((vectorlen((r[4]))) == (+3))) {
+    r[5] = (vectorref((r[4]), (+0)));
     r[5] = obj_from_bool((r[5]) == (mksymbol(internsym("letcc-exp"))));
   } else {
     r[5] = obj_from_bool(0);
@@ -3381,8 +3381,8 @@ case 80: /* clo ek r */
     r[5] = obj_from_bool(0);
   }
   if (bool_from_obj(r[5])) {
-    r[5] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[4]), (2)));
+    r[5] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[4]), (+2)));
     hreserve(hbsz(2+1), 7); /* 7 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -3397,8 +3397,8 @@ case 80: /* clo ek r */
     goto jump;
   } else {
   if ((isvector((r[4])))) {
-  if (((vectorlen((r[4]))) == (3))) {
-    r[5] = (vectorref((r[4]), (0)));
+  if (((vectorlen((r[4]))) == (+3))) {
+    r[5] = (vectorref((r[4]), (+0)));
     r[5] = obj_from_bool((r[5]) == (mksymbol(internsym("withcc-exp"))));
   } else {
     r[5] = obj_from_bool(0);
@@ -3407,8 +3407,8 @@ case 80: /* clo ek r */
     r[5] = obj_from_bool(0);
   }
   if (bool_from_obj(r[5])) {
-    r[5] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[4]), (2)));
+    r[5] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[4]), (+2)));
     hreserve(hbsz(2+1), 7); /* 7 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -3699,10 +3699,10 @@ case 91: /* clo ek r */
     r += 1; /* shift reg. wnd */
     /* ek r source-body k exp */
   if (bool_from_obj(r[1])) {
-    r[5] = (vectorref((r[4]), (2)));
+    r[5] = (vectorref((r[4]), (+2)));
     r[5] = (car((r[5])));
-    r[6] = (vectorref((r[4]), (1)));
-    r[6] = (vectorref((r[6]), (2)));
+    r[6] = (vectorref((r[4]), (+1)));
+    r[6] = (vectorref((r[6]), (+2)));
     hreserve(hbsz(2+1), 7); /* 7 live regs */
     *--hp = r[3];  
     *--hp = r[5];  
@@ -7354,11 +7354,11 @@ gs_display_2Dmodule: /* k specs incs defs sfcs module-code */
     r[9] = (cdr((r[9])));
     r[9] = (car((r[9])));
     { /* list-ref */
-    obj l = r[5];   int c = (4);
+    obj l = r[5];   int c = (+4);
     while (c-- > 0) l = cdr(l);
     r[10] = (car(l)); }
     { /* list-ref */
-    obj l = r[5];   int c = (5);
+    obj l = r[5];   int c = (+5);
     while (c-- > 0) l = cdr(l);
     r[11] = (car(l)); }
     hreserve(hbsz(0+1), 12); /* 12 live regs */

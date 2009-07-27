@@ -12,7 +12,6 @@
 #include <stdlib.h>
 #include <assert.h>
 /* extra includes */
-#include <ctype.h>
 #include <string.h>
 
 /* standard definitions */

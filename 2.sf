@@ -85,7 +85,7 @@
                [(< rb 24) (loop (+ rb 8) (+ (* rb-max 256) 255))]
                [else #f]))))
 
-(define (integer-representation-width x)
+(define (signed-representation-width x)
   (let loop ([rb 8] [rb-min -128] [rb-max 127])
     (cond [(<= rb-min x rb-max) rb]
           [(< rb 24) (loop (+ rb 8) (* rb-min 256) (+ (* rb-max 256) 255) )]
@@ -94,7 +94,7 @@
 (define (char-safe? c)
   (and (char<=? c #\~) (char>=? c #\space)
        (not (char=? c #\\)) (not (char=? c #\"))
-       (not (char=? c #\$))))
+       (not (char=? c #\')) (not (char=? c #\$))))
 
 (define (fold-max base lst)
   (if (null? lst) base
@@ -120,10 +120,12 @@
      (list* '%const 'vector
        (map decompose-literal (vector->list x)))]
     [(char? x)
-     (let ([x (char->integer x)])
-       (list '%const 'char
-         (unsigned-representation-width x)
-         (number->string x)))]
+     (if (char-safe? x)
+         (list '%const 'char (string x))
+         (let ([x (char->integer x)])
+           (list '%const 'char
+             (unsigned-representation-width x)
+             (number->string x))))]
     [(string? x)
      (let* ([c* (string->list x)] [l (map char->integer c*)])
        (if (andmap char-safe? c*)
@@ -140,33 +142,16 @@
              (map number->string l))))]
     [(boolean? x)
      (list '%const 'boolean (if x "1" "0"))]
-    [(and (integer? x) (exact? x))
-     (list '%const 'exact-integer
-       (integer-representation-width x)
+    [(fixnum? x)
+     (list '%const 'integer
+       (signed-representation-width x)
        (if (negative? x) '- '+) 
-       (number->string (abs x)))]
-    [(and (real? x) (inexact? x))
-     (list '%const 'inexact-real
-       (number->string x))]
-    ;[(and (rational? x) (exact? x))
-    ; (list '%const 'exact-rational
-    ;   (if (negative? x) '- '+) 
-    ;   (number->string (numerator (abs x)))
-    ;   (number->string (denominator (abs x))))]
-    ;[(and (complex? x) (exact? x) 
-    ;  (rational? (real-part x)) (rational? (imag-part x)))
-    ; (list '%const 'exact-complex
-    ;   (if (negative? (real-part x)) '- '+) 
-    ;   (number->string (numerator (abs (real-part x))))
-    ;   (number->string (denominator (abs (real-part x))))
-    ;   (if (negative? (imag-part x)) '- '+) 
-    ;   (number->string (numerator (abs (imag-part x))))
-    ;   (number->string (denominator (abs (imag-part x)))))]
-    ;[(and (complex? x) (inexact? x) 
-    ;  (inexact? (real-part x)) (inexact? (imag-part x)))
-    ; (list '%const 'inexact-complex
-    ;   (number->string (real-part x))
-    ;   (number->string (imag-part x)))]
+       (number->string (abs x))
+       10)]
+    [(flonum? x)
+     (list '%const 'decimal 'e (number->string x))]
+    [(procedure? x) ; wrapped 'micro-syntax'
+     (cons '%const (x))]
     [else (x-error "unsupported literal: " x)]))
 
 
@@ -490,7 +475,8 @@
        id-n env store loc-n #f
        (and ek handle-combination) handle-syntax-use
        #f #f)]
-    [(or (number? sexp) (boolean? sexp) (string? sexp) (char? sexp))
+    [(or (number? sexp) (boolean? sexp) (string? sexp) (char? sexp)
+         (procedure? sexp)) ; wrapped 'micro-syntax'
      ;((get-ek sexp) sexp)
      ;(expand-any (decompose-literal sexp) 
      ;   id-n env store loc-n lsd? ek sk dk bk)
@@ -500,7 +486,7 @@
     [else
      (x-error (cond [(pair? sexp) "improper list: "]
                     [(vector? sexp) "vector: "]
-                    [else "non-s-expression: "])
+                    [else "unexpected type of s-expression: "])
        sexp " used as an expression, syntax, or definition.")]))
 
 (define (expand-val sexp id-n env store loc-n k)

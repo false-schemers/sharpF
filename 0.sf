@@ -367,8 +367,7 @@ void *getnative(obj o, cxtype_t *tp) {
 (define-syntax %const
   (let-syntax ([old-%const %const])
     (syntax-rules (boolean)
-      [(_ boolean "0") (%prim "bool(0)")] 
-      [(_ boolean "1") (%prim "bool(1)")] 
+      [(_ boolean b) (%prim ("bool(" b ")"))] 
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-inline (boolean? x)
@@ -393,16 +392,18 @@ void *getnative(obj o, cxtype_t *tp) {
 (%definition "#define FIXNUM_MIN -8388608")
 (%definition "#define FIXNUM_MAX 8388607")
 
-
 (define-syntax %const
   (let-syntax ([old-%const %const])
-    (syntax-rules (exact-integer + -)
-      [(_ exact-integer 8 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 8 - n) (%prim ("fixnum(-" n ")"))] 
-      [(_ exact-integer 16 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 16 - n) (%prim ("fixnum(-" n ")"))]
-      [(_ exact-integer 24 + n) (%prim ("fixnum(" n ")"))] 
-      [(_ exact-integer 24 - n) (%prim ("fixnum(-" n ")"))]
+    (syntax-rules (integer +)
+      [(_ integer 8 + digs 8) (%prim ("fixnum(" "0" digs ")"))] 
+      [(_ integer 16 + digs 8) (%prim ("fixnum(" "0" digs ")"))] 
+      [(_ integer 24 + digs 8) (%prim ("fixnum(" "0" digs ")"))] 
+      [(_ integer 8 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
+      [(_ integer 16 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
+      [(_ integer 24 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
+      [(_ integer 8 + digs 16) (%prim ("fixnum(" "0x" digs ")"))] 
+      [(_ integer 16 + digs 16) (%prim ("fixnum(" "0x" digs ")"))] 
+      [(_ integer 24 + digs 16) (%prim ("fixnum(" "0x" digs ")"))] 
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-inline (fixnum? x)
@@ -562,8 +563,12 @@ void *getnative(obj o, cxtype_t *tp) {
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
-    (syntax-rules (inexact-real)
-      [(_ inexact-real n) (%prim* ("flonum($live, " n ")"))] 
+    (syntax-rules (decimal e)
+      [(_ decimal e str) 
+       (%prim* ("flonum($live, " str ")"))]
+      [(_ decimal e ms indigs frdigs es exdigs) 
+       (%prim* ("flonum($live, " #&(id->string ms) 
+         indigs "." frdigs "e" #&(id->string es) exdigs ")"))]
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-inline (flonum? x)
@@ -818,7 +823,8 @@ void *getnative(obj o, cxtype_t *tp) {
 (define-syntax %const
   (let-syntax ([old-%const %const])
     (syntax-rules (char)
-      [(_ char 8 c) (%prim ("char(" c ")"))] 
+      [(_ char 8 c) (%prim ("char(" c ")"))]
+      [(_ char cs) (%prim ("char('" cs "')"))] 
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-inline (char? x)
@@ -1649,8 +1655,8 @@ void *getnative(obj o, cxtype_t *tp) {
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
-    (syntax-rules (null)
-      [(_ null) (%prim "obj(mknull())")] 
+    (syntax-rules (eof)
+      [(_ eof) (%prim "obj(mkeof())")] 
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-inline (eof-object)
