@@ -76,10 +76,9 @@ extern cxroot_t *cxg_rootp;
 extern obj *cxm_rgc(obj *regs, obj *regp);
 extern obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs);
 extern obj cxg_regs[REGS_SIZE];
+extern void cxm_check(int x, char *msg);
 extern void *cxm_cknull(void *p, char *msg);
-#ifndef NDEBUG
 extern int cxg_rc;
-#endif
 
 /* extra definitions */
 /* basic object representation */
@@ -588,10 +587,8 @@ static obj host(obj pc)
 {
   register obj *r = cxg_regs;
   register obj *hp = cxg_hp;
-#ifndef NDEBUG
   register int rc = cxg_rc;
-#endif
-  jump: 
+jump: 
   switch (case_from_obj(pc)) {
 
 case 0: /* load module */
@@ -711,7 +708,7 @@ case 0: /* load module */
     pc = 0; /* exit from module init */
     r[1+1] = r[0];  
     r += 1; /* shift reg wnd */
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 1: /* begin-exp?#186 k exp */
@@ -738,7 +735,7 @@ gs_begin_2Dexp_3F_23186: /* k exp */
     r[5+3] = r[3];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     /* r[0] */    
@@ -746,7 +743,7 @@ gs_begin_2Dexp_3F_23186: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -755,7 +752,7 @@ gs_begin_2Dexp_3F_23186: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -765,7 +762,7 @@ gs_begin_2Dexp_3F_23186: /* k exp */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -781,7 +778,7 @@ case 2: /* clo ek r */
     r[3+2] = obj_from_bool(!bool_from_obj(r[1]));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 3: /* keep#534 k f lst */
@@ -794,7 +791,7 @@ gs_keep_23534: /* k f lst */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(0+1), 3); /* 3 live regs */
@@ -813,7 +810,7 @@ gs_keep_23534: /* k f lst */
     r[4+2] = (car((r[2])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -838,7 +835,7 @@ case 4: /* clo ek r */
     r[2] = r[3];  
     r[3] = (cdr((r[5])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -847,7 +844,7 @@ case 4: /* clo ek r */
     r[2] = r[3];  
     r[3] = (cdr((r[5])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
 
@@ -870,7 +867,7 @@ case 5: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 6: /* curry-exp?#4048 k exp */
@@ -902,7 +899,7 @@ gs_curry_2Dexp_3F_234048: /* k exp */
     r[5+2] = r[3];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2+0] = r[0];  
@@ -911,7 +908,7 @@ gs_curry_2Dexp_3F_234048: /* k exp */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -935,7 +932,7 @@ case 7: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -947,7 +944,7 @@ s_loop: /* k ids rands */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((ispair((r[2])))) {
@@ -980,7 +977,7 @@ s_loop: /* k ids rands */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -989,7 +986,7 @@ s_loop: /* k ids rands */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -998,7 +995,7 @@ s_loop: /* k ids rands */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -1025,7 +1022,7 @@ s_loop_v10601: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -1059,7 +1056,7 @@ case 9: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 10: /* clo ek r */
@@ -1105,7 +1102,7 @@ case 10: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 11: /* clo ek r */
@@ -1144,7 +1141,7 @@ s_recur: /* k ids tmp-ids */
     r[1] = obj_from_ktrap();
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -1194,7 +1191,7 @@ case 12: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 13: /* clo ek r */
@@ -1260,7 +1257,7 @@ case 13: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 14: /* clo ek r */
@@ -1291,7 +1288,7 @@ case 14: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 15: /* varassign*-exp? k exp */
@@ -1317,7 +1314,7 @@ gs_varassign_2A_2Dexp_3F: /* k exp */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -1334,7 +1331,7 @@ s_assigns_3F: /* k tmp-ids body ids */
     r[1] = obj_from_ktrap();
     r[2] = r[4];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 5); /* 5 live regs */
@@ -1418,7 +1415,7 @@ case 17: /* clo ek r */
     r[2] = (cdr((r[5])));
     r[3] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     r[0] = r[3];  
@@ -1426,7 +1423,7 @@ case 17: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -1435,7 +1432,7 @@ case 17: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -1457,7 +1454,7 @@ s_assignees: /* k body */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (vectorref((r[1]), (+1)));
@@ -1494,7 +1491,7 @@ case 19: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 20: /* letrec-exp k ids rands body */
@@ -1534,7 +1531,7 @@ case 21: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 22: /* clo ek r */
@@ -1615,7 +1612,7 @@ s_loop_v10505: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -1654,7 +1651,7 @@ case 23: /* clo ek r */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 24: /* clo ek r */
@@ -1685,7 +1682,7 @@ case 24: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 25: /* letrec-exp? k exp */
@@ -1714,7 +1711,7 @@ gs_letrec_2Dexp_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -1724,7 +1721,7 @@ gs_letrec_2Dexp_3F: /* k exp */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -1736,7 +1733,7 @@ s_loop_v10484: /* k id */
     r[2+2] = obj_from_bool(isnull((r[1])));
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (car((r[1])));
@@ -1753,7 +1750,7 @@ s_loop_v10484: /* k id */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -1782,7 +1779,7 @@ case 26: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -1812,7 +1809,7 @@ case 27: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -1839,7 +1836,7 @@ case 28: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -1856,7 +1853,7 @@ case 29: /* clo ek r */
     r[4+2] = obj_from_bool(isequal((r[3]), (r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 30: /* letrec*-exp k ids rands body */
@@ -1882,7 +1879,7 @@ s_recur_v10431: /* k ids rands body */
     r[1] = obj_from_ktrap();
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[4] = (cdr((r[1])));
@@ -1927,7 +1924,7 @@ case 31: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 32: /* clo ek r */
@@ -1993,7 +1990,7 @@ case 32: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 33: /* clo ek r */
@@ -2022,7 +2019,7 @@ s_loop_v10416: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -2061,7 +2058,7 @@ case 34: /* clo ek r */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 35: /* clo ek r */
@@ -2092,7 +2089,7 @@ case 35: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 36: /* letrec*-exp? k exp */
@@ -2121,7 +2118,7 @@ gs_letrec_2A_2Dexp_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -2131,7 +2128,7 @@ gs_letrec_2A_2Dexp_3F: /* k exp */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -2143,7 +2140,7 @@ s_loop_v10397: /* k id */
     r[2+2] = obj_from_bool(isnull((r[1])));
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (car((r[1])));
@@ -2160,7 +2157,7 @@ s_loop_v10397: /* k id */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -2184,7 +2181,7 @@ case 37: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -2199,7 +2196,7 @@ s_inits_3F: /* k ids body */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(0+1), 3); /* 3 live regs */
@@ -2255,7 +2252,7 @@ case 39: /* clo ek r */
     r[2] = (cdr((r[4])));
     r[3] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     r[0] = r[3];  
@@ -2263,7 +2260,7 @@ case 39: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -2272,7 +2269,7 @@ case 39: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -2296,7 +2293,7 @@ s_inits: /* k ids body */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -2335,7 +2332,7 @@ case 41: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 42: /* letrec*-exp->body k exp */
@@ -2348,7 +2345,7 @@ case 42: /* letrec*-exp->body k exp */
     r[2+2] = (cxs_letrec_2A_2Dexp_2D_3Ebody((r[1])));
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 43: /* fix-letrecs k exp */
@@ -2389,7 +2386,7 @@ case 44: /* clo k b */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 45: /* clo k b */
@@ -2404,7 +2401,7 @@ case 45: /* clo k b */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 46: /* clo k b */
@@ -2419,7 +2416,7 @@ case 46: /* clo k b */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 47: /* clo k b */
@@ -2434,7 +2431,7 @@ case 47: /* clo k b */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 48: /* clo k ids lams body */
@@ -2474,7 +2471,7 @@ s_loop_v10263: /* k id id ids */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[4] = (cdr((r[1])));
@@ -2517,7 +2514,7 @@ case 49: /* clo ek r */
     r[1] = r[8];  
     r[2] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 50: /* clo ek r */
@@ -2567,7 +2564,7 @@ case 51: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v10274: /* k id r */
@@ -2578,7 +2575,7 @@ s_loop_v10274: /* k id r */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (car((r[1])));
@@ -2599,7 +2596,7 @@ s_loop_v10274: /* k id r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -2626,7 +2623,7 @@ case 52: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     { /* vector */
@@ -2642,7 +2639,7 @@ case 52: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -2730,7 +2727,7 @@ case 55: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(5+1), 8); /* 8 live regs */
@@ -2754,7 +2751,7 @@ s_loop_v10240: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -2789,7 +2786,7 @@ case 56: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 57: /* clo ek r */
@@ -2822,7 +2819,7 @@ s_loop_v10225: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -2857,7 +2854,7 @@ case 58: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 59: /* clo ek r */
@@ -2883,7 +2880,7 @@ case 59: /* clo ek r */
     r[8+4] = r[3];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 60: /* clo ek r */
@@ -2911,7 +2908,7 @@ s_loop_v10206: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -2946,7 +2943,7 @@ case 61: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 62: /* clo ek r */
@@ -2975,7 +2972,7 @@ s_loop_v10191: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -3010,7 +3007,7 @@ case 63: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 64: /* clo ek r */
@@ -3041,7 +3038,7 @@ case 64: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 65: /* clo k exp */
@@ -3077,7 +3074,7 @@ s_fix: /* k exp c-bnd? l-bnd? s-bnd? u-bnd? */
     r[7+2] = r[1];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -3193,7 +3190,7 @@ case 66: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 67: /* clo ek r */
@@ -3217,7 +3214,7 @@ case 67: /* clo ek r */
     r[1] = r[6];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 68: /* clo ek r */
@@ -3240,7 +3237,7 @@ case 68: /* clo ek r */
     r[1] = r[6];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 69: /* clo ek r */
@@ -3265,7 +3262,7 @@ case 69: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 70: /* clo ek r */
@@ -3312,7 +3309,7 @@ case 70: /* clo ek r */
     r[3] = (r[12]);
     r[4] = (r[13]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     hreserve(hbsz(9+1), 11); /* 11 live regs */
@@ -3484,7 +3481,7 @@ s_loop_v10100: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -3519,7 +3516,7 @@ case 76: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 77: /* clo ek r */
@@ -3558,7 +3555,7 @@ s_loop_v10079: /* k id fix */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -3593,7 +3590,7 @@ case 78: /* clo ek r */
     r[1] = r[6];  
     r[2] = (vectorref((r[5]), (+3)));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 79: /* clo ek r */
@@ -3615,7 +3612,7 @@ case 79: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 80: /* clo ek r */
@@ -3648,7 +3645,7 @@ case 80: /* clo ek r */
     r[1] = (r[10]);
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(3+1), 11); /* 11 live regs */
@@ -3662,7 +3659,7 @@ case 80: /* clo ek r */
     r[1] = (r[11]);
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -3702,7 +3699,7 @@ s_loop_v10054: /* k id fix */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -3737,7 +3734,7 @@ case 82: /* clo ek r */
     r[1] = r[6];  
     r[2] = (vectorref((r[5]), (+3)));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 83: /* clo ek r */
@@ -3759,7 +3756,7 @@ case 83: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 84: /* clo ek r */
@@ -3796,7 +3793,7 @@ case 84: /* clo ek r */
     r[12+4] = r[1];  
     r += 12; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 85: /* clo ek r */
@@ -3826,7 +3823,7 @@ case 85: /* clo ek r */
     r[10+4] = r[1];  
     r += 10; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 86: /* clo ek r */
@@ -3858,7 +3855,7 @@ s_loop_v10031: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -3897,7 +3894,7 @@ case 87: /* clo ek r */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 88: /* clo ek r */
@@ -3930,7 +3927,7 @@ s_loop_v10010: /* k id fix */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -3965,7 +3962,7 @@ case 89: /* clo ek r */
     r[1] = r[6];  
     r[2] = (vectorref((r[5]), (+3)));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 90: /* clo ek r */
@@ -3987,7 +3984,7 @@ case 90: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 91: /* clo ek r */
@@ -4034,7 +4031,7 @@ s_loop_v9995: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -4069,7 +4066,7 @@ case 92: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 93: /* clo ek r */
@@ -4100,7 +4097,7 @@ s_loop_v9980: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -4135,7 +4132,7 @@ case 94: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 95: /* clo ek r */
@@ -4181,7 +4178,7 @@ case 95: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 96: /* clo k exp1 exp2 */
@@ -4199,7 +4196,7 @@ case 96: /* clo k exp1 exp2 */
     r[4+1] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 97: /* clo ek r */
@@ -4265,7 +4262,7 @@ case 97: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 98: /* clo ek r */
@@ -4295,7 +4292,7 @@ s_loop_v9931: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -4330,7 +4327,7 @@ case 99: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 100: /* clo ek r */
@@ -4360,7 +4357,7 @@ s_loop_v9910: /* k id fix */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -4395,7 +4392,7 @@ case 101: /* clo ek r */
     r[1] = r[6];  
     r[2] = (vectorref((r[5]), (+3)));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 102: /* clo ek r */
@@ -4417,7 +4414,7 @@ case 102: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 103: /* clo ek r */
@@ -4457,7 +4454,7 @@ case 104: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 105: /* clo ek r */
@@ -4523,7 +4520,7 @@ case 105: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 106: /* clo ek r */
@@ -4629,7 +4626,7 @@ case 106: /* clo ek r */
     r[1] = (r[13]);
     r[2] = (r[12]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[10])))) {
@@ -4655,7 +4652,7 @@ case 106: /* clo ek r */
     r[1] = (r[13]);
     r[2] = (r[12]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[10])))) {
@@ -4682,7 +4679,7 @@ case 106: /* clo ek r */
     r[1] = (r[13]);
     r[2] = (r[12]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[11] = (cx__2Acurrent_2Derror_2Dport_2A);
@@ -4707,7 +4704,7 @@ case 106: /* clo ek r */
     r[3] = (cx__23660);
     r[4] = (r[13]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     r[0] = (cx_write_2F3);
@@ -4717,7 +4714,7 @@ case 106: /* clo ek r */
     r[3] = obj_from_bool(1);
     r[4] = (r[11]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   }
   }
@@ -4763,7 +4760,7 @@ case 107: /* clo ek r */
     r[14+4] = (r[12]);
     r += 14; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 108: /* clo ek r */
@@ -4897,7 +4894,7 @@ s_loop_v9839: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -4932,7 +4929,7 @@ case 112: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 113: /* clo ek r */
@@ -4975,7 +4972,7 @@ s_loop_v9818: /* k id fix */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -5010,7 +5007,7 @@ case 114: /* clo ek r */
     r[1] = r[6];  
     r[2] = (vectorref((r[5]), (+3)));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 115: /* clo ek r */
@@ -5032,7 +5029,7 @@ case 115: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 116: /* clo ek r */
@@ -5113,7 +5110,7 @@ s_recur_v9775: /* k cub* c-bnd? fix body */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[5] = (car((r[1])));
@@ -5158,7 +5155,7 @@ case 118: /* clo ek r */
     r[1] = r[6];  
     r[2] = r[4];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 119: /* clo ek r */
@@ -5178,7 +5175,7 @@ case 119: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 120: /* clo ek r */
@@ -5244,7 +5241,7 @@ case 120: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 121: /* clo ek r */
@@ -5266,7 +5263,7 @@ case 121: /* clo ek r */
     r[1] = r[5];  
     r[2] = (vectorref((r[4]), (+3)));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -5274,7 +5271,7 @@ case 121: /* clo ek r */
     r[1] = r[3];  
     r[2] = (vectorref((r[4]), (+3)));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -5298,7 +5295,7 @@ case 122: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 123: /* clo ek r */
@@ -5328,7 +5325,7 @@ case 123: /* clo ek r */
     r[10+4] = r[1];  
     r += 10; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 124: /* clo ek r */
@@ -5360,7 +5357,7 @@ s_loop_v9756: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -5399,7 +5396,7 @@ case 125: /* clo ek r */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 126: /* clo ek r */
@@ -5432,7 +5429,7 @@ s_loop_v9735: /* k id fix */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -5467,7 +5464,7 @@ case 127: /* clo ek r */
     r[1] = r[6];  
     r[2] = (vectorref((r[5]), (+3)));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 128: /* clo ek r */
@@ -5489,7 +5486,7 @@ case 128: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 129: /* clo ek r */
@@ -5536,7 +5533,7 @@ s_loop_v9720: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -5571,7 +5568,7 @@ case 130: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 131: /* clo ek r */
@@ -5602,7 +5599,7 @@ s_loop_v9705: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -5637,7 +5634,7 @@ case 132: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 133: /* clo ek r */
@@ -5683,7 +5680,7 @@ case 133: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 134: /* clo k b */
@@ -5705,7 +5702,7 @@ case 134: /* clo k b */
     r[5+2] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 135: /* clo ek r */
@@ -5723,7 +5720,7 @@ case 135: /* clo ek r */
     r[5+2] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -5731,7 +5728,7 @@ case 135: /* clo ek r */
     r[1] = r[4];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -5742,7 +5739,7 @@ s_loop_v9644: /* k id fix */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -5776,7 +5773,7 @@ case 136: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 137: /* clo ek r */
@@ -5798,7 +5795,7 @@ case 137: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 138: /* clo ek r */
@@ -5823,7 +5820,7 @@ case 138: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v9621: /* k id fix */
@@ -5833,7 +5830,7 @@ s_loop_v9621: /* k id fix */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -5867,7 +5864,7 @@ case 139: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 140: /* clo ek r */
@@ -5889,7 +5886,7 @@ case 140: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 141: /* clo ek r */
@@ -5910,7 +5907,7 @@ case 141: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 142: /* clo ek r */
@@ -5933,7 +5930,7 @@ case 142: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 143: /* clo ek r */
@@ -5956,7 +5953,7 @@ case 143: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 144: /* clo ek r */
@@ -5979,7 +5976,7 @@ case 144: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 145: /* clo ek r */
@@ -6000,7 +5997,7 @@ case 145: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 146: /* clo ek r */
@@ -6023,7 +6020,7 @@ case 146: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 147: /* clo ek  */
@@ -6053,7 +6050,7 @@ case 147: /* clo ek  */
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 148: /* clo ek  */
@@ -6075,7 +6072,7 @@ case 148: /* clo ek  */
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 149: /* clo ek  */
@@ -6088,7 +6085,7 @@ case 149: /* clo ek  */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 150: /* clo k ids rands body */
@@ -6115,7 +6112,7 @@ case 150: /* clo k ids rands body */
     r[6+2] = r[3];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 151: /* clo ek r */
@@ -6147,7 +6144,7 @@ case 151: /* clo ek r */
     r[9+4] = r[3];  
     r += 9; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 152: /* clo ek r */
@@ -6178,7 +6175,7 @@ s_loop_v9461: /* k id id rr&b-vi fl-simple? ids */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[6] = (cdr((r[1])));
@@ -6270,7 +6267,7 @@ s_loop_v9518: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -6305,7 +6302,7 @@ case 155: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 156: /* clo ek r */
@@ -6376,7 +6373,7 @@ s_l_v9509: /* ek r k r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v9503: /* k id */
@@ -6389,7 +6386,7 @@ s_loop_v9503: /* k id */
     r[1] = obj_from_ktrap();
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -6404,7 +6401,7 @@ s_loop_v9503: /* k id */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -6432,7 +6429,7 @@ case 158: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(3+1), 7); /* 7 live regs */
@@ -6452,7 +6449,7 @@ case 158: /* clo ek r */
     r[1] = r[7];  
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -6478,7 +6475,7 @@ case 159: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[3])))) {
@@ -6515,7 +6512,7 @@ case 159: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -6538,7 +6535,7 @@ case 160: /* clo ek r */
     r[1] = r[5];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -6546,7 +6543,7 @@ case 160: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -6572,7 +6569,7 @@ s_loop_v9480: /* k id r */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (car((r[1])));
@@ -6593,7 +6590,7 @@ s_loop_v9480: /* k id r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -6612,7 +6609,7 @@ case 162: /* clo k id&vu */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 163: /* clo k exp vi */
@@ -6630,7 +6627,7 @@ case 163: /* clo k exp vi */
     r[4+2] = r[1];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 164: /* clo ek r */
@@ -6661,7 +6658,7 @@ case 164: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 165: /* clo k exp */
@@ -6687,7 +6684,7 @@ case 165: /* clo k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(1);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -6751,7 +6748,7 @@ case 165: /* clo k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -6771,7 +6768,7 @@ case 165: /* clo k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(1);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if (bool_from_obj(cxs_let_2Dexp_3F_23216((r[1])))) {
@@ -6824,7 +6821,7 @@ case 165: /* clo k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -6846,7 +6843,7 @@ s_loop_v9420: /* k id fl-simple? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -6865,7 +6862,7 @@ s_loop_v9420: /* k id fl-simple? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -6883,7 +6880,7 @@ case 167: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -6891,7 +6888,7 @@ case 167: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -6908,7 +6905,7 @@ s_loop_v9409: /* k id fl-simple? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -6927,7 +6924,7 @@ s_loop_v9409: /* k id fl-simple? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -6945,7 +6942,7 @@ case 169: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -6953,7 +6950,7 @@ case 169: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -6970,7 +6967,7 @@ s_loop_v9398: /* k id fl-simple? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -6989,7 +6986,7 @@ s_loop_v9398: /* k id fl-simple? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -7007,7 +7004,7 @@ case 171: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -7015,7 +7012,7 @@ case 171: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -7033,7 +7030,7 @@ case 172: /* clo ek r */
     r[1] = r[4];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -7041,7 +7038,7 @@ case 172: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -7058,7 +7055,7 @@ s_loop_v9381: /* k id fl-simple? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -7077,7 +7074,7 @@ s_loop_v9381: /* k id fl-simple? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -7095,7 +7092,7 @@ case 174: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -7103,7 +7100,7 @@ case 174: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -7131,7 +7128,7 @@ case 175: /* box-exp k exp */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 176: /* box-exp? k exp */
@@ -7160,7 +7157,7 @@ case 176: /* box-exp? k exp */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 177: /* boxref-exp k box */
@@ -7187,7 +7184,7 @@ case 177: /* boxref-exp k box */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 178: /* boxref-exp? k exp */
@@ -7216,7 +7213,7 @@ case 178: /* boxref-exp? k exp */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 179: /* boxset-exp k box exp */
@@ -7249,7 +7246,7 @@ case 179: /* boxset-exp k box exp */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 180: /* boxset-exp? k exp */
@@ -7278,7 +7275,7 @@ case 180: /* boxset-exp? k exp */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 181: /* remove-assignments k exp */
@@ -7374,7 +7371,7 @@ s_box: /* k exp box-subst substs */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -7413,7 +7410,7 @@ s_box: /* k exp box-subst substs */
     r[8+3] = (mknull());
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
   } else {
@@ -7582,7 +7579,7 @@ s_box: /* k exp box-subst substs */
     r[8+3] = r[6];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -7632,7 +7629,7 @@ s_box: /* k exp box-subst substs */
     r[3] = (cx__23660);
     r[4] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     r[0] = (cx_write_2F3);
@@ -7642,7 +7639,7 @@ s_box: /* k exp box-subst substs */
     r[3] = obj_from_bool(1);
     r[4] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   }
   }
@@ -7677,7 +7674,7 @@ case 184: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 185: /* clo ek r */
@@ -7714,7 +7711,7 @@ case 185: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 186: /* clo ek r */
@@ -7738,7 +7735,7 @@ case 186: /* clo ek r */
     r[1] = r[6];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 187: /* clo ek r */
@@ -7761,7 +7758,7 @@ case 187: /* clo ek r */
     r[1] = r[6];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 188: /* clo ek r */
@@ -7786,7 +7783,7 @@ case 188: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v9276: /* k id box */
@@ -7796,7 +7793,7 @@ s_loop_v9276: /* k id box */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -7830,7 +7827,7 @@ case 189: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 190: /* clo ek r */
@@ -7852,7 +7849,7 @@ case 190: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 191: /* clo ek r */
@@ -7877,7 +7874,7 @@ case 191: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v9253: /* k id box */
@@ -7887,7 +7884,7 @@ s_loop_v9253: /* k id box */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -7921,7 +7918,7 @@ case 192: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 193: /* clo ek r */
@@ -7943,7 +7940,7 @@ case 193: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 194: /* clo ek r */
@@ -7964,7 +7961,7 @@ case 194: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 195: /* clo ek r */
@@ -7987,7 +7984,7 @@ case 195: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 196: /* clo ek r */
@@ -8017,7 +8014,7 @@ s_loop_v9220: /* k id box */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -8051,7 +8048,7 @@ case 197: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 198: /* clo ek r */
@@ -8073,7 +8070,7 @@ case 198: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 199: /* clo ek r */
@@ -8098,7 +8095,7 @@ case 199: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 200: /* clo k in-ids let-ids let-rands substs */
@@ -8124,7 +8121,7 @@ s_loop_v9177: /* k in-ids let-ids let-rands substs box-subst body ids */
     r[9+3] = r[4];  
     r += 9; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     r[8] = (car((r[1])));
@@ -8151,7 +8148,7 @@ s_loop_v9177: /* k in-ids let-ids let-rands substs box-subst body ids */
     r[10+3] = r[6];  
     r += 10; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
 
@@ -8214,7 +8211,7 @@ case 201: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[9];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 202: /* clo ek r */
@@ -8259,7 +8256,7 @@ case 202: /* clo ek r */
     r[1] = r[9];  
     r[2] = (r[10]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[9+0] = r[2];  
@@ -8271,7 +8268,7 @@ case 202: /* clo ek r */
     r[9+5] = r[3];  
     r += 9; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
   }
 
@@ -8302,7 +8299,7 @@ case 203: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[9];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 204: /* clo ek r */
@@ -8401,7 +8398,7 @@ case 204: /* clo ek r */
     r[14+5] = (r[13]);
     r += 14; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
 
 case 205: /* clo ek r */
@@ -8443,7 +8440,7 @@ case 205: /* clo ek r */
     r[1] = r[8];  
     r[2] = r[9];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(2+1), 8); /* 8 live regs */
@@ -8456,7 +8453,7 @@ case 205: /* clo ek r */
     r[1] = r[8];  
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -8483,7 +8480,7 @@ case 206: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 207: /* clo ek r */
@@ -8551,7 +8548,7 @@ case 207: /* clo ek r */
     r[2] = r[4];  
     r[3] = (r[10]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 208: /* clo ek r */
@@ -8620,7 +8617,7 @@ case 208: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 209: /* clo ek r */
@@ -8643,7 +8640,7 @@ case 209: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 210: /* clo ek r */
@@ -8664,7 +8661,7 @@ case 210: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 211: /* clo ek r */
@@ -8687,7 +8684,7 @@ case 211: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 212: /* clo ek  */
@@ -8717,7 +8714,7 @@ case 212: /* clo ek  */
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 213: /* clo ek  */
@@ -8739,7 +8736,7 @@ case 213: /* clo ek  */
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 214: /* clo ek  */
@@ -8752,7 +8749,7 @@ case 214: /* clo ek  */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 215: /* analyze-globals k exp */
@@ -8838,7 +8835,7 @@ s_gsub: /* k exp substs */
     r[1] = obj_from_ktrap();
     r[2] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -8882,7 +8879,7 @@ s_gsub: /* k exp substs */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -9085,7 +9082,7 @@ s_gsub: /* k exp substs */
     r[3] = (cx__23660);
     r[4] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     r[0] = (cx_write_2F3);
@@ -9095,7 +9092,7 @@ s_gsub: /* k exp substs */
     r[3] = obj_from_bool(1);
     /* r[4] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   }
   }
@@ -9131,7 +9128,7 @@ case 218: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 219: /* clo ek r */
@@ -9154,7 +9151,7 @@ case 219: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 220: /* clo ek r */
@@ -9178,7 +9175,7 @@ case 220: /* clo ek r */
     r[1] = r[6];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 221: /* clo ek r */
@@ -9201,7 +9198,7 @@ case 221: /* clo ek r */
     r[1] = r[6];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 222: /* clo ek r */
@@ -9226,7 +9223,7 @@ case 222: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v9052: /* k id gsub */
@@ -9236,7 +9233,7 @@ s_loop_v9052: /* k id gsub */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -9270,7 +9267,7 @@ case 223: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 224: /* clo ek r */
@@ -9292,7 +9289,7 @@ case 224: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 225: /* clo ek r */
@@ -9317,7 +9314,7 @@ case 225: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v9029: /* k id gsub */
@@ -9327,7 +9324,7 @@ s_loop_v9029: /* k id gsub */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -9361,7 +9358,7 @@ case 226: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 227: /* clo ek r */
@@ -9383,7 +9380,7 @@ case 227: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 228: /* clo ek r */
@@ -9404,7 +9401,7 @@ case 228: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 229: /* clo ek r */
@@ -9427,7 +9424,7 @@ case 229: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 230: /* clo ek r */
@@ -9457,7 +9454,7 @@ s_loop_v8996: /* k id gsub */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -9491,7 +9488,7 @@ case 231: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 232: /* clo ek r */
@@ -9513,7 +9510,7 @@ case 232: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 233: /* clo ek r */
@@ -9538,7 +9535,7 @@ case 233: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 234: /* clo ek r */
@@ -9561,7 +9558,7 @@ case 234: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 235: /* clo ek r */
@@ -9584,7 +9581,7 @@ case 235: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 236: /* clo ek r */
@@ -9605,7 +9602,7 @@ case 236: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 237: /* clo ek r */
@@ -9628,7 +9625,7 @@ case 237: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 238: /* clo ek  */
@@ -9658,7 +9655,7 @@ case 238: /* clo ek  */
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 239: /* clo ek  */
@@ -9680,7 +9677,7 @@ case 239: /* clo ek  */
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 240: /* clo ek  */
@@ -9693,7 +9690,7 @@ case 240: /* clo ek  */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 241: /* clo ek r */
@@ -9719,7 +9716,7 @@ case 241: /* clo ek r */
     r[8+2] = r[1];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 242: /* clo ek r */
@@ -9743,7 +9740,7 @@ case 242: /* clo ek r */
     r[7+3] = r[1];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 243: /* clo ek r */
@@ -9778,7 +9775,7 @@ case 243: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 244: /* clo k exp substs */
@@ -9807,7 +9804,7 @@ s_gls: /* k exp substs exp */
     r[1] = obj_from_ktrap();
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if (bool_from_obj(cxs_gvarassign_2Dexp_3F_231938((r[1])))) {
@@ -9841,7 +9838,7 @@ s_gls: /* k exp substs exp */
     r[8+3] = r[3];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
   } else {
@@ -9899,7 +9896,7 @@ s_gls: /* k exp substs exp */
     r[8+4] = r[7];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -9922,7 +9919,7 @@ s_gls: /* k exp substs exp */
     r[6+4] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -9952,7 +9949,7 @@ s_gls: /* k exp substs exp */
     r[8+4] = r[7];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -9989,7 +9986,7 @@ s_gls: /* k exp substs exp */
     r[1] = obj_from_ktrap();
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -10043,7 +10040,7 @@ s_gls: /* k exp substs exp */
     r[8+4] = r[7];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     r[5] = (cx__2Acurrent_2Derror_2Dport_2A);
@@ -10068,7 +10065,7 @@ s_gls: /* k exp substs exp */
     r[3] = (cx__23660);
     r[4] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     r[0] = (cx_write_2F3);
@@ -10078,7 +10075,7 @@ s_gls: /* k exp substs exp */
     r[3] = obj_from_bool(1);
     r[4] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   }
   }
@@ -10131,7 +10128,7 @@ case 245: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 246: /* clo ek r */
@@ -10160,7 +10157,7 @@ case 246: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -10169,7 +10166,7 @@ case 246: /* clo ek r */
     r[2] = r[5];  
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
 
@@ -10221,7 +10218,7 @@ case 247: /* clo ek r */
     r[2] = r[6];  
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 248: /* clo ek r */
@@ -10263,7 +10260,7 @@ case 248: /* clo ek r */
     r[7+2] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 249: /* clo ek  */
@@ -10293,7 +10290,7 @@ case 249: /* clo ek  */
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 250: /* clo ek  */
@@ -10315,7 +10312,7 @@ case 250: /* clo ek  */
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 251: /* clo ek  */
@@ -10328,7 +10325,7 @@ case 251: /* clo ek  */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 252: /* clo k substs */
@@ -10367,7 +10364,7 @@ case 252: /* clo k substs */
     r[5+4] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 253: /* clo k id&cid&exp substs */
@@ -10388,7 +10385,7 @@ case 253: /* clo k id&cid&exp substs */
     r[5+3] = r[2];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 254: /* clo ek r */
@@ -10410,7 +10407,7 @@ case 254: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 255: /* clo k id&cid&exp substs */
@@ -10487,7 +10484,7 @@ case 255: /* clo k id&cid&exp substs */
     r[14+3] = (r[13]);
     r += 14; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     hreserve(hbsz(8+1), 11); /* 11 live regs */
@@ -10517,7 +10514,7 @@ case 255: /* clo k id&cid&exp substs */
     r[12+2] = (r[10]);
     r += 12; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -10562,7 +10559,7 @@ case 256: /* clo ek r */
     r[9+3] = r[3];  
     r += 9; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 257: /* clo ek r */
@@ -10611,7 +10608,7 @@ case 257: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 258: /* clo ek r */
@@ -10634,7 +10631,7 @@ case 258: /* clo ek r */
     r[10+2] = r[1];  
     r += 10; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(7+1), 10); /* 10 live regs */
@@ -10654,7 +10651,7 @@ case 258: /* clo ek r */
     r[3] = r[7];  
     /* r[4] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   }
 
@@ -10684,7 +10681,7 @@ case 259: /* clo ek r */
     r[2] = r[4];  
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     { /* vector */
@@ -10716,7 +10713,7 @@ case 259: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[9];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -10775,7 +10772,7 @@ s_loop_v8783: /* k ids */
     r[2+2] = (cx__232048);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -10785,7 +10782,7 @@ s_loop_v8783: /* k ids */
     r[2+2] = (cx__232047);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -10804,7 +10801,7 @@ case 261: /* clo ek r */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 262: /* clo ek r */
@@ -10833,7 +10830,7 @@ case 262: /* clo ek r */
     r[2] = r[7];  
     r[3] = (cx__232066);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 263: /* clo ek r */
@@ -10878,7 +10875,7 @@ s_loop_v8764: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -10918,7 +10915,7 @@ case 264: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 265: /* clo ek r */
@@ -10993,7 +10990,7 @@ case 265: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[9];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 266: /* clo ek r */
@@ -11022,7 +11019,7 @@ case 266: /* clo ek r */
     r[2] = r[4];  
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     r[0] = r[6];  
@@ -11030,7 +11027,7 @@ case 266: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -11056,7 +11053,7 @@ case 267: /* clo ek r */
     r[7+2] = r[1];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 268: /* clo ek r */
@@ -11127,7 +11124,7 @@ case 268: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -11135,7 +11132,7 @@ case 268: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -11184,7 +11181,7 @@ s_ag_2Dstack_2Dfunction_3F: /* k exp self-id substs */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -11279,7 +11276,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = (r[11]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[12] = (cdr((r[10])));
@@ -11307,7 +11304,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = (r[13]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     /* r[0] */    
@@ -11327,7 +11324,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -11361,7 +11358,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[13+5] = obj_from_bool(0);
     r += 13; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
   } else {
   if (bool_from_obj(cxs_let_2Dexp_3F_23216((r[1])))) {
@@ -11418,7 +11415,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -11520,7 +11517,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[14+5] = r[4];  
     r += 14; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -11630,7 +11627,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -11639,7 +11636,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -11648,7 +11645,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -11659,7 +11656,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -11668,7 +11665,7 @@ s_sfn_3F: /* k exp self-id subst-locals tail? stack-fn? labels substs */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -11710,7 +11707,7 @@ case 273: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -11727,7 +11724,7 @@ s_loop_v8674: /* k id sfn? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -11746,7 +11743,7 @@ s_loop_v8674: /* k id sfn? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -11764,7 +11761,7 @@ case 275: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -11772,7 +11769,7 @@ case 275: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -11791,7 +11788,7 @@ s_loop_v8661: /* k id stack-fn? labels substs */
     r[5+2] = obj_from_bool(isnull((r[1])));
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(3+1), 5); /* 5 live regs */
@@ -11815,7 +11812,7 @@ s_loop_v8661: /* k id stack-fn? labels substs */
     r[6+5] = obj_from_bool(0);
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
   }
 
@@ -11833,7 +11830,7 @@ case 277: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -11841,7 +11838,7 @@ case 277: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -11873,7 +11870,7 @@ case 278: /* clo ek r */
     r[2] = r[4];  
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     r[0] = r[9];  
@@ -11881,7 +11878,7 @@ case 278: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -11904,7 +11901,7 @@ case 279: /* clo ek r */
     r[7+5] = r[3];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
 
 case 280: /* clo k id */
@@ -11922,7 +11919,7 @@ s_loop_v8638: /* k id stack-fn? labels substs */
     r[5+2] = obj_from_bool(isnull((r[1])));
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(3+1), 5); /* 5 live regs */
@@ -11946,7 +11943,7 @@ s_loop_v8638: /* k id stack-fn? labels substs */
     r[6+5] = obj_from_bool(0);
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
   }
 
@@ -11964,7 +11961,7 @@ case 281: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -11972,7 +11969,7 @@ case 281: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -12001,7 +11998,7 @@ case 282: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -12021,7 +12018,7 @@ s_loop_v8617: /* k id subst-locals substs stack-fn? labels */
     r[6+2] = obj_from_bool(isnull((r[1])));
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[6] = (car((r[1])));
@@ -12048,7 +12045,7 @@ s_loop_v8617: /* k id subst-locals substs stack-fn? labels */
     r[8+3] = r[3];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
 
@@ -12078,7 +12075,7 @@ case 284: /* clo ek r */
     r[9+5] = obj_from_bool(1);
     r += 9; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
 
 case 285: /* clo ek r */
@@ -12095,7 +12092,7 @@ case 285: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -12103,7 +12100,7 @@ case 285: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -12122,7 +12119,7 @@ s_loop_v8604: /* k id stack-fn? labels substs */
     r[5+2] = obj_from_bool(isnull((r[1])));
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(3+1), 5); /* 5 live regs */
@@ -12146,7 +12143,7 @@ s_loop_v8604: /* k id stack-fn? labels substs */
     r[6+5] = obj_from_bool(0);
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
   }
 
@@ -12164,7 +12161,7 @@ case 287: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -12172,7 +12169,7 @@ case 287: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -12191,7 +12188,7 @@ s_loop_v8593: /* k id stack-fn? labels substs */
     r[5+2] = obj_from_bool(isnull((r[1])));
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(3+1), 5); /* 5 live regs */
@@ -12215,7 +12212,7 @@ s_loop_v8593: /* k id stack-fn? labels substs */
     r[6+5] = obj_from_bool(0);
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
   }
 
@@ -12233,7 +12230,7 @@ case 289: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -12241,7 +12238,7 @@ case 289: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -12255,7 +12252,7 @@ s_subst_2Dlocals: /* k ids substs */
     r[1] = obj_from_ktrap();
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -12315,7 +12312,7 @@ s_ag_2Dinlineable_3F: /* k exp */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -12349,7 +12346,7 @@ s_ag_2Dinlineable_3F: /* k exp */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -12412,7 +12409,7 @@ s_inlineable_3F: /* k body substs ag-inlineable-app-rands? ids */
     r[6+4] = r[4];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     /* r[0] */    
@@ -12420,7 +12417,7 @@ s_inlineable_3F: /* k body substs ag-inlineable-app-rands? ids */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -12433,7 +12430,7 @@ s_loop_v8547: /* k id id */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -12478,7 +12475,7 @@ case 293: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 294: /* clo ek r */
@@ -12496,7 +12493,7 @@ case 294: /* clo ek r */
     r[5+3] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 295: /* clo k rands substs lambda-ids */
@@ -12530,7 +12527,7 @@ s_loop_v8504: /* k id ag-lookup substs */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[4] = (cdr((r[1])));
@@ -12568,7 +12565,7 @@ case 296: /* clo ek r */
     r[2] = (car((r[4])));
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 297: /* clo ek r */
@@ -12590,7 +12587,7 @@ case 297: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 298: /* clo ek r */
@@ -12642,7 +12639,7 @@ s_loop_v8491: /* k id */
     r[2+2] = obj_from_bool(isnull((r[1])));
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (car((r[1])));
@@ -12668,7 +12665,7 @@ s_loop_v8491: /* k id */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -12698,7 +12695,7 @@ s_loop_v8476: /* k id */
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[2] = (cdr((r[1])));
@@ -12733,7 +12730,7 @@ case 301: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 302: /* clo ek r */
@@ -12756,7 +12753,7 @@ s_loop_v8467: /* k aids lambda-ids */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (car((r[1])));
@@ -12782,7 +12779,7 @@ s_loop_v8467: /* k aids lambda-ids */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -12791,7 +12788,7 @@ s_loop_v8467: /* k aids lambda-ids */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -12812,7 +12809,7 @@ case 303: /* clo k x */
     r[4+2] = r[1];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 304: /* clo ek r */
@@ -12827,7 +12824,7 @@ case 304: /* clo ek r */
     r[3+2] = obj_from_bool(!bool_from_obj(r[1]));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 305: /* clo k exp substs */
@@ -12853,7 +12850,7 @@ s_ag_2Dlookup: /* k exp substs */
     r[3+2] = r[1];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isnull((r[2])))) {
@@ -12863,7 +12860,7 @@ s_ag_2Dlookup: /* k exp substs */
     r[3+2] = r[1];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (vectorref((r[1]), (+1)));
@@ -12919,7 +12916,7 @@ case 306: /* clo k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -12929,7 +12926,7 @@ case 306: /* clo k exp */
     r[2+2] = obj_from_bool(1);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -12946,7 +12943,7 @@ s_loop_v8398: /* k id ag-constant? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -12965,7 +12962,7 @@ s_loop_v8398: /* k id ag-constant? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -12983,7 +12980,7 @@ case 308: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -12991,7 +12988,7 @@ case 308: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -13024,7 +13021,7 @@ s_ag_2Dsimple_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(1);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -13088,7 +13085,7 @@ s_ag_2Dsimple_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -13109,7 +13106,7 @@ s_loop_v8368: /* k id ag-simple? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -13128,7 +13125,7 @@ s_loop_v8368: /* k id ag-simple? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -13146,7 +13143,7 @@ case 311: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -13154,7 +13151,7 @@ case 311: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -13177,7 +13174,7 @@ case 312: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -13194,7 +13191,7 @@ s_loop_v8353: /* k id ag-simple? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -13213,7 +13210,7 @@ s_loop_v8353: /* k id ag-simple? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -13231,7 +13228,7 @@ case 314: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -13239,7 +13236,7 @@ case 314: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -13304,7 +13301,7 @@ s_cf: /* k exp const-fold fold-typecheck-ctype env */
     r[6+2] = r[1];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if (bool_from_obj(cxs_gvarassign_2Dexp_3F_231938((r[1])))) {
@@ -13397,7 +13394,7 @@ case 318: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 319: /* clo ek r */
@@ -13425,7 +13422,7 @@ case 319: /* clo ek r */
     r[1] = r[8];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 320: /* clo ek r */
@@ -13452,7 +13449,7 @@ case 320: /* clo ek r */
     r[1] = r[8];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 321: /* clo ek r */
@@ -13481,7 +13478,7 @@ case 321: /* clo ek r */
     r[8+5] = r[4];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
 
 case 322: /* clo ek r */
@@ -13504,7 +13501,7 @@ case 322: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
   } else {
     { /* vector */
@@ -13520,7 +13517,7 @@ case 322: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -13587,7 +13584,7 @@ case 323: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 324: /* clo ek r */
@@ -13618,7 +13615,7 @@ case 324: /* clo ek r */
     r[1] = r[9];  
     r[2] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if (bool_from_obj(cxs_let_2Dexp_3F_23216((r[6])))) {
@@ -13715,7 +13712,7 @@ case 324: /* clo ek r */
     r[1] = (r[10]);
     r[2] = r[9];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[6])))) {
@@ -13741,7 +13738,7 @@ case 324: /* clo ek r */
     r[1] = r[9];  
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[6])))) {
@@ -13767,7 +13764,7 @@ case 324: /* clo ek r */
     r[1] = r[9];  
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[6])))) {
@@ -13794,7 +13791,7 @@ case 324: /* clo ek r */
     r[1] = r[9];  
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[7] = (cx__2Acurrent_2Derror_2Dport_2A);
@@ -13819,7 +13816,7 @@ case 324: /* clo ek r */
     r[3] = (cx__23660);
     r[4] = r[9];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     r[0] = (cx_write_2F3);
@@ -13829,7 +13826,7 @@ case 324: /* clo ek r */
     r[3] = obj_from_bool(1);
     r[4] = r[7];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   }
   }
@@ -13902,7 +13899,7 @@ case 325: /* clo ek r */
     r[1] = (r[10]);
     r[2] = r[9];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[10+0] = obj_from_ktrap();
@@ -13964,7 +13961,7 @@ s_l_v8245: /* ek r cf const-fold exp2 k r */
     r[8+3] = r[1];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     hreserve(hbsz(2+1), 7); /* 7 live regs */
@@ -13977,7 +13974,7 @@ s_l_v8245: /* ek r cf const-fold exp2 k r */
     r[1] = r[7];  
     r[2] = r[4];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -13998,7 +13995,7 @@ case 327: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 328: /* clo ek r */
@@ -14064,7 +14061,7 @@ case 328: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 329: /* clo ek r */
@@ -14084,7 +14081,7 @@ case 329: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 330: /* clo ek r */
@@ -14150,7 +14147,7 @@ case 330: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 331: /* clo ek r */
@@ -14174,7 +14171,7 @@ case 331: /* clo ek r */
     r[2] = (car((r[4])));
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 332: /* clo ek r */
@@ -14220,7 +14217,7 @@ case 332: /* clo ek r */
     r[7+2] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v8213: /* k id cf */
@@ -14230,7 +14227,7 @@ s_loop_v8213: /* k id cf */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -14264,7 +14261,7 @@ case 333: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 334: /* clo ek r */
@@ -14286,7 +14283,7 @@ case 334: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 335: /* clo ek r */
@@ -14323,7 +14320,7 @@ s_loop_v8190: /* k id id env */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[4] = (cdr((r[1])));
@@ -14366,7 +14363,7 @@ case 336: /* clo ek r */
     r[9+3] = r[2];  
     r += 9; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 337: /* clo ek r */
@@ -14394,7 +14391,7 @@ case 337: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 338: /* clo ek r */
@@ -14435,7 +14432,7 @@ case 338: /* clo ek r */
     r[2] = r[3];  
     r[3] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 339: /* clo ek r */
@@ -14466,7 +14463,7 @@ case 339: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v8159: /* k id cf */
@@ -14476,7 +14473,7 @@ s_loop_v8159: /* k id cf */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -14510,7 +14507,7 @@ case 340: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 341: /* clo ek r */
@@ -14532,7 +14529,7 @@ case 341: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 342: /* clo ek r */
@@ -14557,7 +14554,7 @@ case 342: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v8136: /* k id cf */
@@ -14567,7 +14564,7 @@ s_loop_v8136: /* k id cf */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -14601,7 +14598,7 @@ case 343: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 344: /* clo ek r */
@@ -14623,7 +14620,7 @@ case 344: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 345: /* clo ek r */
@@ -14645,7 +14642,7 @@ case 345: /* clo ek r */
     r[1] = r[5];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 346: /* clo ek r */
@@ -14669,7 +14666,7 @@ case 346: /* clo ek r */
     r[1] = r[3];  
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[3];  
@@ -14677,7 +14674,7 @@ case 346: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -14708,7 +14705,7 @@ s_loop_v8103: /* k id cf */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -14742,7 +14739,7 @@ case 348: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 349: /* clo ek r */
@@ -14764,7 +14761,7 @@ case 349: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 350: /* clo ek r */
@@ -14789,7 +14786,7 @@ case 350: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 351: /* clo ek r */
@@ -14812,7 +14809,7 @@ case 351: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 352: /* clo ek r */
@@ -14835,7 +14832,7 @@ case 352: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 353: /* clo ek r */
@@ -14856,7 +14853,7 @@ case 353: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 354: /* clo ek r */
@@ -14879,7 +14876,7 @@ case 354: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 355: /* clo ek  */
@@ -14909,7 +14906,7 @@ case 355: /* clo ek  */
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 356: /* clo ek  */
@@ -14931,7 +14928,7 @@ case 356: /* clo ek  */
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 357: /* clo ek  */
@@ -14944,7 +14941,7 @@ case 357: /* clo ek  */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 358: /* clo k exp env h-exp e-exp */
@@ -15011,7 +15008,7 @@ case 358: /* clo k exp env h-exp e-exp */
     r[8+3] = r[2];  
     r += 8; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     /* r[0] */    
@@ -15019,7 +15016,7 @@ case 358: /* clo k exp env h-exp e-exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -15028,7 +15025,7 @@ case 358: /* clo k exp env h-exp e-exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -15040,7 +15037,7 @@ s_loop_v8023: /* k id id env */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[4] = (cdr((r[1])));
@@ -15083,7 +15080,7 @@ case 359: /* clo ek r */
     r[9+3] = r[2];  
     r += 9; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
 
 case 360: /* clo ek r */
@@ -15111,7 +15108,7 @@ case 360: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 361: /* clo ek r */
@@ -15149,7 +15146,7 @@ case 361: /* clo ek r */
     r[9+5] = r[3];  
     r += 9; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 6);
+    rc = 6;
     goto jump;
 
 case 362: /* clo ek r */
@@ -15173,7 +15170,7 @@ case 362: /* clo ek r */
     r[1] = r[6];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 363: /* clo ek r */
@@ -15212,7 +15209,7 @@ case 363: /* clo ek r */
     r[7+2] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 364: /* beta-substitute k exp hold-cps-invariants? hold-lifting-invariants? */
@@ -15261,7 +15258,7 @@ case 365: /* clo k exp */
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -15286,7 +15283,7 @@ case 365: /* clo k exp */
     r[5+2] = r[3];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     /* r[0] */    
@@ -15294,7 +15291,7 @@ case 365: /* clo k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -15303,7 +15300,7 @@ case 365: /* clo k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -15313,7 +15310,7 @@ case 365: /* clo k exp */
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -15407,7 +15404,7 @@ s_bs: /* k exp hold-lifting-invariants? bs-zero-cost-ref-transparent? bs-ref-tra
     r[12+2] = (r[11]);
     r += 12; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if (bool_from_obj(cxs_gvarassign_2Dexp_3F_231938((r[1])))) {
@@ -15709,7 +15706,7 @@ s_bs: /* k exp hold-lifting-invariants? bs-zero-cost-ref-transparent? bs-ref-tra
     r[3] = (cx__23660);
     r[4] = (r[13]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   } else {
     r[0] = (cx_write_2F3);
@@ -15719,7 +15716,7 @@ s_bs: /* k exp hold-lifting-invariants? bs-zero-cost-ref-transparent? bs-ref-tra
     r[3] = obj_from_bool(1);
     r[4] = (r[11]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
   }
   }
@@ -15754,7 +15751,7 @@ case 368: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 369: /* clo ek r */
@@ -15778,7 +15775,7 @@ case 369: /* clo ek r */
     r[1] = r[6];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 370: /* clo ek r */
@@ -15801,7 +15798,7 @@ case 370: /* clo ek r */
     r[1] = r[6];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 371: /* clo ek r */
@@ -15826,7 +15823,7 @@ case 371: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v7918: /* k id bs */
@@ -15836,7 +15833,7 @@ s_loop_v7918: /* k id bs */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -15870,7 +15867,7 @@ case 372: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 373: /* clo ek r */
@@ -15892,7 +15889,7 @@ case 373: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 374: /* clo ek r */
@@ -15962,7 +15959,7 @@ s_loop_v7794: /* k in-ids in-rands out-ids out-rands substs hold-lifting-invaria
     r[15+3] = r[5];  
     r += 15; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     hreserve(hbsz(3+1), 15); /* 15 live regs */
@@ -15978,7 +15975,7 @@ s_loop_v7794: /* k in-ids in-rands out-ids out-rands substs hold-lifting-invaria
     r[16+3] = r[5];  
     r += 16; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
   } else {
@@ -16029,7 +16026,7 @@ s_loop_v7794: /* k in-ids in-rands out-ids out-rands substs hold-lifting-invaria
     r[18+3] = (r[13]);
     r += 18; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
 
@@ -16066,7 +16063,7 @@ case 376: /* clo k id rand */
     r[11+6] = r[4];  
     r += 11; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 7);
+    rc = 7;
     goto jump;
 
 case 377: /* clo k new-substs */
@@ -16089,7 +16086,7 @@ case 377: /* clo k new-substs */
     r[7+6] = r[1];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 7);
+    rc = 7;
     goto jump;
 
 case 378: /* clo ek r */
@@ -16120,7 +16117,7 @@ case 378: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 379: /* clo ek r */
@@ -16162,7 +16159,7 @@ case 379: /* clo ek r */
     r[1] = (r[20]);
     r[2] = (r[15]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if (((+1) == (v10675_r))) {
@@ -16183,7 +16180,7 @@ case 379: /* clo ek r */
     r[1] = (r[20]);
     r[2] = (r[15]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(14+1), 20); /* 20 live regs */
@@ -16355,7 +16352,7 @@ case 380: /* clo ek r */
     r[1] = r[7];  
     r[2] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -16364,7 +16361,7 @@ case 380: /* clo ek r */
     r[2] = r[4];  
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
 
@@ -16409,7 +16406,7 @@ case 381: /* clo ek r */
     r[2] = r[8];  
     /* r[3] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     r[0] = obj_from_ktrap();
@@ -16459,7 +16456,7 @@ s_l_v7863: /* ek r loop-pass loop-skip substs id rand k */
     r[1] = r[7];  
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -16468,7 +16465,7 @@ s_l_v7863: /* ek r loop-pass loop-skip substs id rand k */
     r[2] = r[5];  
     r[3] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
 
@@ -16515,7 +16512,7 @@ s_l_v7809: /* ek r hold-lifting-invariants? bs-zero-cost-ref-transparent? loop-p
     r[1] = (r[15]);
     r[2] = (r[16]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(13+1), 16); /* 16 live regs */
@@ -16592,7 +16589,7 @@ s_l_v7809: /* ek r hold-lifting-invariants? bs-zero-cost-ref-transparent? loop-p
     r[1] = (r[20]);
     r[2] = (r[19]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = obj_from_ktrap();
@@ -16672,7 +16669,7 @@ s_l_v7839: /* ek r bs-zero-cost-ref-transparent? loop-pass body loop out-rands o
     r[2] = (r[12]);
     r[3] = r[4];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   } else {
     hreserve(hbsz(6+1), 15); /* 15 live regs */
@@ -16689,7 +16686,7 @@ s_l_v7839: /* ek r bs-zero-cost-ref-transparent? loop-pass body loop out-rands o
     r[1] = (r[15]);
     r[2] = (r[13]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -16732,7 +16729,7 @@ case 385: /* clo ek r */
     r[1] = (r[11]);
     r[2] = (r[12]);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     { /* cons */ 
@@ -16787,7 +16784,7 @@ case 385: /* clo ek r */
     r[15+6] = (r[12]);
     r += 15; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 7);
+    rc = 7;
     goto jump;
   }
 
@@ -16826,7 +16823,7 @@ case 386: /* clo ek r */
     r[1] = r[7];  
     r[2] = r[8];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -16835,7 +16832,7 @@ case 386: /* clo ek r */
     r[2] = r[5];  
     r[3] = r[6];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 4);
+    rc = 4;
     goto jump;
   }
 
@@ -16852,7 +16849,7 @@ s_loop_v7827: /* k id bs-zero-cost-ref-transparent? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -16871,7 +16868,7 @@ s_loop_v7827: /* k id bs-zero-cost-ref-transparent? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -16889,7 +16886,7 @@ case 388: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -16897,7 +16894,7 @@ case 388: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -16920,7 +16917,7 @@ case 389: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -16937,7 +16934,7 @@ s_loop_v7812: /* k id bs-zero-cost-ref-transparent? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -16956,7 +16953,7 @@ s_loop_v7812: /* k id bs-zero-cost-ref-transparent? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -16974,7 +16971,7 @@ case 391: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -16982,7 +16979,7 @@ case 391: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -16999,7 +16996,7 @@ s_loop_v7797: /* k id bs-zero-cost-ref-transparent? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -17018,7 +17015,7 @@ s_loop_v7797: /* k id bs-zero-cost-ref-transparent? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17036,7 +17033,7 @@ case 393: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -17044,7 +17041,7 @@ case 393: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17055,7 +17052,7 @@ s_loop_v7775: /* k id bs */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -17089,7 +17086,7 @@ case 394: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 395: /* clo ek r */
@@ -17111,7 +17108,7 @@ case 395: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 396: /* clo ek r */
@@ -17136,7 +17133,7 @@ case 396: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 s_loop_v7752: /* k id bs */
@@ -17146,7 +17143,7 @@ s_loop_v7752: /* k id bs */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -17180,7 +17177,7 @@ case 397: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 398: /* clo ek r */
@@ -17202,7 +17199,7 @@ case 398: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 399: /* clo ek r */
@@ -17225,7 +17222,7 @@ case 399: /* clo ek r */
     r[1] = r[6];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 400: /* clo ek r */
@@ -17249,7 +17246,7 @@ case 400: /* clo ek r */
     r[1] = r[3];  
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[3];  
@@ -17257,7 +17254,7 @@ case 400: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = r[5];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17288,7 +17285,7 @@ s_loop_v7719: /* k id bs */
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[3] = (cdr((r[1])));
@@ -17322,7 +17319,7 @@ case 402: /* clo ek r */
     r[1] = r[5];  
     r[2] = (car((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 403: /* clo ek r */
@@ -17344,7 +17341,7 @@ case 403: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 404: /* clo ek r */
@@ -17369,7 +17366,7 @@ case 404: /* clo ek r */
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 405: /* clo ek r */
@@ -17392,7 +17389,7 @@ case 405: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 406: /* clo ek r */
@@ -17415,7 +17412,7 @@ case 406: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 407: /* clo ek r */
@@ -17436,7 +17433,7 @@ case 407: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 408: /* clo ek r */
@@ -17459,7 +17456,7 @@ case 408: /* clo ek r */
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 409: /* clo ek  */
@@ -17489,7 +17486,7 @@ case 409: /* clo ek  */
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 410: /* clo ek  */
@@ -17511,7 +17508,7 @@ case 410: /* clo ek  */
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 5);
+    rc = 5;
     goto jump;
 
 case 411: /* clo ek  */
@@ -17524,7 +17521,7 @@ case 411: /* clo ek  */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 2);
+    rc = 2;
     goto jump;
 
 case 412: /* clo k exp */
@@ -17577,7 +17574,7 @@ case 412: /* clo k exp */
     r[11+2] = (r[10]);
     r += 11; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     /* r[0] */    
@@ -17657,7 +17654,7 @@ case 413: /* clo k id body */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -17690,7 +17687,7 @@ case 414: /* clo k exp */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
 
 case 415: /* clo k id */
@@ -17706,7 +17703,7 @@ s_loop_v7636: /* k id bs-ref-transparent? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -17725,7 +17722,7 @@ s_loop_v7636: /* k id bs-ref-transparent? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17743,7 +17740,7 @@ case 416: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -17751,7 +17748,7 @@ case 416: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17774,7 +17771,7 @@ case 417: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17801,7 +17798,7 @@ s_loop_v7621: /* k id id-one-of? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     /* r[0] */    
@@ -17809,7 +17806,7 @@ s_loop_v7621: /* k id id-one-of? */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17828,7 +17825,7 @@ case 419: /* clo ek r */
     r[5+2] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -17836,7 +17833,7 @@ case 419: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17868,7 +17865,7 @@ case 420: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17885,7 +17882,7 @@ s_loop_v7604: /* k id bs-ref-transparent? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -17904,7 +17901,7 @@ s_loop_v7604: /* k id bs-ref-transparent? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17922,7 +17919,7 @@ case 422: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -17930,7 +17927,7 @@ case 422: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17955,7 +17952,7 @@ case 423: /* clo ek r */
     r[1] = r[6];  
     /* r[2] */    
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[5];  
@@ -17963,7 +17960,7 @@ case 423: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -17982,7 +17979,7 @@ case 424: /* clo ek r */
     r[5+2] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18014,7 +18011,7 @@ s_loop_v7585: /* k id id-one-of? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     /* r[0] */    
@@ -18022,7 +18019,7 @@ s_loop_v7585: /* k id id-one-of? */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18041,7 +18038,7 @@ case 426: /* clo ek r */
     r[5+2] = r[1];  
     r += 5; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[2];  
@@ -18049,7 +18046,7 @@ case 426: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18076,7 +18073,7 @@ s_bs_2Dremovable_2Dif_2Ddead_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(1);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -18144,7 +18141,7 @@ s_bs_2Dremovable_2Dif_2Ddead_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -18164,7 +18161,7 @@ s_bs_2Dremovable_2Dif_2Ddead_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(1);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if (bool_from_obj(cxs_let_2Dexp_3F_23216((r[1])))) {
@@ -18233,7 +18230,7 @@ s_bs_2Dremovable_2Dif_2Ddead_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -18256,7 +18253,7 @@ s_loop_v7558: /* k id bs-removable-if-dead? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -18275,7 +18272,7 @@ s_loop_v7558: /* k id bs-removable-if-dead? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18293,7 +18290,7 @@ case 429: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18301,7 +18298,7 @@ case 429: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18318,7 +18315,7 @@ s_loop_v7547: /* k id bs-removable-if-dead? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -18337,7 +18334,7 @@ s_loop_v7547: /* k id bs-removable-if-dead? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18355,7 +18352,7 @@ case 431: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18363,7 +18360,7 @@ case 431: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18380,7 +18377,7 @@ s_loop_v7536: /* k id bs-removable-if-dead? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -18399,7 +18396,7 @@ s_loop_v7536: /* k id bs-removable-if-dead? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18417,7 +18414,7 @@ case 433: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18425,7 +18422,7 @@ case 433: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18443,7 +18440,7 @@ case 434: /* clo ek r */
     r[1] = r[4];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18451,7 +18448,7 @@ case 434: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18468,7 +18465,7 @@ s_loop_v7519: /* k id bs-removable-if-dead? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -18487,7 +18484,7 @@ s_loop_v7519: /* k id bs-removable-if-dead? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18505,7 +18502,7 @@ case 436: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18513,7 +18510,7 @@ case 436: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18549,7 +18546,7 @@ s_bs_2Dref_2Dtransparent_3F: /* k exp */
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if ((isvector((r[1])))) {
@@ -18613,7 +18610,7 @@ s_bs_2Dref_2Dtransparent_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   } else {
@@ -18633,7 +18630,7 @@ s_bs_2Dref_2Dtransparent_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(1);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
   if (bool_from_obj(cxs_let_2Dexp_3F_23216((r[1])))) {
@@ -18656,7 +18653,7 @@ s_bs_2Dref_2Dtransparent_3F: /* k exp */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
   }
@@ -18677,7 +18674,7 @@ s_loop_v7498: /* k id bs-ref-transparent? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -18696,7 +18693,7 @@ s_loop_v7498: /* k id bs-ref-transparent? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18714,7 +18711,7 @@ case 439: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18722,7 +18719,7 @@ case 439: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18739,7 +18736,7 @@ s_loop_v7487: /* k id bs-ref-transparent? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -18758,7 +18755,7 @@ s_loop_v7487: /* k id bs-ref-transparent? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18776,7 +18773,7 @@ case 441: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18784,7 +18781,7 @@ case 441: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18801,7 +18798,7 @@ s_loop_v7476: /* k id bs-ref-transparent? */
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     hreserve(hbsz(1+1), 3); /* 3 live regs */
@@ -18820,7 +18817,7 @@ s_loop_v7476: /* k id bs-ref-transparent? */
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18838,7 +18835,7 @@ case 443: /* clo ek r */
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18846,7 +18843,7 @@ case 443: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
@@ -18864,7 +18861,7 @@ case 444: /* clo ek r */
     r[1] = r[4];  
     r[2] = r[3];  
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   } else {
     r[0] = r[4];  
@@ -18872,16 +18869,14 @@ case 444: /* clo ek r */
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
     rreserve(MAX_LIVEREGS);
-    assert(rc = 3);
+    rc = 3;
     goto jump;
   }
 
 default: /* inter-host call */
     cxg_hp = hp;
     cxm_rgc(r, r + MAX_LIVEREGS);
-#ifndef NDEBUG
     cxg_rc = rc;
-#endif
     return pc;
   }
 }
@@ -18895,7 +18890,7 @@ void MODULE(void)
     cxg_rootp = &root;
     LOAD();
     pc = obj_from_case(0);
-    assert((cxg_rc = 0, 1));
+    cxg_rc = 0;
     while (pc) pc = (*(cxhost_t*)pc)(pc); 
     assert(cxg_rc == 2);
   }

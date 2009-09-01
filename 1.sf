@@ -13,7 +13,7 @@
 ; if reader's input is needed in S-expr format, (datum->rhe-sexp d) converts
 ; datums to S-exprs in the reader host environment, wrapping the ones which
 ; are not supported by RHE into (lambda () d). This function depends on the
-; data types derfined in 0.sf
+; data types defined in 0.sf
 
 ; Note that the host environment's get-char/peek-char are expected to be 8-bit clean.
 ; char->integer is expected to return nonnegative values in some Unicode subrange 
@@ -654,6 +654,38 @@
         [(char-number-initial? (icar i)) (subread-number i #f 10 return)]
         [(input-prefix i "#\\") => (lambda (i) (subread-char i return))]
         [(char=? (icar i) #\") (subread-string i return)]
+        [(input-prefix i "#<<") ; 'here-string'
+          => (lambda (i)
+               (let loop ([i i] [lst '()])
+                 (cond [(inull? i) (r-error i "unexpected eof after #<<")]
+                       [(not (char=? (icar i) #\newline))
+                        (loop (icdr i) (cons (icar i) lst))]
+                       [else
+                        (if (null? lst)
+                            (r-error i "no close tag after #<<")
+                            (let ([rtag lst])
+                              (define (return-string lst i)
+                                (let* ([rlst (reverse lst)]
+                                       [cpl (map char->integer rlst)]
+                                       [bits (fold-max 8 (map codepoint-byte-width cpl))])
+                                  (if (and (eqv? bits 8) (andmap string-safe-codepoint? cpl))
+                                    (return (datum 'string (list->string rlst)) i)
+                                    (return (make-datum 'string (cons bits cpl)) i))))
+                              (let loop ([i (icdr i)] [lst '()] [res '()])
+                                (cond
+                                  [(inull? i)
+                                   (if (equal? lst rtag)
+                                       (return-string res i)
+                                       (r-error i "unexpected eof in #<<"))]
+                                  [(char=? (icar i) #\newline)
+                                   (if (equal? lst rtag)
+                                       (return-string res i)
+                                       (loop (icdr i) '()
+                                         (if (null? res)
+                                             lst
+                                             (append lst (cons #\newline res)))))]
+                                  [else
+                                   (loop (icdr i) (cons (icar i) lst) res)]))))])))]
         [(input-prefix i "'")
          => (lambda (i) (subread i r (lambda (d i) 
               (return (datum 'list (datum 'symbol "quote") d) i))))]

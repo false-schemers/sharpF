@@ -1790,16 +1790,16 @@ void *getnative(obj o, cxtype_t *tp) {
     [(_ p) (%prim! "void(fputc('\\n', oportdata(obj_from_$arg)))" p)]))
 
 
-(define (write/3 x d? p)
+(define (initial-writer x d? p)
 
   (define (wrpair x d? p)
     (write-char #\( p)
     (let loop ([x x])
-      (write/3 (car x) d? p)
+      (*current-writer* (car x) d? p)
       (cond
         [(pair? (cdr x)) (write-char #\space p) (loop (cdr x))]
         [(null? (cdr x))]
-        [else (write-string " . " p) (write/3 (cdr x) d? p)]))
+        [else (write-string " . " p) (*current-writer* (cdr x) d? p)]))
     (write-char #\) p))
 
   (define (wrchar x p)
@@ -1824,14 +1824,14 @@ void *getnative(obj o, cxtype_t *tp) {
       (if (not (= size 0))
           (let ([last (- size 1)])
             (let loop ([i 0])
-              (write/3 (vector-ref x i) d? p)
+              (*current-writer* (vector-ref x i) d? p)
               (if (not (= i last))
                   (begin (write-char #\space p) (loop (+ i 1))))))))
     (write-char #\) p))
 
   (define (wrbox x d? p)
     (write-string "#&" p)
-    (write/3 (unbox x) d? p))
+    (*current-writer* (unbox x) d? p))
 
   (cond
     [(eof-object? x) (write-string "#<eof>" p)]
@@ -1839,7 +1839,6 @@ void *getnative(obj o, cxtype_t *tp) {
     [(output-port? x) (write-string "#<oport>" p)]
     [(symbol? x) (write-string (symbol->string x) p)]
     [(pair? x) (wrpair x d? p)]
-    ;[(number? x) (write-string (number->string x) p)]
     [(fixnum? x) (display-fixnum x p)]
     [(flonum? x) (display-flonum x p)]
     [(null? x) (write-string "()" p)]
@@ -1850,6 +1849,13 @@ void *getnative(obj o, cxtype_t *tp) {
     [(box? x) (wrbox x d? p)]
     [(procedure? x) (write-string "#<procedure>" p)]
     [else (write-string "#<unknown>" p)]))
+
+(define *current-writer* initial-writer)
+(define (current-writer) *current-writer*)
+(define (set-current-writer! fn) (set! *current-writer* fn))
+
+(define (write/3 x d? port)
+  ((current-writer) x d? port))
 
 (define-syntax write
   (syntax-rules ()

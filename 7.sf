@@ -395,7 +395,7 @@
              "    pc = objptr_from_obj(r[0])[0];\n"
              "    ${r[$arg#] = obj_from_$arg;\n"
              "    $}rreserve(MAX_LIVEREGS);\n"
-             "    assert(rc = $arg#);\n"
+             "    rc = $arg#;\n"
              "    goto jump;")])
              (cg-primapp-to tgt 
                (primapp-exp (*?!-effect) prim (cons rator rands))
@@ -406,7 +406,7 @@
              "    ${r[$live+$arg#] = obj_from_$arg;\n"
              "    $}r += $live; /* shift reg wnd */\n"
              "    rreserve(MAX_LIVEREGS);\n"
-             "    assert(rc = $arg#);\n"
+             "    rc = $arg#;\n"
              "    goto jump;")])
              (cg-primapp-to tgt 
                (primapp-exp (*?!-effect) prim (cons rator rands))

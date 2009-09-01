@@ -505,7 +505,7 @@
     pc = 0; /* exit from module init */
     r[$live+1] = obj_from_$arg;
     r += $live; /* shift reg wnd */
-    assert(rc = 2);
+    rc = 2;
     goto jump;")
 
 (define-integrable (halt-exp exp) 
