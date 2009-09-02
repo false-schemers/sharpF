@@ -399,7 +399,8 @@
                  ;(list 'quote (unwrap-vecs (car tail)))
                  ;(expand-subexpr (decompose-literal (unwrap-vecs (car tail))))
                  ;esl** : changed to expand-subexpr-top (uses empty-env) in 160s
-                 (list '%quote (expand-subexpr-top (decompose-literal (unwrap-vecs (car tail)))))]
+                 ;esl** : moved (list '%quote ...) into expand-subexpr-top call
+                 (expand-subexpr-top (list '%quote (decompose-literal (unwrap-vecs (car tail)))))]
                 [(set!)
                  (expr-assert (and (= len 2) (sid? (car tail))))
                  (let ([var (lookup2 (car tail) env store)])
@@ -480,9 +481,10 @@
      ;((get-ek sexp) sexp)
      ;(expand-any (decompose-literal sexp) 
      ;   id-n env store loc-n lsd? ek sk dk bk)
-     ;esl** : changed to empty-env in 160s 
-     (list '%quote (expand-any (decompose-literal sexp) 
-                      id-n empty-env store loc-n lsd? ek sk dk bk))]
+     ;esl** : changed to empty-env in 160s
+     ;esl** : moved (list '%quote ...) into expand-any call 
+     (expand-any (list '%quote (decompose-literal sexp)) 
+        id-n empty-env store loc-n lsd? ek sk dk bk)]
     [else
      (x-error (cond [(pair? sexp) "improper list: "]
                     [(vector? sexp) "vector: "]

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <assert.h>
 /* extra includes */
+#include <ctype.h>
 #include <string.h>
 
 /* standard definitions */
@@ -144,6 +145,7 @@ char *allocstring(int n, int c) {
   memset(s, c, n); s[n] = 0;
   return s;
 }
+#ifndef NDEBUG
 int stringlen(obj o) {
   char *s = stringdata(o);
   return (int)strlen(s); 
@@ -154,6 +156,7 @@ char* stringref(obj o, int i) {
   assert(i >= 0 && i < l);  
   return s+i;
 }
+#endif
 #ifdef NDEBUG
   #define stringlen(o) ((int)strlen(stringdata(o)))
   #define stringref(o, i) (stringdata(o)+(i))

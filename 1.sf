@@ -304,22 +304,26 @@
 
 ; main reader engine
 
-(define (subread i r return)
-  (let loop ([i i])
+(define (subread start-i r return)
+  (let loop ([i start-i])
     (r i r 
       (lambda (d i) 
-        (cond [(eq? (datum-type d) 'atmosphere) (loop i)]
+        (cond [(eq? (datum-type d) 'eof)
+               (r-error start-i "unexpected eof inside form")]
+              [(eq? (datum-type d) 'atmosphere) (loop i)]
               [(eq? (datum-type d) 'read-as)
                (r-error i "invalid context for #!read")]
               [(eq? (datum-type d) 'terminator)
                (r-error i "unexpected terminator: ~a" (car (datum-components d)))]
               [else (return d i)])))))
 
-(define (subread-to-terminator i r tc dotted? rdefs? kons knil return)
-  (let loop ([i i] [r r] [limit #f] [return return])
+(define (subread-to-terminator start-i r tc dotted? rdefs? kons knil return)
+  (let loop ([i start-i] [r r] [limit #f] [return return])
     (r i r 
       (lambda (d i) 
-        (cond [(eq? (datum-type d) 'atmosphere) (loop i r limit return)]
+        (cond [(eq? (datum-type d) 'eof)
+               (r-error start-i "unexpected eof in nested form")]
+              [(eq? (datum-type d) 'atmosphere) (loop i r limit return)]
               [(eq? (datum-type d) 'read-as)
                (if (not rdefs?)
                    (r-error i "invalid context for #!read")

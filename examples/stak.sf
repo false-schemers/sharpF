@@ -172,6 +172,8 @@ void *getnative(obj o, cxtype_t *tp) {
 
 ; characters
 
+(%include <ctype.h>)
+
 (%definition "/* characters */")
 (%definition "#define CHAR_ITAG 2")  
 (%definition "typedef int char_t;")
@@ -207,17 +209,18 @@ void *getnative(obj o, cxtype_t *tp) {
   return s;
 }")
 
-(%localdef "int stringlen(obj o) {
+(%localdef "#ifndef NDEBUG
+int stringlen(obj o) {
   char *s = stringdata(o);
   return (int)strlen(s); 
-}")
-
-(%localdef "char* stringref(obj o, int i) {
+}
+char* stringref(obj o, int i) {
   char *s = stringdata(o);
   int l = (int)strlen(s); 
   assert(i >= 0 && i < l);  
   return s+i;
-}")
+}
+#endif")
 
 (%definition "#ifdef NDEBUG
   #define stringlen(o) ((int)strlen(stringdata(o)))
