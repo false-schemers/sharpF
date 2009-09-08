@@ -31,6 +31,8 @@
 ;  o  added syntax-lambda; let-syntax became a derived form
 ;  o  literals are decomposed into %quote / %const
 ;  o  modified to get rid of variadics, not needed for self-compile
+;  o  #&() patern matcher extensions
+;  o  (syntax-rules () [_ templ]) supports simple identifier-syntax
 
 #fload "0.sf"
 ; also refers to read/1
@@ -349,7 +351,7 @@
        (lambda (sexp id-n) 
          (expand-any sexp id-n env store loc-n lsd? ek sk dk bk)))]
     [(syntax-lambda)
-     (or ek sk lsd?
+     (or ek sk lsd? (pair? sexp)
          (x-error "syntax lambda applied in bad context: " sexp))
      (let ([formals (cadar syntax)] [sexps (cdr sexp)] 
            [body (cddar syntax)] [denv (cadr syntax)])
@@ -377,7 +379,7 @@
   (define (get-dk sexp) (get-k dk sexp "definition"))
   (define (expand-subexpr sexp)
     (expand-expr sexp id-n env store loc-n))
-  (define (expand-subexpr-top sexp) ;esl++ : expand converted constants in empty env
+  (define (expand-subexpr-top sexp) ;++ : expand converted constants in empty env
     (expand-expr sexp id-n empty-env store loc-n))
   (define (handle-syntax-use syntax head store loc-n)
     (let* ([tail (cdr sexp)] [sexp (cons head tail)])
@@ -398,8 +400,8 @@
                  (expr-assert (= len 1))
                  ;(list 'quote (unwrap-vecs (car tail)))
                  ;(expand-subexpr (decompose-literal (unwrap-vecs (car tail))))
-                 ;esl** : changed to expand-subexpr-top (uses empty-env) in 160s
-                 ;esl** : moved (list '%quote ...) into expand-subexpr-top call
+                 ;** : changed to expand-subexpr-top (uses empty-env) in 160s
+                 ;** : moved (list '%quote ...) into expand-subexpr-top call
                  (expand-subexpr-top (list '%quote (decompose-literal (unwrap-vecs (car tail)))))]
                 [(set!)
                  (expr-assert (and (= len 2) (sid? (car tail))))
@@ -466,7 +468,10 @@
     [(sid? sexp)
      (let ([val (lookup2 sexp env store)])
        (if (syntax? val)
-           ((get-sk sexp) val sexp store loc-n)
+           (if (and (not sk) ek (expander? val)) 
+               ;++ : support for identifier-syntax
+               (apply-expander val sexp id-n env store loc-n #f ek #f #f #f)
+               ((get-sk sexp) val sexp store loc-n))
            ((get-ek sexp)
             (if (expanded-code? val) (code-output val) val))))]
     [(null? sexp)
@@ -481,8 +486,8 @@
      ;((get-ek sexp) sexp)
      ;(expand-any (decompose-literal sexp) 
      ;   id-n env store loc-n lsd? ek sk dk bk)
-     ;esl** : changed to empty-env in 160s
-     ;esl** : moved (list '%quote ...) into expand-any call 
+     ;** : changed to empty-env in 160s
+     ;** : moved (list '%quote ...) into expand-any call 
      (expand-any (list '%quote (decompose-literal sexp)) 
         id-n empty-env store loc-n lsd? ek sk dk bk)]
     [else
@@ -625,7 +630,7 @@
     (for-each check formals) 
     (make-expander (cons 'syntax-lambda (cdr synlambda)) env))) ;*** fixed in 153s
   
-;; esl++: pattern matcher extension
+;;++ : pattern matcher extension
 
 (define (sbox->sexp-list b)  (cdr (unbox b)))
 
@@ -841,20 +846,23 @@
       (or (list2? rule) (x-error "malformed syntax rule: " rule))
       (let ([pat (car rule)] [tmpl (cadr rule)])
         (or (and (pair? pat) (sid? (car pat)))
+            (sid? pat) ;++ : support for identifier-syntax
             (x-error "malformed pattern: " pat))
-        (check-ellipses pat #f)
-        (check-ellipses tmpl #t)
-        (let ([pat-env (make-pat-env pat)])
-          (check-var-depths tmpl pat-env)
-          (let collect ([x tmpl] [lits '()])
-            (cond
-              [(ellipsis? x) lits]
-              [(sid? x)
-               (if (assv (sid-id x) pat-env) lits (cons (sid-id x) lits))]
-              [(vector? x) (collect (svector->list x) lits)]
-              [(box? x) (collect (template-sbox->sexp x) lits)]
-              [(pair? x) (collect (car x) (collect (cdr x) lits))]
-              [else lits])))))
+        ;++ : treat _ pat as (_) for checking purposes
+        (let ([pat (if (sid? pat) (list pat) pat)])
+          (check-ellipses pat #f)
+          (check-ellipses tmpl #t)
+          (let ([pat-env (make-pat-env pat)])
+            (check-var-depths tmpl pat-env)
+            (let collect ([x tmpl] [lits '()])
+              (cond
+                [(ellipsis? x) lits]
+                [(sid? x)
+                 (if (assv (sid-id x) pat-env) lits (cons (sid-id x) lits))]
+                [(vector? x) (collect (svector->list x) lits)]
+                [(box? x) (collect (template-sbox->sexp x) lits)]
+                [(pair? x) (collect (car x) (collect (cdr x) lits))]
+                [else lits]))))))
     (define (reduce-env lits)
       (define (list-dots-ids x ids)
         (cond
@@ -955,7 +963,7 @@
                   [vars (list-ids (car pat) #t not-pat-literal?)])
              (define (collect1 match)
                (map cdr (collect (car pat) match '())))
-             (append (apply-map-list (cons vars (map collect1 matches))) ; esl*
+             (append (apply-map-list (cons vars (map collect1 matches))) ; *
                      (collect (cddr pat) tail bindings)))]
           [else
            (collect (car pat) (car sexp)
@@ -999,7 +1007,7 @@
                      (expand (car tmpl) (map cons vars-to-iterate vals)))
                    (let ([val-lists (map lookup vars-to-iterate)])
                      (if (or (null? (cdr val-lists))
-                             (pairwise-andmap (lambda (x y) (= x y)) ; esl*
+                             (pairwise-andmap (lambda (x y) (= x y)) ; *
                                (map length val-lists))) ; was (apply = (map length val-lists))
                          (append
                            (map expand-using-vals-list (apply-map-list val-lists))
@@ -1015,13 +1023,14 @@
       (if (null? rules)
           (x-error "no matching rule for macro use: " sexp)
           (let* ([rule (car rules)] [pat (car rule)] [tmpl (cadr rule)])
-            (if (pair? pat)
-                (if (and (pair? sexp) (matches? (cdr pat)))
-                    (expand-template (cdr pat) tmpl (make-bindings (cdr pat)))
-                    (loop (cdr rules)))
-                (if (sid? sexp)
-                    (expand-template '() tmpl '())
-                    (loop (cdr rules)))))))))
+            (cond
+               [(and (pair? pat) (pair? sexp) (matches? (cdr pat)))
+                (expand-template (cdr pat) tmpl (make-bindings (cdr pat)))]
+               ;++ : support for identifier-syntax
+               [(and (sid? pat) (sid? sexp))
+                (expand-template '() tmpl '())]
+               [else
+                (loop (cdr rules))])))))) 
 
 (define builtins-store
   (let loop ([bs '(begin define define-syntax if lambda quote
@@ -1037,7 +1046,7 @@
 (define null-prog '())
 (define null-stuff 
   (expand-top-level-forms null-prog builtins-store 0 
-    (lambda (acc store loc-n) (list acc store loc-n)))) ; esl*
+    (lambda (acc store loc-n) (list acc store loc-n)))) ; *
 (define null-output (car null-stuff))
 (define null-store (cadr null-stuff))
 (define null-loc-n (caddr null-stuff))

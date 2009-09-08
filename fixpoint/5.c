@@ -20,7 +20,6 @@ extern void module_3(void); /* 3.sf */
 #include <string.h>
 
 /* standard definitions */
-#define REGS_SIZE 5000
 
 typedef ptrdiff_t obj;        /* pointers are this size, lower bit zero */
 typedef ptrdiff_t cxoint_t;   /* same thing, used as integer */
@@ -55,7 +54,7 @@ typedef struct {              /* type descriptor */
 #define void_from_void(v)     (void)(v)
 #define void_from_obj(o)      (void)(o)
 
-#define rreserve(m)           if (r > cxg_regs + REGS_SIZE - 2*(m)) r = cxm_rgc(r, r+(m))
+#define rreserve(m)           if (r + (m) >= cxg_rend) r = cxm_rgc(r, m)
 #define hpushptr(p, pt, l)    (hreserve(2, l), *--hp = (obj)(p), *--hp = (obj)(pt), (obj)(hp+1))   
 #define hbsz(s)               ((s) + 1) /* 1 extra word to store block size */
 #define hreserve(n, l)        ((hp < cxg_heap + (n)) ? hp = cxm_hgc(r, r+(l), hp, n) : hp)
@@ -73,9 +72,9 @@ extern obj *cxg_heap;
 extern obj *cxg_hp;
 extern cxoint_t cxg_hmask;
 extern cxroot_t *cxg_rootp;
-extern obj *cxm_rgc(obj *regs, obj *regp);
+extern obj *cxm_rgc(obj *regs, size_t needs);
 extern obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs);
-extern obj cxg_regs[REGS_SIZE];
+extern obj *cxg_regs, *cxg_rend;
 extern void cxm_check(int x, char *msg);
 extern void *cxm_cknull(void *p, char *msg);
 extern int cxg_rc;
@@ -448,12 +447,13 @@ static obj cases[205] = {
 };
 
 /* host procedure */
-#define MAX_LIVEREGS 26
+#define MAX_HOSTREGS 52
 static obj host(obj pc)
 {
   register obj *r = cxg_regs;
   register obj *hp = cxg_hp;
   register int rc = cxg_rc;
+  rreserve(MAX_HOSTREGS); 
 jump: 
   switch (case_from_obj(pc)) {
 
@@ -517,7 +517,7 @@ gs_begin_2Dexp_3F_23203: /* k exp */
     r[5+2] = (car((r[2])));
     r[5+3] = r[3];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -525,7 +525,7 @@ gs_begin_2Dexp_3F_23203: /* k exp */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -534,7 +534,7 @@ gs_begin_2Dexp_3F_23203: /* k exp */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -544,7 +544,7 @@ gs_begin_2Dexp_3F_23203: /* k exp */
     r[2+1] = obj_from_ktrap();
     r[2+2] = obj_from_bool(0);
     r += 2; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -560,7 +560,7 @@ case 2: /* clo ek r */
     r[3+1] = obj_from_ktrap();
     r[3+2] = obj_from_bool(!bool_from_obj(r[1]));
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -586,7 +586,7 @@ s_loop: /* k id */
     r[2+1] = obj_from_ktrap();
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -626,7 +626,7 @@ case 4: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -678,7 +678,7 @@ case 5: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -692,7 +692,7 @@ s_unionq: /* k s1 s2 */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     /* r[2] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -739,7 +739,7 @@ case 7: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -753,7 +753,7 @@ s_setdiffq: /* k s1 s2 */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -800,7 +800,7 @@ case 9: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -814,7 +814,7 @@ s_intersectionq: /* k s1 s2 */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -861,7 +861,7 @@ case 11: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -882,7 +882,7 @@ case 12: /* cps-convert k exp */
     pc = objptr_from_obj(r[3+0])[0];
     r[3+1] = r[2];  
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -928,7 +928,7 @@ case 13: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -1009,7 +1009,7 @@ case 14: /* clo ek r */
     r[1] = r[4];  
     r[2] = r[3];  
     r[3] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -1055,7 +1055,7 @@ case 16: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[7];  
     r[2] = r[4];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -1069,7 +1069,7 @@ case 16: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
   }
@@ -1086,7 +1086,7 @@ case 17: /* clo ek r */
     r[4+1] = r[3];  
     r[4+2] = r[1];  
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1140,7 +1140,7 @@ case 18: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[7];  
     r[2] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1164,7 +1164,7 @@ case 19: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -1226,7 +1226,7 @@ case 20: /* clo ek r */
     r[1] = r[4];  
     r[2] = r[3];  
     r[3] = r[9];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -1240,7 +1240,7 @@ s_cps_2Dlist: /* k exps inner */
     r[3+1] = r[0];  
     r[3+2] = (mknull());
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -1291,7 +1291,7 @@ case 22: /* clo ek r */
     r[1] = r[7];  
     r[2] = (cdr((r[6])));
     r[3] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -1306,7 +1306,7 @@ case 22: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
   }
@@ -1330,7 +1330,7 @@ case 23: /* clo k new-exps */
     r[6+1] = r[5];  
     r[6+2] = (car((r[3])));
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1352,7 +1352,7 @@ case 24: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[3];  
     r[2] = r[5];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1407,7 +1407,7 @@ case 25: /* clo ek r */
     r[1] = r[8];  
     r[2] = (cdr((r[5])));
     r[3] = r[9];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -1431,7 +1431,7 @@ case 26: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -1493,7 +1493,7 @@ case 27: /* clo ek r */
     r[1] = r[4];  
     r[2] = (car((r[3])));
     r[3] = r[9];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -1521,7 +1521,7 @@ case 28: /* clo k new-exps */
     r[5+1] = r[0];  
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1567,7 +1567,7 @@ case 30: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[7];  
     r[2] = r[4];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -1576,7 +1576,7 @@ case 30: /* clo ek r */
     r[1] = r[5];  
     r[2] = r[4];  
     r[3] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   }
@@ -1619,7 +1619,7 @@ case 31: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1646,7 +1646,7 @@ s_cps_2Dsimple: /* k exp */
     r[3+1] = obj_from_ktrap();
     r[3+2] = r[1];  
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -1710,7 +1710,7 @@ s_cps_2Dsimple: /* k exp */
     r[6+6] = r[4];  
     r[6+7] = r[3];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v4475;
   } else {
   if ((isvector((r[1])))) {
@@ -1740,7 +1740,7 @@ s_cps_2Dsimple: /* k exp */
     pc = objptr_from_obj(r[6+0])[0];
     r[6+1] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
   } else {
@@ -1811,7 +1811,7 @@ case 33: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1835,7 +1835,7 @@ case 34: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     /* r[2] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1858,7 +1858,7 @@ case 35: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1883,7 +1883,7 @@ case 36: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -1934,7 +1934,7 @@ s_loop_v4475: /* k rands ids vals exps cps-simple prim effect */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -1958,7 +1958,7 @@ s_loop_v4475: /* k rands ids vals exps cps-simple prim effect */
     r[9+1] = r[8];  
     r[9+2] = (car((r[1])));
     r += 9; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -1999,7 +1999,7 @@ case 38: /* clo ek r */
     r[9+4] = r[4];  
     r[9+5] = r[8];  
     r += 9; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 6;
     goto jump;
   } else {
@@ -2016,7 +2016,7 @@ case 38: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
   }
@@ -2089,7 +2089,7 @@ case 39: /* clo ek r */
     r[13+4] = (r[11]);
     r[13+5] = (r[12]);
     r += 13; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 6;
     goto jump;
 
@@ -2143,7 +2143,7 @@ case 40: /* clo ek r */
     r[1] = r[7];  
     r[2] = r[3];  
     r[3] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -2173,7 +2173,7 @@ case 41: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2203,7 +2203,7 @@ s_loop_v4442: /* k id cps-simple */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2237,7 +2237,7 @@ case 43: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2259,7 +2259,7 @@ case 44: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2284,7 +2284,7 @@ case 45: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2311,7 +2311,7 @@ case 46: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[7];  
     r[2] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2332,7 +2332,7 @@ case 46: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[8];  
     r[2] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2357,7 +2357,7 @@ case 46: /* clo ek r */
     r[2] = r[5];  
     r[3] = (cx__2393);
     r[4] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   } else {
@@ -2367,7 +2367,7 @@ case 46: /* clo ek r */
     r[2] = (cx__2389);
     r[3] = obj_from_bool(1);
     r[4] = r[5];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   }
@@ -2391,7 +2391,7 @@ case 47: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2411,7 +2411,7 @@ case 48: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -2477,7 +2477,7 @@ case 49: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2507,7 +2507,7 @@ s_loop_v4391: /* k id cps-simple */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2541,7 +2541,7 @@ case 51: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2563,7 +2563,7 @@ case 52: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2594,7 +2594,7 @@ case 53: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -2624,7 +2624,7 @@ case 54: /* clo ek  */
     r[7+3] = (cx__2387);
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -2646,7 +2646,7 @@ case 55: /* clo ek  */
     r[5+3] = obj_from_bool(1);
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -2659,7 +2659,7 @@ case 56: /* clo ek  */
     r[0] = (cx_reset);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -2685,7 +2685,7 @@ s_cps_2Dsimple_3F: /* k exp */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(1);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2764,7 +2764,7 @@ s_cps_2Dsimple_3F: /* k exp */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(1);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2819,7 +2819,7 @@ s_loop_v4336: /* k id cps-simple? */
     r[3+1] = obj_from_ktrap();
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2838,7 +2838,7 @@ s_loop_v4336: /* k id cps-simple? */
     r[4+1] = r[3];  
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -2856,7 +2856,7 @@ case 59: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2864,7 +2864,7 @@ case 59: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -2881,7 +2881,7 @@ s_loop_v4325: /* k id cps-simple? */
     r[3+1] = obj_from_ktrap();
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2900,7 +2900,7 @@ s_loop_v4325: /* k id cps-simple? */
     r[4+1] = r[3];  
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -2918,7 +2918,7 @@ case 61: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2926,7 +2926,7 @@ case 61: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -2954,7 +2954,7 @@ case 62: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[7];  
     r[2] = r[5];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -2988,7 +2988,7 @@ case 62: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -3007,7 +3007,7 @@ case 62: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -3026,7 +3026,7 @@ case 62: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -3051,7 +3051,7 @@ case 62: /* clo ek r */
     r[2] = r[5];  
     r[3] = (cx__2393);
     r[4] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   } else {
@@ -3061,7 +3061,7 @@ case 62: /* clo ek r */
     r[2] = (cx__2389);
     r[3] = obj_from_bool(1);
     r[4] = r[5];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   }
@@ -3084,7 +3084,7 @@ case 63: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -3092,7 +3092,7 @@ case 63: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -3109,7 +3109,7 @@ s_loop_v4304: /* k id cps-simple? */
     r[3+1] = obj_from_ktrap();
     r[3+2] = obj_from_bool(isnull((r[1])));
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -3128,7 +3128,7 @@ s_loop_v4304: /* k id cps-simple? */
     r[4+1] = r[3];  
     r[4+2] = (car((r[1])));
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -3146,7 +3146,7 @@ case 65: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     r[2] = (cdr((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -3154,7 +3154,7 @@ case 65: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -3172,7 +3172,7 @@ case 66: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -3180,7 +3180,7 @@ case 66: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -3211,7 +3211,7 @@ case 67: /* clo ek  */
     r[7+3] = (cx__2387);
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -3233,7 +3233,7 @@ case 68: /* clo ek  */
     r[5+3] = obj_from_bool(1);
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -3246,7 +3246,7 @@ case 69: /* clo ek  */
     r[0] = (cx_reset);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -3317,7 +3317,7 @@ case 70: /* clo k exp kexp */
     r[10+5] = r[7];  
     r[10+6] = r[6];  
     r += 10; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_l_v4233;
   } else {
     hreserve(hbsz(3+1), 10); /* 10 live regs */
@@ -3330,7 +3330,7 @@ case 70: /* clo k exp kexp */
     pc = objptr_from_obj(r[11+0])[0];
     r[11+1] = (r[10]);
     r += 11; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
   }
@@ -3460,7 +3460,7 @@ case 71: /* clo k val */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -3487,7 +3487,7 @@ s_l_v4233: /* k kexp cps-one else-exp cps then-exp test-exp */
     r[8+2] = r[6];  
     r[8+3] = r[7];  
     r += 8; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -3514,7 +3514,7 @@ case 73: /* clo k test */
     r[7+2] = r[2];  
     r[7+3] = r[4];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -3539,7 +3539,7 @@ case 74: /* clo ek r */
     r[1] = r[7];  
     r[2] = r[4];  
     /* r[3] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -3564,7 +3564,7 @@ case 75: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -3616,7 +3616,7 @@ case 76: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     r[2] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -3659,7 +3659,7 @@ case 77: /* clo ek r */
     r[8+1] = obj_from_ktrap();
     r[8+2] = r[7];  
     r += 8; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -3711,7 +3711,7 @@ case 78: /* clo k args */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -3741,7 +3741,7 @@ s_loop_v4193: /* k id cps-simple */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -3775,7 +3775,7 @@ case 80: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -3797,7 +3797,7 @@ case 81: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -3822,7 +3822,7 @@ case 82: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -3853,7 +3853,7 @@ case 83: /* clo ek r */
     r[1] = (r[10]);
     r[2] = r[9];  
     r[3] = r[4];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -3874,7 +3874,7 @@ case 83: /* clo ek r */
     r[1] = r[6];  
     r[2] = (vectorref((r[7]), (+2)));
     r[3] = (r[10]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -3906,7 +3906,7 @@ case 83: /* clo ek r */
     r[1] = r[6];  
     r[2] = (r[10]);
     r[3] = (r[11]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -3940,7 +3940,7 @@ case 83: /* clo ek r */
     r[1] = (r[10]);
     r[2] = r[9];  
     r[3] = (r[11]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -3966,7 +3966,7 @@ case 83: /* clo ek r */
     r[1] = r[6];  
     r[2] = (vectorref((r[7]), (+1)));
     r[3] = r[9];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -3991,7 +3991,7 @@ case 83: /* clo ek r */
     r[2] = r[8];  
     r[3] = (cx__2393);
     r[4] = (r[10]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   } else {
@@ -4001,7 +4001,7 @@ case 83: /* clo ek r */
     r[2] = (cx__2389);
     r[3] = obj_from_bool(1);
     r[4] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   }
@@ -4029,7 +4029,7 @@ case 84: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -4083,7 +4083,7 @@ case 85: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -4139,7 +4139,7 @@ case 86: /* clo ek r */
     r[1] = r[4];  
     r[2] = r[3];  
     r[3] = r[9];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -4164,7 +4164,7 @@ case 87: /* clo k vals */
     r[7+2] = r[4];  
     r[7+3] = r[3];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -4195,7 +4195,7 @@ case 88: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4225,7 +4225,7 @@ case 89: /* clo k fn+args */
     r[4+1] = obj_from_ktrap();
     r[4+2] = r[3];  
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4268,7 +4268,7 @@ case 90: /* clo ek r */
     r[8+1] = obj_from_ktrap();
     r[8+2] = r[7];  
     r += 8; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4285,7 +4285,7 @@ case 91: /* clo k kexp */
     r[4+2] = r[3];  
     r[4+3] = r[1];  
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -4315,7 +4315,7 @@ case 92: /* clo ek  */
     r[7+3] = (cx__2387);
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -4337,7 +4337,7 @@ case 93: /* clo ek  */
     r[5+3] = obj_from_bool(1);
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -4350,7 +4350,7 @@ case 94: /* clo ek  */
     r[0] = (cx_reset);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -4381,7 +4381,7 @@ case 95: /* lambda-lift k exp */
     r[6+3] = r[3];  
     r[6+4] = r[2];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_lift;
 
 case 96: /* clo k lam xvars tid */
@@ -4406,7 +4406,7 @@ s_loop_v4076: /* k id */
     r[2+1] = obj_from_ktrap();
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -4438,7 +4438,7 @@ case 97: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -4486,7 +4486,7 @@ case 98: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4515,7 +4515,7 @@ s_loop_v4061: /* k id */
     r[2+1] = obj_from_ktrap();
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -4555,7 +4555,7 @@ case 100: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4572,7 +4572,7 @@ case 101: /* clo ek r */
     r[5+2] = r[2];  
     r[5+3] = r[1];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_curry_2Dexp_231421;
 
 case 102: /* clo ek r */
@@ -4598,7 +4598,7 @@ case 102: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4638,7 +4638,7 @@ s_lift: /* k exp top-lams top-ids curry-lam */
     r[7+1] = obj_from_ktrap();
     r[7+2] = r[1];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -4775,7 +4775,7 @@ s_lift: /* k exp top-lams top-ids curry-lam */
     pc = objptr_from_obj(r[8+0])[0];
     r[8+1] = r[7];  
     r += 8; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
   } else {
@@ -4801,7 +4801,7 @@ s_lift: /* k exp top-lams top-ids curry-lam */
     r[10+5] = r[3];  
     r[10+6] = r[4];  
     r += 10; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_lift_2Dlams;
   } else {
     r[7] = (cx__2Acurrent_2Derror_2Dport_2A);
@@ -4825,7 +4825,7 @@ s_lift: /* k exp top-lams top-ids curry-lam */
     r[2] = r[7];  
     r[3] = (cx__2393);
     r[4] = r[9];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   } else {
@@ -4835,7 +4835,7 @@ s_lift: /* k exp top-lams top-ids curry-lam */
     r[2] = (cx__2389);
     r[3] = obj_from_bool(1);
     r[4] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   }
@@ -4867,7 +4867,7 @@ case 104: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4891,7 +4891,7 @@ case 105: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     /* r[2] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4914,7 +4914,7 @@ case 106: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4939,7 +4939,7 @@ case 107: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -4949,7 +4949,7 @@ s_loop_v3978: /* k id lift */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -4983,7 +4983,7 @@ case 108: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5005,7 +5005,7 @@ case 109: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5030,7 +5030,7 @@ case 110: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5060,7 +5060,7 @@ s_loop_v3951: /* k id lift */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -5094,7 +5094,7 @@ case 112: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5116,7 +5116,7 @@ case 113: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5147,7 +5147,7 @@ case 114: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5157,7 +5157,7 @@ s_loop_v3926: /* k id lift */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -5191,7 +5191,7 @@ case 115: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5213,7 +5213,7 @@ case 116: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5234,7 +5234,7 @@ case 117: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5257,7 +5257,7 @@ case 118: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5317,7 +5317,7 @@ case 119: /* clo ek r */
     r[2] = r[6];  
     r[3] = r[7];  
     r[4] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -5347,7 +5347,7 @@ case 120: /* clo ek  */
     r[7+3] = (cx__2387);
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -5369,7 +5369,7 @@ case 121: /* clo ek  */
     r[5+3] = obj_from_bool(1);
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -5382,7 +5382,7 @@ case 122: /* clo ek  */
     r[0] = (cx_reset);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -5429,7 +5429,7 @@ s_loop_v3860: /* k id */
     r[2+1] = obj_from_ktrap();
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -5460,7 +5460,7 @@ case 124: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[4];  
     r[2] = (car((r[2])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5482,7 +5482,7 @@ case 125: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5529,7 +5529,7 @@ s_loop_v3816: /* k id id* */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -5590,7 +5590,7 @@ s_loop_v3827: /* k id id* */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -5627,7 +5627,7 @@ case 129: /* clo ek r */
     r[7+2] = r[5];  
     r[7+3] = r[2];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -5649,7 +5649,7 @@ case 130: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5671,7 +5671,7 @@ case 131: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5716,7 +5716,7 @@ s_loop_v3795: /* k id id* */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -5769,7 +5769,7 @@ case 134: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5806,7 +5806,7 @@ case 135: /* clo ek r */
     r[14+1] = r[2];  
     r[14+2] = r[1];  
     r += 14; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v3764;
 
 s_loop_v3764: /* k id id */
@@ -5815,7 +5815,7 @@ s_loop_v3764: /* k id id */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -5859,7 +5859,7 @@ case 136: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -5881,7 +5881,7 @@ case 137: /* clo k av */
     r[5+3] = r[3];  
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -5895,7 +5895,7 @@ case 138: /* clo k i a */
     r[4+1] = r[2];  
     r[4+2] = (vectorref((r[3]), fixnum_from_obj(r[1])));
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_unionq_231460;
 
 case 139: /* clo ek r */
@@ -5980,7 +5980,7 @@ s_loop_v3747: /* k i wrap? r av n */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[4];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -5998,7 +5998,7 @@ s_loop_v3747: /* k i wrap? r av n */
     r[8+1] = r[7];  
     r[8+2] = r[4];  
     r += 8; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -6021,7 +6021,7 @@ case 141: /* clo ek r */
     r[1] = r[4];  
     r[2] = obj_from_fixnum((v4782_i) + (+1));
     /* r[3] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -6031,7 +6031,7 @@ case 141: /* clo ek r */
     r[1] = r[4];  
     r[2] = obj_from_fixnum((v4782_i) + (+1));
     r[3] = obj_from_bool(1);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } } 
@@ -6081,7 +6081,7 @@ s_loop_v3726: /* k id */
     r[2+1] = obj_from_ktrap();
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -6115,7 +6115,7 @@ case 143: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -6161,7 +6161,7 @@ case 144: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -6203,7 +6203,7 @@ case 145: /* clo ek r */
     r[13+9] = r[3];  
     r[13+10] = r[4];  
     r += 13; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v3707;
 
 case 146: /* clo k id id id */
@@ -6223,7 +6223,7 @@ s_loop_v3707: /* k id id id lift-lam r r lam* id* top-lams top-ids */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = ((0) ? obj_from_bool(0) : obj_from_void(0));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -6261,7 +6261,7 @@ s_loop_v3707: /* k id id id lift-lam r r lam* id* top-lams top-ids */
     r[15+6] = r[6];  
     r[15+7] = r[5];  
     r += 15; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 8;
     goto jump;
   }
@@ -6302,7 +6302,7 @@ case 147: /* clo ek r */
     r[10+3] = (cdr((r[4])));
     r[10+4] = (cdr((r[3])));
     r += 10; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -6332,7 +6332,7 @@ case 148: /* clo ek  */
     pc = objptr_from_obj(r[0])[0];
     r[1] = (r[10]);
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -6359,7 +6359,7 @@ case 149: /* clo ek r */
     r[9+3] = r[3];  
     r[9+4] = r[2];  
     r += 9; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v3678;
 
 s_loop_v3678: /* k id id id curry-lam */
@@ -6368,7 +6368,7 @@ s_loop_v3678: /* k id id id curry-lam */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -6413,7 +6413,7 @@ case 150: /* clo ek r */
     r[8+3] = (car((r[4])));
     r[8+4] = (car((r[3])));
     r += 8; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -6435,7 +6435,7 @@ case 151: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -6466,7 +6466,7 @@ case 152: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -6530,7 +6530,7 @@ case 153: /* clo k lam xvars id* lam* xvars* tid* */
     r[2] = (r[10]);
     r[3] = (cx__2393);
     r[4] = (r[12]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   } else {
@@ -6540,7 +6540,7 @@ case 153: /* clo k lam xvars id* lam* xvars* tid* */
     r[2] = (cx__2389);
     r[3] = obj_from_bool(1);
     r[4] = (r[10]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   }
@@ -6573,7 +6573,7 @@ case 154: /* clo ek r */
     r[11+3] = r[3];  
     r[11+4] = r[2];  
     r += 11; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v3618;
 
 s_loop_v3618: /* k id id id curry-lam */
@@ -6582,7 +6582,7 @@ s_loop_v3618: /* k id id id curry-lam */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -6627,7 +6627,7 @@ case 155: /* clo ek r */
     r[8+3] = (car((r[4])));
     r[8+4] = (car((r[3])));
     r += 8; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -6649,7 +6649,7 @@ case 156: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -6703,7 +6703,7 @@ case 157: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[8];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -6733,7 +6733,7 @@ case 158: /* clo ek  */
     r[7+3] = (cx__2387);
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -6755,7 +6755,7 @@ case 159: /* clo ek  */
     r[5+3] = obj_from_bool(1);
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -6768,7 +6768,7 @@ case 160: /* clo ek  */
     r[0] = (cx_reset);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -6780,7 +6780,7 @@ case 161: /* unbox-values k exp */
     r[2+1] = r[1];  
     r[2+2] = (mknull());
     r += 2; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_unbox_2Dvals;
 
 case 162: /* clo k exp substs */
@@ -6795,7 +6795,7 @@ s_unbox_2Dvals: /* k exp substs */
     r[4+2] = r[3];  
     r[4+3] = r[2];  
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_uv;
 
 case 163: /* clo k exp */
@@ -6832,7 +6832,7 @@ s_uv: /* k exp unbox-vals substs */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -6920,7 +6920,7 @@ s_uv: /* k exp unbox-vals substs */
     r[1] = (r[12]);
     r[2] = (r[11]);
     r[3] = r[6];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -6932,7 +6932,7 @@ s_uv: /* k exp unbox-vals substs */
     r[11+5] = r[5];  
     r[11+6] = r[0];  
     r += 11; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_l_v3544;
   }
   } else {
@@ -6944,7 +6944,7 @@ s_uv: /* k exp unbox-vals substs */
     r[10+5] = r[5];  
     r[10+6] = r[0];  
     r += 10; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_l_v3544;
   }
   } else {
@@ -6956,7 +6956,7 @@ s_uv: /* k exp unbox-vals substs */
     r[9+5] = r[5];  
     r[9+6] = r[0];  
     r += 9; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_l_v3544;
   }
   } else {
@@ -7086,7 +7086,7 @@ s_uv: /* k exp unbox-vals substs */
     r[7+7] = r[6];  
     r[7+8] = r[5];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v3313;
   } else {
     r[5] = (cx__2Acurrent_2Derror_2Dport_2A);
@@ -7110,7 +7110,7 @@ s_uv: /* k exp unbox-vals substs */
     r[2] = r[5];  
     r[3] = (cx__2393);
     r[4] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   } else {
@@ -7120,7 +7120,7 @@ s_uv: /* k exp unbox-vals substs */
     r[2] = (cx__2389);
     r[3] = obj_from_bool(1);
     r[4] = r[5];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
   }
@@ -7153,7 +7153,7 @@ case 164: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7173,7 +7173,7 @@ s_l_v3544: /* ek r else-exp then-exp uv test-exp k */
     r[7+1] = obj_from_ktrap();
     r[7+2] = r[1];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -7188,7 +7188,7 @@ s_l_v3544: /* ek r else-exp then-exp uv test-exp k */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[7];  
     /* r[2] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -7213,7 +7213,7 @@ case 166: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     /* r[2] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7236,7 +7236,7 @@ case 167: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[6];  
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7261,7 +7261,7 @@ case 168: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7299,7 +7299,7 @@ case 169: /* clo ek r */
     r[1] = (r[10]);
     r[2] = r[9];  
     r[3] = r[5];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -7307,7 +7307,7 @@ case 169: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -7316,7 +7316,7 @@ case 169: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -7352,7 +7352,7 @@ case 170: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = (r[11]);
     r[2] = (vectorref((r[7]), (+2)));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -7360,7 +7360,7 @@ case 170: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -7396,7 +7396,7 @@ case 171: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = (r[12]);
     /* r[2] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -7404,7 +7404,7 @@ case 171: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -7440,7 +7440,7 @@ case 172: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = (r[11]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
@@ -7515,7 +7515,7 @@ case 173: /* clo ek r */
     r[1] = (r[13]);
     r[2] = r[4];  
     r[3] = (r[14]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
 
@@ -7572,7 +7572,7 @@ case 174: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = (r[11]);
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7597,7 +7597,7 @@ case 175: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7607,7 +7607,7 @@ s_loop_v3484: /* k id uv */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -7641,7 +7641,7 @@ case 176: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7663,7 +7663,7 @@ case 177: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7686,7 +7686,7 @@ case 178: /* clo ek r */
     r[7+6] = r[2];  
     r[7+7] = r[3];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v3437;
 
 case 179: /* clo k in-ids in-rands out-ids out-rands substs */
@@ -7709,7 +7709,7 @@ s_loop_v3437: /* k in-ids in-rands out-ids out-rands substs unbox-vals body */
     r[9+2] = r[7];  
     r[9+3] = r[5];  
     r += 9; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -7738,7 +7738,7 @@ s_loop_v3437: /* k in-ids in-rands out-ids out-rands substs unbox-vals body */
     r[11+2] = r[8];  
     r[11+3] = r[7];  
     r += 11; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   }
@@ -7770,7 +7770,7 @@ case 180: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -7814,7 +7814,7 @@ case 181: /* clo ek r */
     r[1] = (r[12]);
     r[2] = r[5];  
     r[3] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -7880,7 +7880,7 @@ s_l_v3447: /* ek r loop substs out-rands rand out-ids in-rands in-ids k id */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = (r[12]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
   } else {
@@ -7905,7 +7905,7 @@ s_l_v3447: /* ek r loop substs out-rands rand out-ids in-rands in-ids k id */
     r[13+5] = (r[12]);
     r[13+6] = r[3];  
     r += 13; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 7;
     goto jump;
   }
@@ -7989,7 +7989,7 @@ case 183: /* clo ek r */
     r[17+5] = (r[15]);
     r[17+6] = (r[16]);
     r += 17; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 7;
     goto jump;
 
@@ -8016,7 +8016,7 @@ case 184: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8026,7 +8026,7 @@ s_loop_v3418: /* k id uv */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -8060,7 +8060,7 @@ case 185: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8082,7 +8082,7 @@ case 186: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8107,7 +8107,7 @@ case 187: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8117,7 +8117,7 @@ s_loop_v3395: /* k id uv */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -8151,7 +8151,7 @@ case 188: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8173,7 +8173,7 @@ case 189: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8194,7 +8194,7 @@ case 190: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8217,7 +8217,7 @@ case 191: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8247,7 +8247,7 @@ s_loop_v3362: /* k id uv */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = (mknull());
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -8281,7 +8281,7 @@ case 193: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
     r[2] = (car((r[3])));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8303,7 +8303,7 @@ case 194: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8328,7 +8328,7 @@ case 195: /* clo ek r */
     r[6+1] = obj_from_ktrap();
     r[6+2] = r[5];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8353,7 +8353,7 @@ s_loop_v3313: /* k in-ids out-ids out-rands substs unbox-vals uv body ids */
     r[10+1] = r[9];  
     r[10+2] = r[7];  
     r += 10; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -8370,7 +8370,7 @@ s_loop_v3313: /* k in-ids out-ids out-rands substs unbox-vals uv body ids */
     r[10+2] = r[7];  
     r[10+3] = r[4];  
     r += 10; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   }
@@ -8405,7 +8405,7 @@ s_loop_v3313: /* k in-ids out-ids out-rands substs unbox-vals uv body ids */
     r[11+2] = r[9];  
     r[11+3] = r[7];  
     r += 11; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   }
@@ -8429,7 +8429,7 @@ case 197: /* clo ek r */
     r[5+1] = obj_from_ktrap();
     r[5+2] = r[4];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8467,7 +8467,7 @@ case 198: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[7];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -8501,7 +8501,7 @@ case 199: /* clo ek r */
     r[0] = (cx_timestamp);
     pc = objptr_from_obj(r[0])[0];
     r[1] = (r[10]);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
   } else {
@@ -8513,7 +8513,7 @@ case 199: /* clo ek r */
     r[9+4] = r[4];  
     r[9+5] = r[3];  
     r += 9; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 6;
     goto jump;
   }
@@ -8600,7 +8600,7 @@ case 200: /* clo ek r */
     r[15+4] = (r[13]);
     r[15+5] = (r[14]);
     r += 15; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 6;
     goto jump;
 
@@ -8619,7 +8619,7 @@ case 201: /* clo ek r */
     r[5+2] = r[3];  
     r[5+3] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 4;
     goto jump;
   } else {
@@ -8627,7 +8627,7 @@ case 201: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_bool(0);
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -8658,7 +8658,7 @@ case 202: /* clo ek  */
     r[7+3] = (cx__2387);
     r[7+4] = r[6];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -8680,7 +8680,7 @@ case 203: /* clo ek  */
     r[5+3] = obj_from_bool(1);
     r[5+4] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 5;
     goto jump;
 
@@ -8693,13 +8693,13 @@ case 204: /* clo ek  */
     r[0] = (cx_reset);
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[2];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 2;
     goto jump;
 
 default: /* inter-host call */
     cxg_hp = hp;
-    cxm_rgc(r, r + MAX_LIVEREGS);
+    cxm_rgc(r, MAX_HOSTREGS);
     cxg_rc = rc;
     return pc;
   }

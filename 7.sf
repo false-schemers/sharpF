@@ -363,7 +363,7 @@
                (let ([prim (string-append
                      "${r[$live+$arg#] = obj_from_$arg;\n"
                  "    $}r += $live; /* shift reg wnd */\n"
-                 "    rreserve(MAX_LIVEREGS);\n"
+                 "    rreserve(MAX_HOSTREGS);\n"
                  "    goto " lname ";")])
                  (cg-primapp-to tgt 
                    (primapp-exp (*?!-effect) prim rands)
@@ -382,7 +382,7 @@
                (let ([prim (string-append
                      "${r[$live+$arg#] = obj_from_$arg;\n"
                  "    $}r += $live; /* shift reg wnd */\n"
-                 "    rreserve(MAX_LIVEREGS);\n"
+                 "    rreserve(MAX_HOSTREGS);\n"
                  "    goto " lname ";")])
                  (cg-primapp-to tgt 
                    (primapp-exp (*?!-effect) prim rands)
@@ -394,7 +394,7 @@
                  "r[0] = obj_from_$arg;\n"
              "    pc = objptr_from_obj(r[0])[0];\n"
              "    ${r[$arg#] = obj_from_$arg;\n"
-             "    $}rreserve(MAX_LIVEREGS);\n"
+             "    $}rreserve(MAX_HOSTREGS);\n"
              "    rc = $arg#;\n"
              "    goto jump;")])
              (cg-primapp-to tgt 
@@ -405,7 +405,7 @@
              "    pc = objptr_from_obj(r[$live+0])[0];\n"
              "    ${r[$live+$arg#] = obj_from_$arg;\n"
              "    $}r += $live; /* shift reg wnd */\n"
-             "    rreserve(MAX_LIVEREGS);\n"
+             "    rreserve(MAX_HOSTREGS);\n"
              "    rc = $arg#;\n"
              "    goto jump;")])
              (cg-primapp-to tgt 
@@ -761,7 +761,8 @@
                (list
                  ; add 2 to max-live: one for topmost "output" reg
                  ; (not in reg-layout), another for extra arg in trampolines
-                 "#define MAX_LIVEREGS " (+ 2 max-live) "\n")
+                 ; then multiply by 2 to cover caller's + callee's needs
+                 "#define MAX_HOSTREGS " (* 2 (+ 2 max-live)) "\n")
                globals
                roots
                cases

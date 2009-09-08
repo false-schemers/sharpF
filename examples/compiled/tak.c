@@ -13,7 +13,6 @@
 #include <assert.h>
 
 /* standard definitions */
-#define REGS_SIZE 5000
 
 typedef ptrdiff_t obj;        /* pointers are this size, lower bit zero */
 typedef ptrdiff_t cxoint_t;   /* same thing, used as integer */
@@ -48,7 +47,7 @@ typedef struct {              /* type descriptor */
 #define void_from_void(v)     (void)(v)
 #define void_from_obj(o)      (void)(o)
 
-#define rreserve(m)           if (r > cxg_regs + REGS_SIZE - 2*(m)) r = cxm_rgc(r, r+(m))
+#define rreserve(m)           if (r + (m) >= cxg_rend) r = cxm_rgc(r, m)
 #define hpushptr(p, pt, l)    (hreserve(2, l), *--hp = (obj)(p), *--hp = (obj)(pt), (obj)(hp+1))   
 #define hbsz(s)               ((s) + 1) /* 1 extra word to store block size */
 #define hreserve(n, l)        ((hp < cxg_heap + (n)) ? hp = cxm_hgc(r, r+(l), hp, n) : hp)
@@ -66,9 +65,9 @@ extern obj *cxg_heap;
 extern obj *cxg_hp;
 extern cxoint_t cxg_hmask;
 extern cxroot_t *cxg_rootp;
-extern obj *cxm_rgc(obj *regs, obj *regp);
+extern obj *cxm_rgc(obj *regs, size_t needs);
 extern obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs);
-extern obj cxg_regs[REGS_SIZE];
+extern obj *cxg_regs, *cxg_rend;
 extern void cxm_check(int x, char *msg);
 extern void *cxm_cknull(void *p, char *msg);
 extern int cxg_rc;
@@ -152,12 +151,13 @@ static obj cases[4] = {
 };
 
 /* host procedure */
-#define MAX_LIVEREGS 9
+#define MAX_HOSTREGS 18
 static obj host(obj pc)
 {
   register obj *r = cxg_regs;
   register obj *hp = cxg_hp;
   register int rc = cxg_rc;
+  rreserve(MAX_HOSTREGS); 
 jump: 
   switch (case_from_obj(pc)) {
 
@@ -182,7 +182,7 @@ case 1: /* tak k x y z */
     r[4+1] = obj_from_ktrap();
     r[4+2] = (cxs_tak((r[1]), (r[2]), (r[3])));
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -195,7 +195,7 @@ case 2: /* runtak k n r */
     r[3+1] = obj_from_ktrap();
     r[3+2] = (cxs_runtak((r[1]), (r[2])));
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -211,13 +211,13 @@ case 3: /* main k argv */
     r[3+1] = obj_from_ktrap();
     r[3+2] = r[2];  
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
 default: /* inter-host call */
     cxg_hp = hp;
-    cxm_rgc(r, r + MAX_LIVEREGS);
+    cxm_rgc(r, MAX_HOSTREGS);
     cxg_rc = rc;
     return pc;
   }
@@ -240,13 +240,14 @@ void MODULE(void)
 
 /* basic runtime */
 #define HEAP_SIZE 131072 /* 2^17 */
+#define REGS_SIZE 4092
 
 obj *cxg_heap = NULL;
 cxoint_t cxg_hmask = 0;
 obj *cxg_hp = NULL;
 static cxroot_t cxg_root = { 0, NULL, NULL };
 cxroot_t *cxg_rootp = &cxg_root;
-obj cxg_regs[REGS_SIZE];
+obj *cxg_regs = NULL, *cxg_rend = NULL;
 int cxg_rc = 0;
 
 static obj *cxg_heap2 = NULL;
@@ -320,29 +321,37 @@ obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs)
   cxg_hsize = hs; return cxg_hp = hp;
 }
 
-obj *cxm_rgc(obj *regs, obj *regp) 
+obj *cxm_rgc(obj *regs, size_t needs) 
 {
-  obj *p = cxg_regs;
-  assert(regp <= cxg_regs + REGS_SIZE);
-  while (regs < regp) *p++ = *regs++;
+  obj *p = cxg_regs; assert(needs > 0);
+  if (!p || cxg_rend - p < needs) {
+    size_t roff = regs ? regs - p : 0;
+    if (!(p = realloc(p, needs*sizeof(obj)))) { perror("alloc[r]"); exit(2); }
+    cxg_regs = p; cxg_rend = p + needs;
+    regs = p + roff;
+  }
+  if (regs && regs > p) while (needs--) *p++ = *regs++;
   return cxg_regs;
 }
 
 void cxm_check(int x, char *msg)
 {
-  if (!x) { perror(msg); exit(2); }
+  if (!x) { 
+    perror(msg); exit(2); 
+  }
 }
 
 void *cxm_cknull(void *p, char *msg)
 {
-  if (!p) { perror(msg); exit(2); }
+  cxm_check(p != NULL, msg); 
   return p;
 }
 
 /* os entry point */
 int main(int argc, char **argv) {
   int res; obj pc;
-  obj retcl[1] = { 0 }; 
+  obj retcl[1] = { 0 };
+  cxm_rgc(NULL, REGS_SIZE);
   MODULE();
   cxg_regs[0] = cx_main;
   cxg_regs[1] = (obj)retcl;

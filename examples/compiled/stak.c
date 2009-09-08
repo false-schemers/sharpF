@@ -16,7 +16,6 @@
 #include <string.h>
 
 /* standard definitions */
-#define REGS_SIZE 5000
 
 typedef ptrdiff_t obj;        /* pointers are this size, lower bit zero */
 typedef ptrdiff_t cxoint_t;   /* same thing, used as integer */
@@ -51,7 +50,7 @@ typedef struct {              /* type descriptor */
 #define void_from_void(v)     (void)(v)
 #define void_from_obj(o)      (void)(o)
 
-#define rreserve(m)           if (r > cxg_regs + REGS_SIZE - 2*(m)) r = cxm_rgc(r, r+(m))
+#define rreserve(m)           if (r + (m) >= cxg_rend) r = cxm_rgc(r, m)
 #define hpushptr(p, pt, l)    (hreserve(2, l), *--hp = (obj)(p), *--hp = (obj)(pt), (obj)(hp+1))   
 #define hbsz(s)               ((s) + 1) /* 1 extra word to store block size */
 #define hreserve(n, l)        ((hp < cxg_heap + (n)) ? hp = cxm_hgc(r, r+(l), hp, n) : hp)
@@ -69,9 +68,9 @@ extern obj *cxg_heap;
 extern obj *cxg_hp;
 extern cxoint_t cxg_hmask;
 extern cxroot_t *cxg_rootp;
-extern obj *cxm_rgc(obj *regs, obj *regp);
+extern obj *cxm_rgc(obj *regs, size_t needs);
 extern obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs);
-extern obj cxg_regs[REGS_SIZE];
+extern obj *cxg_regs, *cxg_rend;
 extern void cxm_check(int x, char *msg);
 extern void *cxm_cknull(void *p, char *msg);
 extern int cxg_rc;
@@ -280,12 +279,13 @@ static obj cases[25] = {
 };
 
 /* host procedure */
-#define MAX_LIVEREGS 14
+#define MAX_HOSTREGS 28
 static obj host(obj pc)
 {
   register obj *r = cxg_regs;
   register obj *hp = cxg_hp;
   register int rc = cxg_rc;
+  rreserve(MAX_HOSTREGS); 
 jump: 
   switch (case_from_obj(pc)) {
 
@@ -324,7 +324,7 @@ case 0: /* load module */
     r[1+1] = (cx_s10);
     r[1+2] = (cx_s10);
     r += 1; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_string_2B;
 
 case 1: /* substring k s start end */
@@ -339,7 +339,7 @@ gs_substring: /* k s start end */
     r[5+4] = r[3];  
     r[5+5] = r[2];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop;
 
 s_loop: /* k i s ss end start */
@@ -349,7 +349,7 @@ s_loop: /* k i s ss end start */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -383,7 +383,7 @@ gs_string_2Dappend: /* k a b */
     r[6+3] = r[1];  
     r[6+4] = r[3];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v499;
 
 s_loop_v499: /* k i s a al */
@@ -393,7 +393,7 @@ s_loop_v499: /* k i s a al */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = ((0) ? obj_from_bool(0) : obj_from_void(0));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -427,7 +427,7 @@ case 3: /* clo ek  */
     r[7+3] = r[2];  
     r[7+4] = r[3];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto s_loop_v490;
 
 s_loop_v490: /* k i s al b */
@@ -437,7 +437,7 @@ s_loop_v490: /* k i s al b */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = ((0) ? obj_from_bool(0) : obj_from_void(0));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -462,7 +462,7 @@ case 4: /* clo ek  */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -475,7 +475,7 @@ case 5: /* string-fill! k s c */
     r[3+1] = obj_from_ktrap();
     r[3+2] = (cxs_string_2Dfill_21((r[1]), (r[2])));
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
@@ -488,7 +488,7 @@ gs_string_2D: /* k s1 s2 */
     r[3+2] = obj_from_fixnum(0);
     r[3+3] = obj_from_fixnum((stringlen((r[1]))) - (stringlen((r[2]))));
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_substring;
 
 case 7: /* string+ k s1 s2 */
@@ -512,7 +512,7 @@ case 8: /* clo ek r */
     r[3+1] = (cx_s20);
     r[3+2] = (cx_s20);
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_string_2B;
 
 case 9: /* clo ek r */
@@ -527,7 +527,7 @@ case 9: /* clo ek r */
     r[3+1] = (cx_s40);
     r[3+2] = (cx_s40);
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_string_2B;
 
 case 10: /* clo ek r */
@@ -542,7 +542,7 @@ case 10: /* clo ek r */
     r[3+1] = (cx_s80);
     r[3+2] = (cx_s20);
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_string_2B;
 
 case 11: /* clo ek r */
@@ -582,7 +582,7 @@ gs_tak: /* k x y z */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = r[3];  
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   }
@@ -608,7 +608,7 @@ case 13: /* clo ek r */
     r[7+2] = r[3];  
     r[7+3] = r[2];  
     r += 7; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_tak;
 
 case 14: /* clo ek r */
@@ -701,7 +701,7 @@ case 17: /* clo ek r */
     r[8+2] = r[3];  
     r[8+3] = r[2];  
     r += 8; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_tak;
 
 case 18: /* clo ek r */
@@ -717,7 +717,7 @@ case 18: /* clo ek r */
     r[5+2] = r[2];  
     r[5+3] = r[1];  
     r += 5; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_tak;
 
 case 19: /* runtak k n r */
@@ -729,7 +729,7 @@ gs_runtak: /* k n r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     /* r[2] */    
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
   } else {
@@ -780,7 +780,7 @@ case 21: /* clo ek r */
     r[6+1] = r[2];  
     r[6+2] = r[1];  
     r += 6; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_string_2B;
 
 case 22: /* clo ek r */
@@ -794,7 +794,7 @@ case 22: /* clo ek r */
     r[4+1] = r[2];  
     r[4+2] = r[1];  
     r += 4; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_runtak;
 
 case 23: /* main k argv */
@@ -809,7 +809,7 @@ case 23: /* main k argv */
     r[3+1] = (cx_s100);
     r[3+2] = (cx_s0);
     r += 3; /* shift reg wnd */
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     goto gs_runtak;
 
 case 24: /* clo ek r */
@@ -823,13 +823,13 @@ case 24: /* clo ek r */
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
     r[2] = obj_from_void(putchar('\n'));
-    rreserve(MAX_LIVEREGS);
+    rreserve(MAX_HOSTREGS);
     rc = 3;
     goto jump;
 
 default: /* inter-host call */
     cxg_hp = hp;
-    cxm_rgc(r, r + MAX_LIVEREGS);
+    cxm_rgc(r, MAX_HOSTREGS);
     cxg_rc = rc;
     return pc;
   }
@@ -852,13 +852,14 @@ void MODULE(void)
 
 /* basic runtime */
 #define HEAP_SIZE 131072 /* 2^17 */
+#define REGS_SIZE 4092
 
 obj *cxg_heap = NULL;
 cxoint_t cxg_hmask = 0;
 obj *cxg_hp = NULL;
 static cxroot_t cxg_root = { 0, NULL, NULL };
 cxroot_t *cxg_rootp = &cxg_root;
-obj cxg_regs[REGS_SIZE];
+obj *cxg_regs = NULL, *cxg_rend = NULL;
 int cxg_rc = 0;
 
 static obj *cxg_heap2 = NULL;
@@ -932,29 +933,37 @@ obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs)
   cxg_hsize = hs; return cxg_hp = hp;
 }
 
-obj *cxm_rgc(obj *regs, obj *regp) 
+obj *cxm_rgc(obj *regs, size_t needs) 
 {
-  obj *p = cxg_regs;
-  assert(regp <= cxg_regs + REGS_SIZE);
-  while (regs < regp) *p++ = *regs++;
+  obj *p = cxg_regs; assert(needs > 0);
+  if (!p || cxg_rend - p < needs) {
+    size_t roff = regs ? regs - p : 0;
+    if (!(p = realloc(p, needs*sizeof(obj)))) { perror("alloc[r]"); exit(2); }
+    cxg_regs = p; cxg_rend = p + needs;
+    regs = p + roff;
+  }
+  if (regs && regs > p) while (needs--) *p++ = *regs++;
   return cxg_regs;
 }
 
 void cxm_check(int x, char *msg)
 {
-  if (!x) { perror(msg); exit(2); }
+  if (!x) { 
+    perror(msg); exit(2); 
+  }
 }
 
 void *cxm_cknull(void *p, char *msg)
 {
-  if (!p) { perror(msg); exit(2); }
+  cxm_check(p != NULL, msg); 
   return p;
 }
 
 /* os entry point */
 int main(int argc, char **argv) {
   int res; obj pc;
-  obj retcl[1] = { 0 }; 
+  obj retcl[1] = { 0 };
+  cxm_rgc(NULL, REGS_SIZE);
   MODULE();
   cxg_regs[0] = cx_main;
   cxg_regs[1] = (obj)retcl;
