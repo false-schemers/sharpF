@@ -524,19 +524,28 @@
 
 ; memoization of var/exp attributes (ideally, it should use weak hash table)
 
+(define *memoization-optsz* 500)
+(define *memoization-limit* 1000)
+
 (define (memoizate-exp-attribute fn)
   (define memo '())
+  (define mlen 0)
   (lambda (exp)
-    (cond [(not exp) (set! memo '())]
+    (cond [(not exp) (set! memo '()) (set! mlen 0)]
           [(assq exp memo) => cdr]
           [else (let ([res (fn exp)]) 
                   (set! memo (cons (cons exp res) memo))
+                  (set! mlen (+ mlen 1))
+                  (when (> mlen *memoization-limit*)
+                    (set-cdr! (list-tail memo *memoization-optsz*) '())
+                    (set! mlen (length memo)))
                   res)])))
 
 (define (memoizate-var-attribute fn)
   (define memo '())
+  (define mlen 0)
   (lambda (id exp)
-    (cond [(not id) (set! memo '())]
+    (cond [(not id) (set! memo '()) (set! mlen 0)]
           [(assq exp memo) => 
            (lambda (exp&idmemo)
              (cond [(assq id (cdr exp&idmemo)) => cdr]
@@ -547,6 +556,10 @@
           [else (let ([res (fn id exp)]) 
                   (set! memo 
                     (cons (cons exp (list (cons id res))) memo))
+                  (set! mlen (+ mlen 1))
+                  (when (> mlen *memoization-limit*)
+                    (set-cdr! (list-tail memo *memoization-optsz*) '())
+                    (set! mlen (length memo)))
                   res)])))
 
 

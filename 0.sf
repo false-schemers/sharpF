@@ -1056,7 +1056,7 @@ void *getnative(obj o, cxtype_t *tp) {
     $return obj(hpushstr($live, d)); }" s))
 
 (define-inline (string-fill! s c)
-  (%prim! "void(stringfill(stringchars(obj_from_$arg), fixnum_from_$arg))" s c))
+  (%prim! "void(stringfill(stringdata(obj_from_$arg), char_from_$arg))" s c))
 
 
 
@@ -1968,7 +1968,7 @@ void *getnative(obj o, cxtype_t *tp) {
   if (h == (obj)STRING_NTAG) return strcmp(stringchars(x), stringchars(y)) == 0; 
   if (isaptr(h) || !(n = size_from_obj(h)) || hblkref(x, 0) != hblkref(y, 0)) return 0;
   for (i = 1; i < n-1; ++i) if (!isequal(hblkref(x, i), hblkref(y, i))) return 0;
-  if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 0; 
+  if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 1; 
 }")
 
 (%definition "extern obj ismember(obj x, obj l);")

@@ -401,7 +401,7 @@ int isequal(obj x, obj y) {
   if (h == (obj)STRING_NTAG) return strcmp(stringchars(x), stringchars(y)) == 0; 
   if (isaptr(h) || !(n = size_from_obj(h)) || hblkref(x, 0) != hblkref(y, 0)) return 0;
   for (i = 1; i < n-1; ++i) if (!isequal(hblkref(x, i), hblkref(y, i))) return 0;
-  if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 0; 
+  if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 1; 
 }
 extern obj ismember(obj x, obj l);
 obj ismember(obj x, obj l) {

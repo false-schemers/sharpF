@@ -299,6 +299,19 @@
              (loop (icdr i) (+ ind 1))]
             [else #f]))))
 
+(define (char-list->string-datum lst)
+  (let* ([cpl (map char->integer lst)]
+         [bits (fold-max 8 (map codepoint-byte-width cpl))])
+    (if (and (eqv? bits 8) (andmap string-safe-codepoint? cpl))
+      (datum 'string (list->string lst))
+      (make-datum 'string (cons bits cpl)))))
+
+(define (char-list->symbol-datum lst)
+  (let* ([cpl (map char->integer lst)]
+         [bits (fold-max 8 (map codepoint-byte-width cpl))])
+    (if (and (eqv? bits 8) (andmap string-safe-codepoint? cpl))
+      (datum 'symbol (list->string lst))
+      (make-datum 'symbol (cons bits cpl)))))
 
 ;------------------------------------------------------------------------------
 
@@ -412,13 +425,13 @@
     (64 "1000000000000000000000000000000000000000000000000000000000000000" "111111111111111111111111111111111111111111111111111111111111111"))))
 
 (define (integer-representation-width sign s radix)
-  (define (s<? s1 s2)
+  (define (s<=? s1 s2)
     (let ([l1 (string-length s1)] [l2 (string-length s2)])
-      (cond [(< l1 l2) #t] [(> l1 l2) #f] [else (string<? s1 s2)])))
+      (cond [(< l1 l2) #t] [(> l1 l2) #f] [else (string<=? s1 s2)])))
   (let loop ([st (cdr (assq radix integer-representation-table))])
     (cond [(null? st) 'big]
-          [(and (eq? sign '-) (s<? s (cadar st))) (caar st)]
-          [(and (eq? sign '+) (s<? s (caddar st))) (caar st)]
+          [(and (eq? sign '-) (s<=? s (cadar st))) (caar st)]
+          [(and (eq? sign '+) (s<=? s (caddar st))) (caar st)]
           [else (loop (cdr st))])))
     
 (define (subread-number i exactness radix return)
@@ -489,6 +502,10 @@
           [(input-delimited-prefix i "+inf.0") => (lambda (i) (return (datum 'inf '+) i))]
           [(and (= radix 10) (input-prefix i ".")) 
            (subread-decimal (datum 'integer 8 '+ "0" 10) i return)]
+          [(and (= radix 10) (input-prefix i "+.")) 
+           (subread-decimal (datum 'integer 8 '+ "0" 10) (icdr i) return)]
+          [(and (= radix 10) (input-prefix i "-.")) 
+           (subread-decimal (datum 'integer 8 '- "0" 10) (icdr i) return)]
           [else (subread-real i return)]))
   (define (subread-complex i return)
     (cond [(input-delimited-prefix i "+i")
@@ -559,15 +576,12 @@
 (define (subread-string i return)
   (let loop ([i (input-skip-expected-prefix i "\"")] [lst '()])
     (cond [(inull? i) (r-error i "unexpected eof in string")]
-          [(char=? (icar i) #\") 
-           (let ([bits (fold-max 8 (map codepoint-byte-width lst))])
-             (if (and (eqv? bits 8) (andmap string-safe-codepoint? lst))
-                 (return (datum 'string (list->string (map integer->char (reverse lst)))) (icdr i))
-                 (return (make-datum 'string (cons bits (reverse lst))) (icdr i))))]
+          [(char=? (icar i) #\")
+           (return (char-list->string-datum (reverse lst)) (icdr i))]
           [(char=? (icar i) #\\) 
            (subread-string-escape (icdr i) ;=>
-             (lambda (cp i) (loop i (cons cp lst))))]
-          [else (loop (icdr i) (cons (char->integer (icar i)) lst))])))
+             (lambda (cp i) (loop i (cons (integer->char cp) lst))))]
+          [else (loop (icdr i) (cons (icar i) lst))])))
 
 (define (subread-char i return) 
   (if (inull? i) 
@@ -620,13 +634,16 @@
                  [(char=? (icar i) #\newline) (return (datum 'atmosphere) (icdr i))]
                  [else (loop (icdr i))]))]
         [(char-initial? (icar i)) 
-         (let loop ([i (icdr i)] [lst (list (char->integer (icar i)))])
+         (let loop ([i (icdr i)] [lst (list (icar i))])
            (if (or (inull? i) (not (char-subsequent? (icar i))))
-               (let ([bits (fold-max 8 (map codepoint-byte-width lst))])
-                 (if (and (eqv? bits 8) (andmap string-safe-codepoint? lst))
-                     (return (datum 'symbol (list->string (map integer->char (reverse lst)))) i)
-                     (return (make-datum 'symbol (cons bits (reverse lst))) i)))
-               (loop (icdr i) (cons (char->integer (icar i)) lst))))]
+               (return (char-list->symbol-datum (reverse lst)) i)
+               (loop (icdr i) (cons (icar i) lst))))]
+        [(input-prefix-ci i "->")  
+         => (lambda (i)
+              (let loop ([i i] [lst (list #\> #\-)])
+                (if (or (inull? i) (not (char-subsequent? (icar i))))
+                    (return (char-list->symbol-datum (reverse lst)) i)
+                    (loop (icdr i) (cons (icar i) lst)))))]
         [(input-delimited-prefix i ".") => (lambda (i) (return (datum 'terminator #\.) i))]
         [(input-delimited-prefix i "+")   => (lambda (i) (return (datum 'symbol "+") i))]
         [(input-delimited-prefix i "-")   => (lambda (i) (return (datum 'symbol "-") i))]
@@ -659,8 +676,8 @@
         [(input-prefix i "#\\") => (lambda (i) (subread-char i return))]
         [(char=? (icar i) #\") (subread-string i return)]
         [(input-prefix i "#<<") ; 'here-string'
-          => (lambda (i)
-               (let loop ([i i] [lst '()])
+         => (lambda (i)
+              (let loop ([i i] [lst '()])
                  (cond [(inull? i) (r-error i "unexpected eof after #<<")]
                        [(not (char=? (icar i) #\newline))
                         (loop (icdr i) (cons (icar i) lst))]
@@ -668,22 +685,15 @@
                         (if (null? lst)
                             (r-error i "no close tag after #<<")
                             (let ([rtag lst])
-                              (define (return-string lst i)
-                                (let* ([rlst (reverse lst)]
-                                       [cpl (map char->integer rlst)]
-                                       [bits (fold-max 8 (map codepoint-byte-width cpl))])
-                                  (if (and (eqv? bits 8) (andmap string-safe-codepoint? cpl))
-                                    (return (datum 'string (list->string rlst)) i)
-                                    (return (make-datum 'string (cons bits cpl)) i))))
                               (let loop ([i (icdr i)] [lst '()] [res '()])
                                 (cond
                                   [(inull? i)
                                    (if (equal? lst rtag)
-                                       (return-string res i)
+                                       (return (char-list->string-datum (reverse res)) i)
                                        (r-error i "unexpected eof in #<<"))]
                                   [(char=? (icar i) #\newline)
                                    (if (equal? lst rtag)
-                                       (return-string res i)
+                                       (return (char-list->string-datum (reverse res)) i)
                                        (loop (icdr i) '()
                                          (if (null? res)
                                              lst
