@@ -658,6 +658,8 @@
       (case (car l)
         [(number->string) (list1? (cdr l))]
         [(string->number) (list1? (cdr l))]
+        [(list->string) (list1? (cdr l))]
+        [(string->list) (list1? (cdr l))]
         [(length) (list1? (cdr l))]
         [(string-append) (list? (cdr l))]
         [(+ *) (list? (cdr l))]
@@ -679,6 +681,18 @@
          (if (string? sexp)
              (string->number sexp)
              (x-error "string->number: not a string: " sexp))))]
+    [(list->string)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (and (list? sexp) (andmap char? sexp))
+             (list->string sexp)
+             (x-error "list->string: not a list of chars: " sexp))))]
+    [(string->list)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (string? sexp)
+             (string->list sexp)
+             (x-error "string->list: not a string: " sexp))))]
     [(length)
      (lambda (sexps env)
        (let ([sexp (car sexps)])

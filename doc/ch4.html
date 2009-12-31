@@ -1,4 +1,4 @@
-Ôªø<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" >
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
@@ -75,14 +75,14 @@ be affected by the non-macro parts of the program being compiled.</p>
 <p class="note"><em>Rationale:&nbsp;&nbsp;</em>Most modern Scheme systems provide a way to mix macroexpansion
 and evaluation environments, allowing macros to use parts of the program being interpreted.
 This approach leads to all sorts of complications, which can be either resolved in ad-hoc manner
-(via <tt>eval-when</tt> and similar constructs), or by introduction of a ‚Äútower‚Äù of interpreters
+(via <tt>eval-when</tt> and similar constructs), or by introduction of a ìtowerî of interpreters
 requiring an intricate computational environment to support it. #F chose a traditionalist standalone
 compiler model which requires a fixed compilation environment, so its macro system stays within
 the R<sup>5</sup>RS framework (no way to write a transformer in the target language, and thus no
 <tt>syntax-case</tt>).</p>
 
 <p>Macros defined using <em>syntax-lambda</em> and <em>syntax-rules</em> with no <em>template escapes</em>
-are ‚Äúhygienic‚Äù and ‚Äúreferentially transparent‚Äù and thus preserve lexical scoping. Template escapes
+are ìhygienicî and ìreferentially transparentî and thus preserve lexical scoping. Template escapes
 provide a limited set of methods to break the hygiene by introducing constructed identifiers which
 can bind or be bound by identifiers present in the original source code.</p>
 
@@ -108,7 +108,7 @@ associated meaning in the syntactic environment of the keyword expression.</p>
 </pre>
 
 <p><em>Note:&nbsp;&nbsp;</em>In #F, as in R<sup>6</sup>RS Scheme, a macro writer cannot
-rely on referential transparency of identifier expressions. #F‚Äôs identifiers can be
+rely on referential transparency of identifier expressions. #Fís identifiers can be
 syntactically bound to expressions which may produce side effects (cf. <tt>identifier-syntax</tt>).</p>
 
 <a id="4.2."></a><h2>4.2.&nbsp;&nbsp;&nbsp;&nbsp;Macro uses</h2>
@@ -284,6 +284,8 @@ by their literal names:</p>
 <pre style="line-height: 3.5ex">
  &bull; number->string   <q>converts a number into a string</q>
  &bull; string->number   <q>converts a string into a number</q>
+ &bull; list->string     <q>converts a list of characters into a string</q>
+ &bull; string->list     <q>converts a string into a list of characters</q>
  &bull; id->string       <q>converts an identifier into a string</q>
  &bull; string->id       <q>converts a string into a capturing identifier</q>
  &bull; length           <q>converts a list to its length (a number)</q>
@@ -295,7 +297,7 @@ by their literal names:</p>
 <p>A <abbr>template-escape</abbr> template expands by first expanding its subtemplates
 as if they were components of a list template. The result of the expansion is then
 processed according to a transformation specified by the name of the template escape.
-The first five escape forms require exactly one subform, the other three can accept
+The first seven escape forms require exactly one subform, the remaining three can accept
 any number of subforms. It is an error if a subform does not belong to a class
 implied in the escape name.</p>
 

@@ -573,19 +573,41 @@ long fxflo(double f) {
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
-    (syntax-rules (integer exact inexact)
-      [(_ integer 8 sign digs 8) (%prim ("fixnum(" #&(id->string sign) "0" digs ")"))] 
-      [(_ integer 16 sign digs 8) (%prim ("fixnum(" #&(id->string sign) "0" digs ")"))] 
-      [(_ integer 24 sign digs 8) (%prim ("fixnum(" #&(id->string sign) "0" digs ")"))] 
-      [(_ integer 8 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
-      [(_ integer 16 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
-      [(_ integer 24 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
-      [(_ integer 8 sign digs 16) (%prim ("fixnum(" #&(id->string sign) "0x" digs ")"))] 
-      [(_ integer 16 sign digs 16) (%prim ("fixnum(" #&(id->string sign) "0x" digs ")"))] 
-      [(_ integer 24 sign digs 16) (%prim ("fixnum(" #&(id->string sign) "0x" digs ")"))]
-      [(_ exact (integer . r)) (%const integer . r)] 
-      [(_ inexact (integer . r)) (exact->inexact (%const integer . r))] 
-      [(_ arg ...) (old-%const arg ...)]))) 
+    (letrec-syntax
+       ([bin->oct
+         (syntax-rules ()
+           [(_ b sign digs) (bin->oct b sign #&(string->list digs) ())]
+           [(_ b sign () l) (%const integer b sign #&(list->string l) 8)]
+           [(_ b sign (#\0) l) (bin->oct b sign () (#\0 . l))] 
+           [(_ b sign (#\1) l) (bin->oct b sign () (#\1 . l))]    
+           [(_ b sign (#\0 #\0) l) (bin->oct b sign () (#\0 . l))] 
+           [(_ b sign (#\0 #\1) l) (bin->oct b sign () (#\1 . l))]    
+           [(_ b sign (#\1 #\0) l) (bin->oct b sign () (#\2 . l))] 
+           [(_ b sign (#\1 #\1) l) (bin->oct b sign () (#\3 . l))]    
+           [(_ b sign (d ... #\0 #\0 #\0) l) (bin->oct b sign (d ...) (#\0 . l))] 
+           [(_ b sign (d ... #\0 #\0 #\1) l) (bin->oct b sign (d ...) (#\1 . l))] 
+           [(_ b sign (d ... #\0 #\1 #\0) l) (bin->oct b sign (d ...) (#\2 . l))] 
+           [(_ b sign (d ... #\0 #\1 #\1) l) (bin->oct b sign (d ...) (#\3 . l))] 
+           [(_ b sign (d ... #\1 #\0 #\0) l) (bin->oct b sign (d ...) (#\4 . l))] 
+           [(_ b sign (d ... #\1 #\0 #\1) l) (bin->oct b sign (d ...) (#\5 . l))] 
+           [(_ b sign (d ... #\1 #\1 #\0) l) (bin->oct b sign (d ...) (#\6 . l))] 
+           [(_ b sign (d ... #\1 #\1 #\1) l) (bin->oct b sign (d ...) (#\7 . l))])])   
+      (syntax-rules (integer exact inexact)
+        [(_ integer 8 sign digs 2) (bin->oct 8 sign digs)] 
+        [(_ integer 16 sign digs 2) (bin->oct 16 sign digs)] 
+        [(_ integer 24 sign digs 2) (bin->oct 24 sign digs)] 
+        [(_ integer 8 sign digs 8) (%prim ("fixnum(" #&(id->string sign) "0" digs ")"))] 
+        [(_ integer 16 sign digs 8) (%prim ("fixnum(" #&(id->string sign) "0" digs ")"))] 
+        [(_ integer 24 sign digs 8) (%prim ("fixnum(" #&(id->string sign) "0" digs ")"))] 
+        [(_ integer 8 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
+        [(_ integer 16 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
+        [(_ integer 24 sign digs 10) (%prim ("fixnum(" #&(id->string sign) digs ")"))] 
+        [(_ integer 8 sign digs 16) (%prim ("fixnum(" #&(id->string sign) "0x" digs ")"))] 
+        [(_ integer 16 sign digs 16) (%prim ("fixnum(" #&(id->string sign) "0x" digs ")"))] 
+        [(_ integer 24 sign digs 16) (%prim ("fixnum(" #&(id->string sign) "0x" digs ")"))]
+        [(_ exact (integer . r)) (%const integer . r)] 
+        [(_ inexact (integer . r)) (exact->inexact (%const integer . r))] 
+        [(_ arg ...) (old-%const arg ...)])))) 
 
 (define-inline (fixnum? x)
   (%prim "bool(is_fixnum_$arg)" x))
