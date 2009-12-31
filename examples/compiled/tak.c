@@ -71,6 +71,7 @@ extern obj *cxg_regs, *cxg_rend;
 extern void cxm_check(int x, char *msg);
 extern void *cxm_cknull(void *p, char *msg);
 extern int cxg_rc;
+extern char **cxg_argv;
 
 /* extra definitions */
 /* immediate object representation */
@@ -249,6 +250,7 @@ static cxroot_t cxg_root = { 0, NULL, NULL };
 cxroot_t *cxg_rootp = &cxg_root;
 obj *cxg_regs = NULL, *cxg_rend = NULL;
 int cxg_rc = 0;
+char **cxg_argv = NULL;
 
 static obj *cxg_heap2 = NULL;
 static size_t cxg_hsize = 0; 
@@ -324,7 +326,7 @@ obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs)
 obj *cxm_rgc(obj *regs, size_t needs) 
 {
   obj *p = cxg_regs; assert(needs > 0);
-  if (!p || cxg_rend - p < needs) {
+  if (!p || cxg_rend < p + needs) {
     size_t roff = regs ? regs - p : 0;
     if (!(p = realloc(p, needs*sizeof(obj)))) { perror("alloc[r]"); exit(2); }
     cxg_regs = p; cxg_rend = p + needs;
@@ -352,6 +354,7 @@ int main(int argc, char **argv) {
   int res; obj pc;
   obj retcl[1] = { 0 };
   cxm_rgc(NULL, REGS_SIZE);
+  cxg_argv = argv;
   MODULE();
   cxg_regs[0] = cx_main;
   cxg_regs[1] = (obj)retcl;

@@ -246,6 +246,7 @@
         [(id->ctype id) (symbol (id->symbol id) ":" (id->ts id))]
         [else (symbol (id->symbol id) "." (id->ts id))]))
 
+(define begin-id-symbol (symbol "."))
 
 ;------------------------------------------------------------------------------
 

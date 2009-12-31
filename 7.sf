@@ -656,7 +656,10 @@
         (map (lambda (id) (list (c-undecorate-alvar (id->symbol id)) " "))
           (cadr id&ids&rands))
         "*/\n"
-        "    assert(rc == " (+ 1 (length (cadr id&ids&rands))) ");\n"
+        (if (and (list2? (cadr id&ids&rands)) 
+                 (eq? (id->symbol (cadadr id&ids&rands)) begin-id-symbol))
+            (list "    assert(rc >= 2);\n" "    r[2] = obj_from_void(0); /* ignored */\n")
+            (list "    assert(rc == " (+ 1 (length (cadr id&ids&rands))) ");\n"))
         (cmove (cadr id&ids&rands) (cddr id&ids&rands))
         "    r += 1; /* shift reg. wnd */\n"))
     (let loop ([alst curry-alist] [i curry-case-no-start])

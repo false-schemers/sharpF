@@ -74,6 +74,7 @@ extern obj *cxg_regs, *cxg_rend;
 extern void cxm_check(int x, char *msg);
 extern void *cxm_cknull(void *p, char *msg);
 extern int cxg_rc;
+extern char **cxg_argv;
 
 /* extra definitions */
 /* basic object representation */
@@ -436,15 +437,16 @@ s_loop: /* k i l o */
     goto gs_write;
   }
 
-case 6: /* clo ek  */
-    assert(rc == 3);
+case 6: /* clo ek . */
+    assert(rc >= 2);
+    r[2] = obj_from_void(0); /* ignored */
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1];
     r[1+3] = p[2];
     r[1+4] = p[3];
     r[1+5] = p[4]; }
     r += 1; /* shift reg. wnd */
-    /* ek  loop l i k */
+    /* ek . loop l i k */
     r[0] = r[2];  
     pc = objptr_from_obj(r[0])[0];
     r[1] = r[5];  
@@ -454,12 +456,13 @@ case 6: /* clo ek  */
     rc = 4;
     goto jump;
 
-case 7: /* clo ek  */
-    assert(rc == 3);
+case 7: /* clo ek . */
+    assert(rc >= 2);
+    r[2] = obj_from_void(0); /* ignored */
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1]; }
     r += 1; /* shift reg. wnd */
-    /* ek  k */
+    /* ek . k */
     r[0] = r[2];  
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
@@ -1981,14 +1984,15 @@ gs_show_2Dstates: /* k s n */
     goto jump;
   }
 
-case 72: /* clo ek  */
-    assert(rc == 3);
+case 72: /* clo ek . */
+    assert(rc >= 2);
+    r[2] = obj_from_void(0); /* ignored */
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1];
     r[1+3] = p[2];
     r[1+4] = p[3]; }
     r += 1; /* shift reg. wnd */
-    /* ek  s n k */
+    /* ek . s n k */
     hreserve(hbsz(2+1), 5); /* 5 live regs */
     *--hp = r[4];  
     *--hp = r[3];  
@@ -2054,15 +2058,16 @@ s_loop_v442: /* k i s */
     goto gs_write;
   }
 
-case 76: /* clo ek  */
-    assert(rc == 3);
+case 76: /* clo ek . */
+    assert(rc >= 2);
+    r[2] = obj_from_void(0); /* ignored */
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1];
     r[1+3] = p[2];
     r[1+4] = p[3];
     r[1+5] = p[4]; }
     r += 1; /* shift reg. wnd */
-    /* ek  s loop i k */
+    /* ek . s loop i k */
     hreserve(hbsz(3+1), 6); /* 6 live regs */
     *--hp = r[5];  
     *--hp = r[4];  
@@ -2091,12 +2096,13 @@ case 77: /* clo ek r */
     rc = 4;
     goto jump;
 
-case 78: /* clo ek  */
-    assert(rc == 3);
+case 78: /* clo ek . */
+    assert(rc >= 2);
+    r[2] = obj_from_void(0); /* ignored */
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1]; }
     r += 1; /* shift reg. wnd */
-    /* ek  k */
+    /* ek . k */
     r[0] = r[2];  
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
@@ -2170,6 +2176,7 @@ static cxroot_t cxg_root = { 0, NULL, NULL };
 cxroot_t *cxg_rootp = &cxg_root;
 obj *cxg_regs = NULL, *cxg_rend = NULL;
 int cxg_rc = 0;
+char **cxg_argv = NULL;
 
 static obj *cxg_heap2 = NULL;
 static size_t cxg_hsize = 0; 
@@ -2245,7 +2252,7 @@ obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs)
 obj *cxm_rgc(obj *regs, size_t needs) 
 {
   obj *p = cxg_regs; assert(needs > 0);
-  if (!p || cxg_rend - p < needs) {
+  if (!p || cxg_rend < p + needs) {
     size_t roff = regs ? regs - p : 0;
     if (!(p = realloc(p, needs*sizeof(obj)))) { perror("alloc[r]"); exit(2); }
     cxg_regs = p; cxg_rend = p + needs;
@@ -2273,6 +2280,7 @@ int main(int argc, char **argv) {
   int res; obj pc;
   obj retcl[1] = { 0 };
   cxm_rgc(NULL, REGS_SIZE);
+  cxg_argv = argv;
   MODULE();
   cxg_regs[0] = cx_main;
   cxg_regs[1] = (obj)retcl;

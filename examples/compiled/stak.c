@@ -74,6 +74,7 @@ extern obj *cxg_regs, *cxg_rend;
 extern void cxm_check(int x, char *msg);
 extern void *cxm_cknull(void *p, char *msg);
 extern int cxg_rc;
+extern char **cxg_argv;
 
 /* extra definitions */
 /* immediate object representation */
@@ -407,15 +408,16 @@ s_loop_v499: /* k i s a al */
     goto s_loop_v499;
   } } 
 
-case 3: /* clo ek  */
-    assert(rc == 3);
+case 3: /* clo ek . */
+    assert(rc >= 2);
+    r[2] = obj_from_void(0); /* ignored */
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1];
     r[1+3] = p[2];
     r[1+4] = p[3];
     r[1+5] = p[4]; }
     r += 1; /* shift reg. wnd */
-    /* ek  al b k s */
+    /* ek . al b k s */
     hreserve(hbsz(2+1), 6); /* 6 live regs */
     *--hp = r[5];  
     *--hp = r[4];  
@@ -451,13 +453,14 @@ s_loop_v490: /* k i s al b */
     goto s_loop_v490;
   } } 
 
-case 4: /* clo ek  */
-    assert(rc == 3);
+case 4: /* clo ek . */
+    assert(rc >= 2);
+    r[2] = obj_from_void(0); /* ignored */
     { obj* p = objptr_from_obj(r[0]);
     r[1+2] = p[1];
     r[1+3] = p[2]; }
     r += 1; /* shift reg. wnd */
-    /* ek  k s */
+    /* ek . k s */
     r[0] = r[2];  
     pc = objptr_from_obj(r[0])[0];
     r[1] = obj_from_ktrap();
@@ -861,6 +864,7 @@ static cxroot_t cxg_root = { 0, NULL, NULL };
 cxroot_t *cxg_rootp = &cxg_root;
 obj *cxg_regs = NULL, *cxg_rend = NULL;
 int cxg_rc = 0;
+char **cxg_argv = NULL;
 
 static obj *cxg_heap2 = NULL;
 static size_t cxg_hsize = 0; 
@@ -936,7 +940,7 @@ obj *cxm_hgc(obj *regs, obj *regp, obj *hp, size_t needs)
 obj *cxm_rgc(obj *regs, size_t needs) 
 {
   obj *p = cxg_regs; assert(needs > 0);
-  if (!p || cxg_rend - p < needs) {
+  if (!p || cxg_rend < p + needs) {
     size_t roff = regs ? regs - p : 0;
     if (!(p = realloc(p, needs*sizeof(obj)))) { perror("alloc[r]"); exit(2); }
     cxg_regs = p; cxg_rend = p + needs;
@@ -964,6 +968,7 @@ int main(int argc, char **argv) {
   int res; obj pc;
   obj retcl[1] = { 0 };
   cxm_rgc(NULL, REGS_SIZE);
+  cxg_argv = argv;
   MODULE();
   cxg_regs[0] = cx_main;
   cxg_regs[1] = (obj)retcl;

@@ -1149,10 +1149,10 @@ void *getnative(obj o, cxtype_t *tp) {
 
 ; null
 
-; () is immediate 0 with immediate tag 2 (singular null object)
+; () is immediate 0 with immediate tag 3 (singular null object)
 
 (%definition "/* null */")
-(%definition "#define NULL_ITAG 2")  
+(%definition "#define NULL_ITAG 3")  
 (%definition "#define mknull() mkimm(0, NULL_ITAG)")  
 (%definition "#define isnull(o) ((o) == mkimm(0, NULL_ITAG))")  
 
@@ -1436,10 +1436,10 @@ void *getnative(obj o, cxtype_t *tp) {
 
 ; symbols
 
-; symbols are immediate with immediate tag 3
+; symbols are immediate with immediate tag 4
 
 (%definition "/* symbols */")
-(%definition "#define SYMBOL_ITAG 3")  
+(%definition "#define SYMBOL_ITAG 4")  
 (%definition "#define issymbol(o) (isimm(o, SYMBOL_ITAG))")
 (%definition "#define mksymbol(i) mkimm(i, SYMBOL_ITAG)")
 (%definition "#define getsymbol(o) getimmu(o, SYMBOL_ITAG)")

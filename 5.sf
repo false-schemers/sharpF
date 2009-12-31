@@ -56,7 +56,7 @@
        (cps body kexp)]
       [begin-exp (exp1 exp2)
        (cps exp1 
-         (lambda-exp (list (lexical-id 'ek) (lexical-id '_)) 
+         (lambda-exp (list (lexical-id 'ek) (lexical-id begin-id-symbol)) 
            (cps exp2 kexp)))]
       [let-exp (ids rands body)
        (cps-list rands

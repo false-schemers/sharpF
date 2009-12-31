@@ -71,6 +71,7 @@ extern obj *cxg_regs, *cxg_rend;
 extern void cxm_check(int x, char *msg);
 extern void *cxm_cknull(void *p, char *msg);
 extern int cxg_rc;
+extern char **cxg_argv;
 
 /* extra definitions */
 /* immediate object representation */

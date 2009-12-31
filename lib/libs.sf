@@ -133,13 +133,43 @@
        (set! var expr)
        ...
        (let () . body))]))
-       
+
 (define-syntax rec
   (syntax-rules ()
     [(_ (name . args) . body)
      (letrec ([name (lambda args . body)]) name)]
     [(_ name expr)
      (letrec ([name expr]) name)]))
+
+(define-syntax letcc
+  (let-syntax ([old-letcc letcc])
+    (syntax-rules ()
+      [(_ var . body)
+       (old-letcc var (let-syntax () . body))])))
+       
+(define-syntax receive
+  (syntax-rules ()
+    [(_ formals expr . body)
+     (call-with-values 
+       (lambda () expr)
+       (lambda formals . body))]))
+
+(define-syntax let-values
+  (syntax-rules ()
+    [(_ () . body)
+     (let () . body)]
+    [(_ ([formals expr] . more) . body)
+     (let ([thunk (lambda () expr)])
+       (let-values more
+         (receive formals (thunk) . body)))]))
+
+(define-syntax let*-values
+  (syntax-rules ()
+    [(_ () . body)
+     (let () . body)]
+    [(_ ([formals expr] . more) . body)
+     (receive formals expr
+       (let*-values more . body))]))
 
 
 ; control
@@ -179,56 +209,6 @@
     [(_ test) (let () test)]
     [(_ test . tests) (let ([x test]) (if x x (or . tests)))]))
 
-
-; varargs & continuations
-
-(define-syntax letcc
-  (let-syntax ([old-letcc letcc])
-    (syntax-rules ()
-      [(_ var . body)
-       (old-letcc var (let-syntax () . body))])))
-
-(define-syntax call-with-current-continuation
-  (lambda (f) (letcc k (f k))))
-
-(define-syntax call/cc call-with-current-continuation)
-
-(define-syntax throw
-  (syntax-rules ()
-    [(_ k expr ...) 
-     (withcc (%prim "ktrap()") (k expr ...))]))
-
-(define-syntax values
-  (syntax-rules ()
-    [(_ expr ...) 
-     (letcc k (throw k expr ...))]
-    [_ %residual-values]))
-
-(define-syntax receive
-  (syntax-rules ()
-    [(_ (var ...) expr . body)
-     (letcc k
-       (withcc 
-         (lambda (var ...)
-           (withcc k (let-syntax () . body)))
-         expr))]))
-
-(define-syntax let-values
-  (syntax-rules ()
-    [(_ () . body)
-     (let () . body)]
-    [(_ ([formals expr] . more) . body)
-     (let ([thunk (lambda () expr)])
-       (let-values more
-         (receive formals (thunk) . body)))]))
-
-(define-syntax let*-values
-  (syntax-rules ()
-    [(_ () . body)
-     (let () . body)]
-    [(_ ([formals expr] . more) . body)
-     (receive formals expr
-       (let*-values more . body))]))
 
 
 ;------------------------------------------------------------------------------
@@ -507,6 +487,14 @@ long fxflo(double f) {
 }
 #endif")
 
+(%definition "extern int fxifdv(long x, long y, long *pi, double *pd);")
+(%localdef "int fxifdv(long x, long y, long *pi, double *pd) { 
+  assert(y); 
+  assert(x != FIXNUM_MIN || y != -1);
+  if (x % y == 0) { *pi = x / y; return 1; }
+  else { *pd = (double)x / (double)y; return 0; }  
+}")
+
 (%definition "extern double flquo(double x, double y);")
 (%localdef "double flquo(double x, double y) {
   double z;
@@ -565,6 +553,8 @@ long fxflo(double f) {
 
 
 ; fixnums
+
+; fixnums are immediate with immediate tag 1
 
 (%definition "/* fixnums */")
 (%definition "#define FIXNUM_ITAG 1")  
@@ -952,6 +942,13 @@ long fxflo(double f) {
 (define-inline (flexpt x y)
   (%prim* "flonum($live, pow(flonum_from_$arg, flonum_from_$arg))" x y))
 
+(define-inline (fxfl/ x y)
+  (%prim* "{ /* fxfl/ */ 
+    fixnum_t x = fixnum_from_$arg, y = fixnum_from_$arg;
+    long i; double d;
+    if (fxifdv(x, y, &i, &d)) $return fixnum(i);
+    else $return flonum($live, d); }" x y))
+
 
 ; generic math (fixnum/flonum)
 
@@ -1067,8 +1064,8 @@ long fxflo(double f) {
 
 (define-syntax /
   (syntax-rules ()
-    [(_ x) (let ([a x]) (if (fixnum? a) (fx/ a) (fl/ a)))]
-    [(_ x y) (real-binop x y fx/ fl/)]
+    [(_ x) (let ([a x]) (if (fixnum? a) (fxfl/ 1 a) (fl/ a)))]
+    [(_ x y) (real-binop x y fxfl/ fl/)]
     [(_ x y z ...) (/ (/ x y) z ...)]
     [_ %residual/]))
    
@@ -1093,8 +1090,15 @@ long fxflo(double f) {
   
 ; no div
 ; no mod  
-; no numerator
-; no denominator
+
+(define-inline (numerator n)
+  n)
+
+(define-inline (denominator n)
+  1)
+
+(define-inline (rationalize n d)
+  n)
 
 (define-inline (floor x)
   (if (fixnum? x) x (flfloor x)))
@@ -1147,6 +1151,8 @@ long fxflo(double f) {
 ; characters
 
 (%include <ctype.h>)
+
+; characters are immediate with immediate tag 2
 
 (%definition "/* characters */")
 (%definition "#define CHAR_ITAG 2")  
@@ -1339,7 +1345,7 @@ long fxflo(double f) {
      (%prim* "{ /* string */
     obj o = hpushstr($live, allocstring($argc, ' '));
     unsigned char *s = (unsigned char *)stringchars(o);
-    ${*s++ = char_from_$arg;
+    ${*s++ = (unsigned char)char_from_$arg;
     $}$return obj(o); }" c ...)]
     [_ %residual-string]))
 
@@ -1533,10 +1539,10 @@ long fxflo(double f) {
 
 ; null
 
-; () is immediate 0 with immediate tag 2 (singular null object)
+; () is immediate 0 with immediate tag 3 (singular null object)
 
 (%definition "/* null */")
-(%definition "#define NULL_ITAG 2")  
+(%definition "#define NULL_ITAG 3")  
 (%definition "#define mknull() mkimm(0, NULL_ITAG)")  
 (%definition "#define isnull(o) ((o) == mkimm(0, NULL_ITAG))")  
 
@@ -1802,7 +1808,7 @@ long fxflo(double f) {
 (define (partition f l)
   (let loop ([l l] [y '()] [n '()])
     (if (null? l) 
-      (values (reverse! y) (reverse! n))
+      (%residual-values (reverse! y) (reverse! n))
       (let ([a (car l)] [d (cdr l)]) 
         (if (f a)
             (loop d (cons a y) n)
@@ -1860,10 +1866,10 @@ long fxflo(double f) {
 
 ; symbols
 
-; symbols are immediate with immediate tag 3
+; symbols are immediate with immediate tag 4
 
 (%definition "/* symbols */")
-(%definition "#define SYMBOL_ITAG 3")  
+(%definition "#define SYMBOL_ITAG 4")  
 (%definition "#define issymbol(o) (isimm(o, SYMBOL_ITAG))")
 (%definition "#define mksymbol(i) mkimm(i, SYMBOL_ITAG)")
 (%definition "#define getsymbol(o) getimmu(o, SYMBOL_ITAG)")
@@ -2059,7 +2065,7 @@ long fxflo(double f) {
 (%definition "extern obj appcases[];")
 (%localdef "/* apply/dotted lambda adapter entry points */")
 (%localdef "static obj apphost(obj);")
-(%localdef "obj appcases[2] = { (obj)apphost,  (obj)apphost };")
+(%localdef "obj appcases[3] = { (obj)apphost,  (obj)apphost,  (obj)apphost };")
 (%localdef "/* apphost procedure */
 static obj apphost(obj pc)
 {
@@ -2102,6 +2108,18 @@ case 1: /* dotted lambda adapter */
     pc = objptr_from_obj(r[0])[0];
     goto jump; }
 
+case 2: /* void continuation adapter */
+    /* cclo ek arg ... */
+    assert(rc >= 2);
+    { obj* p = objptr_from_obj(r[0]);
+    r[0] = p[1]; /* cont */
+    pc = objptr_from_obj(r[0])[0];
+    /* ek in r[1] */
+    rreserve(3);
+    r[2] = obj_from_void(0);
+    rc = 3;
+    goto jump; }
+
 default: /* inter-host call */
     cxg_hp = hp;
     cxm_rgc(r, 1);
@@ -2109,6 +2127,11 @@ default: /* inter-host call */
     return pc;
   }
 }")
+
+(define apply 
+  (%prim "{ /* define apply */
+    static obj c[] = { obj_from_objptr(appcases+0) }; 
+    $return objptr(c); }"))
 
 (define-inline (make-improper-lambda n lam)
   (%prim* "{ /* make-improper-lambda */
@@ -2118,17 +2141,12 @@ default: /* inter-host call */
     *--hp = obj_from_objptr(appcases+1);
     $return obj(hendblk(3)); }" lam n))
 
-(define apply 
-  (%prim "{ /* define apply */
-    static obj c[] = { obj_from_objptr(appcases+0) }; 
-    $return objptr(c); }"))
-
-(define-inline (call-with-values producer consumer)
-  (letcc k
-    (withcc 
-      (lambda results
-        (withcc k (apply consumer results)))
-      (producer))))
+(define-inline (make-void-continuation k)
+  (%prim* "{ /* make-void-continuation */
+    hreserve(hbsz(2), $live); /* $live live regs */
+    *--hp = obj_from_$arg;
+    *--hp = obj_from_objptr(appcases+2);
+    $return obj(hendblk(2)); }" k))
 
 
 ; delay & force
@@ -2321,6 +2339,11 @@ default: /* inter-host call */
     $return void(fputs(buf, oportdata(obj_from_$arg))); }" x p)]
     [_ %residual-display-flonum])) 
 
+(define-syntax char-ready?
+  (syntax-rules ()
+    [(_) (char-ready? (current-input-port))]
+    [(_ p) #t] ; no better solution for FILE ports
+    [_ %residual-char-ready?]))
 
 
 ; equivalence and case
@@ -2895,6 +2918,63 @@ default: /* inter-host call */
     int res = remove(stringchars(obj_from_$arg));
     $return bool(res == 0); }" fn))
 
+(define-inline (rename-file fnold fnnew)
+  (%prim?! "{ /* delete-file */ 
+    int res = rename(stringchars(obj_from_$arg), stringchars(obj_from_$arg));
+    $return bool(res == 0); }" fnold fnnew))
+
+
+
+; multiple values & continuations
+
+(define-inline (call-with-values producer consumer)
+  (letcc k
+    (withcc 
+      (lambda results
+        (withcc k (apply consumer results)))
+      (producer))))
+
+(define *current-dynamic-state* (list #f))
+
+(define (call-with-current-continuation proc)
+  (let ([here *current-dynamic-state*])
+    (letcc cont
+      (proc 
+        (lambda results
+           (dynamic-state-reroot! here)
+           (apply cont results))))))
+
+(define-syntax call/cc call-with-current-continuation)
+
+(define-syntax throw
+  (syntax-rules ()
+    [(_ k expr ...) 
+     (withcc (%prim "ktrap()") (k expr ...))]))
+
+(define-syntax values
+  (syntax-rules ()
+    [(_ expr ...) 
+     (call/cc (lambda (k) (throw k expr ...)))]
+    [_ %residual-values]))
+
+(define (dynamic-wind before during after)
+  (let ([here *current-dynamic-state*])
+    (dynamic-state-reroot! (cons (cons before after) here))
+    (call-with-values during
+      (lambda results
+        (dynamic-state-reroot! here)
+        (apply values results)))))
+
+(define (dynamic-state-reroot! there)
+  (if (not (eq? *current-dynamic-state* there))
+      (begin (dynamic-state-reroot! (cdr there))
+             (let ([before (caar there)] [after (cdar there)])
+               (set-car! *current-dynamic-state* (cons after before))
+               (set-cdr! *current-dynamic-state* there)
+               (set-car! there #f)
+               (set-cdr! there '())
+               (set! *current-dynamic-state* there)
+               (before)))))
 
 
 ; miscellaneous / system
@@ -2916,9 +2996,9 @@ default: /* inter-host call */
     if (s) $return obj(hpushstr($live, newstring(s)));
     else $return bool(0); }" i argv))
 
-(define-inline (argv->list argv)
+(define (command-line)
   (let loop ([r '()] [i (%prim "fixnum(0)")])
-    (let ([arg (argv-ref argv i)])
+    (let ([arg (argv-ref (%prim "obj(cxg_argv)") i)])
       (if arg 
           (loop (cons arg r) (fx+ i (%prim "fixnum(1)")))
           (reverse! r)))))
@@ -2938,11 +3018,24 @@ default: /* inter-host call */
 ;------------------------------------------------------------------------------
 
 
+; stubs
+
+(define-inline (make-rectangular r i)
+  (if (= i 0) r (error 'make-rectangular "nonzero imag part not supported" i)))
+(define-inline (make-polar m a)
+  (cond [(= a 0) m]
+        [(= a 3.141592653589793238462643) (- m)]
+        [else (error 'make-polar "angle not supported" a)]))
+(define-inline (real-part x) x)
+(define-inline (imag-part x) 0)
+(define-inline (magnitude x) (abs x))
+(define-inline (angle x) (if (negative? x) 3.141592653589793238462643 0))
+
+
 ; residual versions of inline procedures
 
-
 (define (%residual-values . l)
-  (letcc k (throw apply k l)))
+  (call/cc (lambda (k) (throw apply k l))))
 
 (define-syntax cmp-reducer
   (syntax-rules ()
@@ -3120,6 +3213,7 @@ default: /* inter-host call */
 
 (define %residual-read-char (nullary-unary-adaptor read-char))
 (define %residual-peek-char (nullary-unary-adaptor peek-char))
+(define %residual-char-ready? (nullary-unary-adaptor char-ready?))
 
 (define %residual-display-fixnum (unary-binary-adaptor display-fixnum))
 (define %residual-display-flonum (unary-binary-adaptor display-flonum))
