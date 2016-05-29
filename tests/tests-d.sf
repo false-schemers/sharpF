@@ -1,0 +1,74 @@
+;;(load source "helpers.qa2")
+#fload "../lib/libs.sf"
+#fload "helpers.sf"
+
+
+
+(SECTION 6 3 6) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (vector? '#(0 (2 2 2 2) "Anna"))
+      '(vector? '#(0 (2 2 2 2) "Anna"))
+      '#t)
+(test '#(0 (2 2 2 2) "Anna")
+      ''#(0 (2 2 2 2) "Anna")
+      '#(0 (2 2 2 2) "Anna"))
+
+(test (vector? '#())
+      '(vector? '#())
+      '#t)
+
+(test (make-vector 2 'hi)
+      '(make-vector 2 'hi)
+      '#(hi hi))
+(test (make-vector 0)
+      '(make-vector 0)
+      '#())
+(test (make-vector 0 'a)
+      '(make-vector 0 'a)
+      '#())
+
+(test (vector 'a 'b 'c)
+      '(vector 'a 'b 'c)
+      '#(a b c))
+(test (vector)
+      '(vector)
+      '#())
+
+(test (vector-length '#(0 (2 2 2 2) "Anna"))
+      '(vector-length '#(0 (2 2 2 2) "Anna"))
+      '3)
+(test (vector-length '#())
+      '(vector-length '#())
+      '0)
+
+(test (vector-ref '#(1 1 2 3 5 8 13 21) 5)
+      '(vector-ref '#(1 1 2 3 5 8 13 21) 5)
+      '8)
+
+(test (let ((vec (vector 0 '(2 2 2 2) "Anna")))
+        (vector-set! vec 1 '("Sue" "Sue"))
+        vec)
+      '(let ((vec (vector 0 '(2 2 2 2) "Anna")))
+        (vector-set! vec 1 '("Sue" "Sue"))
+        vec)
+      '#(0 ("Sue" "Sue") "Anna"))
+
+(test (vector->list '#(dah dah didah))
+      '(vector->list '#(dah dah didah))
+      '(dah dah didah))
+(test (list->vector '(dididit dah))
+      '(list->vector '(dididit dah))
+      '#(dididit dah))
+
+(test (vector->list '#())
+      '(vector->list '#())
+      '())
+(test (list->vector '())
+      '(list->vector '())
+      '#())
+
+(test (make-vector 3 0)
+      '(make-vector 3 0)
+      '#(0 0 0))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (main argv) (report-errors))

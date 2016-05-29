@@ -1,0 +1,284 @@
+;;(load source "helpers.qa2")
+#fload "../lib/libs.sf"
+#fload "helpers.sf"
+
+
+
+(SECTION 4 1 1) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define x 28)
+(test x 'x 28)
+
+(SECTION 4 1 2) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (quote a)
+      '(quote a)
+      'a)
+(test (quote #(a b c))
+      '(quote #(a b c))
+      '#(a b c))
+(test (quote (+ 1 2))
+      '(quote (+ 1 2))
+      '(+ 1 2))
+(test 'a
+      ''a
+      'a)
+(test '#(a b c)
+      ''#(a b c)
+      '#(a b c))
+(test ''a
+      '''a
+      '(quote a))
+(test '"abc"
+      ''"abc"
+      '"abc")
+(test "abc"
+      '"abc"
+      '"abc")
+(test '145932
+      '145932
+      '145932)
+(test 145932
+      '145932
+      '145932)
+(test '#t
+      '#t
+      '#t)
+(test #t
+      '#t
+      '#t)
+
+(SECTION 4 1 3) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (+ 3 4)
+      '(+ 3 4)
+      '7)
+(test ((if #f + *) 3 4)
+      '((if #f + *) 3 4)
+      '12)
+
+(SECTION 4 1 4) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (procedure? (lambda x (+ x x)))
+      '(procedure? (lambda x (+ x x)))
+      '#t)
+(define reverse-subtract (lambda (x y) (- y x)))
+(test (reverse-subtract 7 10)
+      '(reverse-subtract 7 10)
+      '3)
+(define add4
+  (let ((x 4))
+    (lambda (y) (+ x y))))
+(test (add4 6)
+      '(add4 6)
+      '10)
+(test ((lambda x x) 3 4 5 6)
+      '((lambda x x) 3 4 5 6)
+      '(3 4 5 6))
+(test ((lambda (x y . z)  z) 3 4 5 6)
+      '((lambda (x y . z)  z) 3 4 5 6)
+      '(5 6))
+
+(SECTION 4 1 5) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (if (> 3 2) 'yes 'no)
+      '(if (> 3 2) 'yes 'no)
+      'yes)
+(test (if (> 2 3) 'yes 'no)
+      '(if (> 2 3) 'yes 'no)
+      'no)
+(test (if (> 3 2) (- 3 2) (+ 3 2))
+      '(if (> 3 2) (- 3 2) (+ 3 2))
+      '1)
+
+(SECTION 4 1 6) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define x 2)
+(test (+ x 1)
+      '(+ x 1)
+      '3)
+(set! x 4)
+(test (+ x 1)
+      '(+ x 1) '5)
+
+(SECTION 4 2 1) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (cond ((> 3 2) 'greater)
+            ((< 3 2) 'less))
+      '(cond ((> 3 2) 'greater)
+             ((< 3 2) 'less))
+      'greater)
+(test (cond ((> 3 3) 'greater)
+            ((< 3 3) 'less)
+            (else 'equal))
+      '(cond ((> 3 3) 'greater)
+            ((< 3 3) 'less)
+            (else 'equal))
+      'equal)
+(test (cond ((assv 'b '((a 1) (b 2))) => cadr)
+            (else #f))
+      '(cond ((assv 'b '((a 1) (b 2))) => cadr)
+             (else #f))
+      '2)
+(test (case (* 2 3)
+        ((2 3 5 7) 'prime)
+        ((1 4 6 8 9) 'composite))
+      '(case (* 2 3)
+        ((2 3 5 7) 'prime)
+        ((1 4 6 8 9) 'composite))
+      'composite)
+(test (case (car '(c d))
+                         ((a e i o u) 'vowel)
+                         ((w y) 'semivowel)
+                         (else 'consonant))
+      '(case (car '(c d))
+                         ((a e i o u) 'vowel)
+                         ((w y) 'semivowel)
+                         (else 'consonant))
+      'consonant)
+(test (and (= 2 2) (> 2 1))
+      '(and (= 2 2) (> 2 1))
+      '#t)
+(test (and (= 2 2) (< 2 1))
+      '(and (= 2 2) (< 2 1))
+      '#f)
+(test (and 1 2 'c '(f g))
+      '(and 1 2 'c '(f g))
+      '(f g))
+(test (and)
+      '(and)
+      '#t)
+(test (or (= 2 2) (> 2 1))
+      '(or (= 2 2) (> 2 1))
+      '#t)
+(test (or (= 2 2) (< 2 1))
+      '(or (= 2 2) (< 2 1))
+      '#t)
+(test (or #f #f #f)
+      '(or #f #f #f)
+      '#f)
+(test (or)
+      '(or)
+      '#f)
+(test (or (memq 'b '(a b c)) (+ 3 0))
+      '(or (memq 'b '(a b c)) (+ 3 0))
+      '(b c))
+
+(SECTION 4 2 2) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (let ((x 2) (y 3)) (* x y))
+      '(let ((x 2) (y 3)) (* x y))
+      '6)
+(test (let ((x 2) (y 3)) (let ((x 7) (z (+ x y))) (* z x)))
+      '(let ((x 2) (y 3)) (let ((x 7) (z (+ x y))) (* z x)))
+      '35)
+(test (let ((x 2) (y 3)) (let* ((x 7) (z (+ x y))) (* z x)))
+      '(let ((x 2) (y 3)) (let* ((x 7) (z (+ x y))) (* z x)))
+      '70)
+(test (letrec ((even?
+                (lambda (n) (if (zero? n) #t (odd? (- n 1)))))
+               (odd?
+                (lambda (n) (if (zero? n) #f (even? (- n 1))))))
+        (even? 88))
+      '(letrec ((even?
+                (lambda (n) (if (zero? n) #t (odd? (- n 1)))))
+               (odd?
+                (lambda (n) (if (zero? n) #f (even? (- n 1))))))
+         (even? 88))
+      '#t)
+
+(define x 34)
+(test (let ((x 3)) (define x 5) x)
+      '(let ((x 3)) (define x 5) x)
+      5 '(let ((x 3)) (define x 5) x))
+(test x
+      'x
+      34 'x)
+(test (let () (define x 6) x)
+      '(let () (define x 6) x)
+      6 '(let () (define x 6) x))
+(test x
+      'x
+      34 'x)
+(test (let* ((x 3)) (define x 7) x)
+      '(let* ((x 3)) (define x 7) x)
+      7 '(let* ((x 3)) (define x 7) x))
+(test x
+      'x
+      34 'x)
+(test (let* () (define x 8) x)
+      '(let* () (define x 8) x)
+      8 '(let* () (define x 8) x))
+(test x
+      'x
+      34 'x)
+(test (letrec () (define x 9) x)
+      '(letrec () (define x 9) x)
+      9 '(letrec () (define x 9) x))
+(test x
+      'x
+      34 'x)
+(test (letrec ((x 3)) (define x 10) x)
+      '(letrec ((x 3)) (define x 10) x)
+      10 '(letrec ((x 3)) (define x 10) x))
+(test x
+      'x
+      34 'x)
+
+
+(SECTION 4 2 3) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define x 0)
+(test (begin (set! x 5) (+ x 1))
+      '(begin (set! x 5) (+ x 1))
+      '6)
+
+(SECTION 4 2 4) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (do ((vec (make-vector 5))
+           (i 0 (+ i 1)))
+          ((= i 5) vec)
+        (vector-set! vec i i))
+      '(do ((vec (make-vector 5))
+           (i 0 (+ i 1)))
+          ((= i 5) vec)
+         (vector-set! vec i i))
+      '#(0 1 2 3 4))
+(test (let ((x '(1 3 5 7 9)))
+        (do ((x x (cdr x))
+             (sum 0 (+ sum (car x))))
+            ((null? x) sum)))
+      '(let ((x '(1 3 5 7 9)))
+        (do ((x x (cdr x))
+             (sum 0 (+ sum (car x))))
+            ((null? x) sum)))
+      '25)
+(test (let loop ((numbers '(3 -2 1 6 -5))
+                 (nonneg '())
+                 (neg '()))
+        (cond ((null? numbers) (list nonneg neg))
+              ((negative? (car numbers))
+               (loop (cdr numbers)
+                     nonneg
+                     (cons (car numbers) neg)))
+              (else
+               (loop (cdr numbers)
+                     (cons (car numbers) nonneg)
+                     neg))))
+      '(let loop ((numbers '(3 -2 1 6 -5))
+                 (nonneg '())
+                 (neg '()))
+        (cond ((null? numbers) (list nonneg neg))
+              ((negative? (car numbers))
+               (loop (cdr numbers)
+                     nonneg
+                     (cons (car numbers) neg)))
+              (else
+               (loop (cdr numbers)
+                     (cons (car numbers) nonneg)
+                     neg))))
+      '((6 1 3) (-5 -2)))
+(test (let foo () 1)
+      '(let foo () 1)
+      '1)
+(test (let ((x 10) (loop 1)) 
+        (let loop ((x x) (y loop))
+          (if (zero? x) y (loop (- x 1) (* y x)))))
+      '(let ((x 10) (loop 1)) 
+        (let loop ((x x) (y loop))
+          (if (zero? x) y (loop (- x 1) (* y x)))))
+      '3628800)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (main argv) (report-errors))

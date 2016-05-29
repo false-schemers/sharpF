@@ -1,0 +1,118 @@
+#fload "../lib/libs.sf"
+#fload "helpers.sf"
+
+(define n-tail-calls 2000000)
+
+(SECTION 1 3 4) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test (* 5 8) '(* 5 8) 40)
+
+(SECTION 2 1) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define symbols '(+ lambda list-vector <=? q soup V17a a34kTMNs
+                    the-word-recursion-has-many-meanings  ...
+                    x! x$ x% x* x+ x- x. x/ x: x< x= x> x? x@ x^ x_ x~))
+
+(test (every? symbol? symbols) '(every? symbol? symbols) #t "all symbols")
+(test (length symbols) '(length symbols) 27)
+
+(SECTION 2 2) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; The FACT procedure computes the factorial
+;;; of a non-negative integer.
+(define fact
+  (lambda (n)
+    (if (= n 0)
+        1          ;Base case: return 1
+        (* n (fact (- n 1))))))
+
+(test (fact 4) '(fact 4) 24)
+(test (fact 6) '(fact 6) 720)
+;;(test (fact 20) '(fact 20) 2432902008176640000)
+;;(test (fact 30) '(fact 30) 265252859812191058636308480000000)
+;;(test (number->string (fact 40))
+;;      '(number->string (fact 40))
+;;      "815915283247897734345611269596115894272000000000")
+
+(SECTION 3 2) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define type-predicates
+  (list boolean? symbol? vector? procedure? pair? number? string?))
+
+(define (types x) (map (lambda (p) (if (p x) 1 0)) type-predicates))
+(define (disjoint? x) (= 1 (apply + (types x))))
+
+(for-each 
+ (lambda (p x y)
+   (test (disjoint? x) (list 'disjoint? x) #t)
+   (test (disjoint? y) (list 'disjoint? y) #t)
+   (test (p x) (list 'p x) #t)
+   (test (p y) (list 'p y) #t)
+   (test (equal? (types x) (types y))
+         (list 'equal? (list 'types x) (list 'types y))
+         #t))
+ type-predicates
+ (list #t 'symbol       '#()    car     '(test)  9739  ""
+        )
+ (list #f 'nil     '#(a b) test '(t . t) -3252 "test"
+       ))
+
+(SECTION 3 3) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test '( 08 13) '( 08 13) '(8 13))
+(test '(8 . (13 . ())) '(8 . (13 . ())) '(8 13))
+
+
+
+(SECTION 3 5) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test for tail recursiveness of each of the expressions on page 8.
+;; You may want to set n-tail-calls lower (if this is too slow) 
+;; or higher (to make sure it is larger than the call stack size).
+(define n n-tail-calls)
+
+(test (let go ((i n)) (if (= i 0) 0 (go (- i 1))))
+      '(let go ((i n)) (if (= i 0) 0 (go (- i 1))))
+      0)
+(test (let go ((i n)) (cond ((= i 0) 0) (else (go (- i 1)))))
+      '(let go ((i n)) (cond ((= i 0) 0) (else (go (- i 1)))))
+      0)
+(test (let go ((i n)) (case i ((0) 0) (else (go (- i 1)))))
+      '(let go ((i n)) (case i ((0) 0) (else (go (- i 1)))))
+      0)
+(test (let go ((i n)) (if (= i 0) 0 (and #t (go (- i 1)))))
+      '(let go ((i n)) (if (= i 0) 0 (and #t (go (- i 1)))))
+      0)
+(test (let go ((i n)) (if (= i 0) 0 (or #f (go (- i 1)))))
+      '(let go ((i n)) (if (= i 0) 0 (or #f (go (- i 1)))))
+      0)
+(test (let go ((i n)) (if (= i 0) 0 (let ((a 0)) (go (- i 1)))))
+      '(let go ((i n)) (if (= i 0) 0 (let ((a 0)) (go (- i 1)))))
+      0)
+(test (let go ((i n)) (if (= i 0) 0 (let* ((a 0)) (go (- i 1)))))
+      '(let go ((i n)) (if (= i 0) 0 (let* ((a 0)) (go (- i 1)))))
+      0)
+(test (let go ((i n)) (if (= i 0) 0 (letrec ((a 0)) (go (- i 1)))))
+      '(let go ((i n)) (if (= i 0) 0 (letrec ((a 0)) (go (- i 1)))))
+      0)
+(test (let go ((i n)) (if (= i 0) 0 (begin #f (go (- i 1)))))
+      '(let go ((i n)) (if (= i 0) 0 (begin #f (go (- i 1)))))
+      0)
+(test (do ((i n (- i 1))) ((= i 0) 0) #t)
+      '(do ((i n (- i 1))) ((= i 0) 0) #t)
+      0)
+(test (let go ((i n)) (if (= i 0) 0 (do () (#t (go (- i 1))) 1)))
+      '(let go ((i n)) (if (= i 0) 0 (do () (#t (go (- i 1))) 1)))
+      0)
+(test (let go ((i n)) (if (= i 0) 0 (apply go (list (- i 1)))))
+      '(let go ((i n)) (if (= i 0) 0 (apply go (list (- i 1)))))
+      0)
+
+(test (let go ((i n)) (if (= i 0) 0 (call-with-current-continuation
+                                     (lambda (ignore) (go (- i 1))))))
+      '(let go ((i n)) (if (= i 0) 0 (call-with-current-continuation
+                                     (lambda (ignore) (go (- i 1))))))
+      0)
+(test (let go ((i n))
+        (if (= i 0) 0 (call-with-values (lambda () (- i 1)) go)))
+      '(let go ((i n))
+         (if (= i 0) 0 (call-with-values (lambda () (- i 1)) go)))
+      0)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (main argv) (report-errors))

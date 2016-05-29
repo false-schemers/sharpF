@@ -1,0 +1,57 @@
+;;(load library "stdlib.qa2")
+#fload "../lib/libs.sf"
+
+(define current-section #f)
+(define errors '())
+
+(define (writeln line) (write line) (newline))
+
+(define ! string->number)
+
+(define (convert-! tree)
+  (cond ((not (pair? tree)) tree)
+        ((eq? (car tree) '!) (string->number (cadr tree)))
+        (else (cons (convert-! (car tree)) (convert-! (cdr tree))))))
+
+(define (every? p xs) (or (null? xs) 
+                          (and (p (car xs)) (every? p (cdr xs)))))
+
+(define SECTION ;; Say that we're entering a new section
+  (let ((sec 'SECTION))
+    (lambda args
+      (set! current-section (cons sec args))
+      (newline)
+      (writeln current-section))))
+
+(define (test got quoted expected . comments) 
+  (let* ((ok (or (eq? expected 'unspecified)
+                 (equal? got (convert-! expected))))
+         (msg (if ok '() (list '*** 'but 'expected expected)))
+         (record (append (list quoted '=> got) msg comments)))
+    (if (not ok)
+        (set! errors (cons (list current-section record) errors)))
+    (write-string "    ")
+    (for-each (lambda (x) (write-string " ") (write x)) record)
+    (newline)))
+
+(define (report-errors)
+  (newline)
+  (if (null? errors) 
+      (begin 
+        (display "ALL TESTS PASSED!\n")
+        (exit 0))
+      (begin
+        (display (length errors))
+        (display " MISTAKES WERE MADE\n")
+        (for-each 
+           (lambda (cs&rec)
+             (write-string "    ")
+             (write (car cs&rec))
+             (newline)
+             (write-string "    ")
+             (for-each (lambda (x) (write-string " ") (write x)) (cadr cs&rec))
+             (newline)
+             (newline))
+           (reverse errors))
+        (writeln (list 'total 'of (length errors) 'errors))
+        (exit 1))))

@@ -545,8 +545,11 @@ long fxflo(double f) {
     return errno = eno, (conv == 'i') ? (*pd = (double)l, 'i') : (*pl = l, 'e');
   if (radix != 10) return errno = eno, 0;
   d = (errno = 0, strtod(s, &e));
-  if (!errno && e != s && !*e)
-    return errno = eno, (conv == 'e') ? (*pl = fxflo(d), 'e') : (*pd = d, 'i'); 
+  if (!errno && e != s && !*e) {
+    if ((conv == 'e') && ((l=(long)d) < FIXNUM_MIN || l > FIXNUM_MAX || (double)l != d))
+      return errno = eno, 0;
+    else return errno = eno, (conv == 'e') ? (*pl = fxflo(d), 'e') : (*pd = d, 'i');
+  }
   return errno = eno, 0;
 }")
 
@@ -565,9 +568,10 @@ long fxflo(double f) {
 (%definition "#define is_fixnum_bool(i) ((void)(i), 0)")
 (%definition "#define fixnum_from_obj(o) (getimms(o, FIXNUM_ITAG))")
 (%definition "#define fixnum_from_fixnum(i) (i)")
+(%definition "#define fixnum_from_flonum(l,x) ((fixnum_t)(x))")
 (%definition "#define bool_from_fixnum(i) ((void)(i), 1)")
 (%definition "#define void_from_fixnum(i) (void)(i)")
-(%definition "#define obj_from_fixnum(i) mkimm(i, FIXNUM_ITAG)")
+(%definition "#define obj_from_fixnum(i) mkimm((fixnum_t)(i), FIXNUM_ITAG)")
 
 ; fixme: add #b constants
 
@@ -968,7 +972,8 @@ long fxflo(double f) {
   (%prim* "{ /* fxfl/ */ 
     fixnum_t x = fixnum_from_$arg, y = fixnum_from_$arg;
     long i; double d;
-    if (fxifdv(x, y, &i, &d)) $return fixnum(i);
+    if (0) $return obj(0); /* to fool sfc unboxer */
+    else if (fxifdv(x, y, &i, &d)) $return fixnum(i);
     else $return flonum($live, d); }" x y))
 
 
@@ -1071,7 +1076,7 @@ long fxflo(double f) {
 
 (define-syntax *
   (syntax-rules ()
-    [(_) 0]
+    [(_) 1]
     [(_ x) x]
     [(_ x y) (real-binop x y fx* fl*)]
     [(_ x y z ...) (* x (* y z ...))]
@@ -2072,11 +2077,15 @@ long fxflo(double f) {
 
 ; procedures (closures) are heap blocks of length >= 1 which
 ; have a pointer as 0th element
+; sfc allocates env-less global procedures outside of heap,
+; so procedure answers #t to any out-of-heap pointer
 
 (define-inline (procedure? o)
   (%prim "{ /* procedure? */
     obj o = obj_from_$arg;
-    if (!isobjptr(o)) $return bool(0);
+    if (is_bool_obj(o)) $return bool(0);
+    else if (isaptr(o) && !isobjptr(o)) $return bool(1);
+    else if (!isobjptr(o)) $return bool(0);
     else { obj h = objptr_from_obj(o)[-1];
     $return bool(notaptr(h) && size_from_obj(h) >= 1 && isaptr(hblkref(o, 0))); } }" o))
 
@@ -2483,10 +2492,16 @@ default: /* inter-host call */
         [(_ key (datum . data))
          (if (eqv? key 'datum) #t (compare key data))])]
      [case
-      (syntax-rules (else)
+      (syntax-rules (else =>)
         [(case key) (if #f #f)]
+        [(case key (else => resproc))
+         (resproc key)]
         [(case key (else result1 . results))
          (begin result1 . results)]
+        [(case key ((datum ...) => resproc) . clauses)
+         (if (compare key (datum ...))
+             (resproc key)
+             (case key . clauses))]
         [(case key ((datum ...) result1 . results) . clauses)
          (if (compare key (datum ...))
              (begin result1 . results)

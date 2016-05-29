@@ -1,0 +1,19 @@
+#fload "../lib/libs.sf"
+#fload "helpers.sf"
+
+(SECTION "SFC procedure predicate") ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (do-test p n v msg)
+  (test (procedure? p) (list 'procedure? n) v msg))
+
+(define (add x y ) (+ x y))
+(define (xxx x y . z) (+ x y))
+
+(do-test car 'car #t "car built-in")
+(do-test do-test 'do-test #t "user-defined function")
+(do-test list 'list #t "list built-in")
+(do-test add 'add #t "defined proc with two args")
+(do-test xxx 'xxx #t "defined proc with two args and extras")
+(do-test 123 '123 #f "number")
+
+(define (main argv) (report-errors))
