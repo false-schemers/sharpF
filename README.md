@@ -1,3 +1,5 @@
+![](https://raw.githubusercontent.com/false-schemers/sharpF/master/misc/lambda-sunrise.png)
+
 # #F - A Minimalistic Scheme System
                          
 #F (Sharp-F or False) is a portable compiler/runtime for a subset of the Scheme programming language. Its main purpose is to facilitate creation of specialized code fragments which use Scheme-like computational model (garbage-collected memory, proper tail recursion, call/cc, closures, multiple return values) and can be easily integrated with regular C code in a direct way (no FFI or "scripting language bindings").
