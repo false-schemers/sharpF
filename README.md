@@ -80,9 +80,9 @@ wind. All missing functionality can be defined using the facilities existing
 in the core #F language.
 
 As an example of language-building, and as an aid to porting Scheme programs,
-#F distribution includes a simple Scheme portability library, LibS  
-(see [libs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libs.sf)). LibS is just
-a regular #F source file, and it is included in the project in a regular
+#F distribution includes a simple Scheme portability library, LibS (see [libs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libs.sf)).
+
+LibS is just a regular #F source file, and it is included in the project in a regular
 manner:
 
 ```
@@ -256,7 +256,6 @@ go surprisingly far with just a few simple tricks and no embedded
 knowledge of supported datatypes.
 
 
-
 ## Debugging
 
 SFC does not insert any run-time checks into a release version of the
@@ -267,6 +266,43 @@ by SFC switches to debug versions of data access primitives, catching
 data access and parameter passing violations with C run-time asserts.
 
 
+## Installation
+
+To install SFC, grab the C files from the `fixpoint` subdirectory of the master tree and compile them with your favorite C compiler.
+
+If you are too lazy to learn GIT, the latest versions of the C source files are here:
+
+[0.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/0.c) [1.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/1.c) [2.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/2.c) [3.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/3.c) [4.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/4.c) [5.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/5.c) [6.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/6.c) [7.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/7.c) [c.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/fixpoint/c.c)
+
+Here's how you can compile SFC on a unix box:
+
+```
+gcc -o sfc -Wall -O3 -DNDEBUG 0.c 1.c 2.c 3.c 4.c 5.c 6.c 7.c c.c
+```
+
+The rest is up to you - the compiler has no dependencies and can be run from any location.
+
+
+## Documentation
+
+The documentation is not yet complete and might be slightly out-of-date.
+The .html files are located in the `doc` subdirectory of the master tree.
+
+[Preview via RawGit](https://rawgit.com/false-schemers/sharpF/master/doc/intro.html)
+
+
+## Examples
+
+You may also learn some #F basics by looking at the examples:
+
+[hello.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/hello.sf) [tak.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/tak.sf) [stak.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/stak.sf) [rk.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/rk.sf)
+
+They can be compiled in the following manner:
+
+```
+./sfc tak.sf   # produces tak.c 
+gcc -o tak -Wall -O3 -DNDEBUG tak.c
+```
 
 ## Historical note
 
