@@ -57,7 +57,8 @@ The files can be seen here:
 There's no need to compile all .sf files in a single run. Doing it one file
 at a time is just as good. Dependant units (files) are scanned for macros during
 compilation of a unit, so they should be present and in a good shape. Dependencies
-are declared via `(load "foo.sf")` special form, which serves two purposes: to tell
+are declared via `(load "foo.sf")` special form (or its syntactic shortcut `#fload "foo.sf"`), 
+which serves two purposes: to tell
 SFC where to look for macros and how to order initialization code. SFC turns
 all globally defined Scheme identifiers into C identifiers (e.g. foo => cx_foo), 
 generating "extern" specifications as needed. To do that, SFC assumes that
@@ -111,9 +112,9 @@ may affect the real-life performance of your converted Scheme
 programs:
 
   *  very large list/vector literals converted to C code can choke your C compiler
-  *  there is a large performance penalty related to use of `apply` and functions with improper argument lists
-  *  there is a performance penalty for using `call/cc` because of `dynamic-wind`'s need to preserve multiple return values in a list
-  *  run-time errors such as fixnum overflows trigger asserts in C code
+  *  there is a noticeable performance penalty related to use of `apply` and functions with improper argument lists
+  *  compared to #F's native `letcc`/`withcc`, there is a performance penalty for using `call/cc` because of `dynamic-wind`'s need to preserve multiple return values in a list
+  *  run-time errors such as fixnum overflows trigger asserts in C code unless `NDEBUG` is defined during compilation
   *  decyphering syntax errors in the source code can be tricky
 
 In addition to R^5RS-level functionality, LibS supports many popular extensions
@@ -132,12 +133,12 @@ SRFIs, and R^6RS libraries:
   *  `get-environment-variable`, `system` 
 
 
-## C Compatibility
+## Interoperability with C code
 
 
 #F memory model was designed to be C-friendly. #F programs can freely 
 use pointers to C objects because #F's garbage collector does not scan
-pointers pointing outside its heap. For C objects requiring finalisation,
+pointers pointing outside its heap. For #F's wrapped C objects requiring finalisation,
 the collector provides support for a finalisation call. Finalization
 procedures are registered on per-datatype basis, e.g.:
 
