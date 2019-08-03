@@ -2075,29 +2075,50 @@ long fxflo(double f) {
 
 ; control
 
-; procedures (closures) are heap blocks of length >= 1 which
-; have a pointer as 0th element
-; sfc allocates env-less global procedures outside of heap,
-; so procedure answers #t to any out-of-heap pointer
+; closure procedures are heap blocks of length >= 1 which
+; have a pointer to the static code entry as 0th element;
+; sfc allocates env-less global procedures in static memory,
+; so procedure? answers #t to any nonzero out-of-heap pointer
+
+(%localdef "int isprocedure(obj o) {
+  if (!o) return 0;
+  else if (isaptr(o) && !isobjptr(o)) return 1;
+  else if (!isobjptr(o)) return 0;
+  else { obj h = objptr_from_obj(o)[-1];
+    return notaptr(h) && size_from_obj(h) >= 1 
+      && isaptr(hblkref(o, 0)); }
+}")
+
+(%localdef "int procedurelen(obj o) {
+  assert(isprocedure(o));
+  return isobjptr(o) ? hblklen(o) : 1;
+}")
+
+(%localdef "obj* procedureref(obj o, int i) {
+  int len; assert(isprocedure(o));
+  len = isobjptr(o) ? hblklen(o) : 1;
+  assert(i >= 0 && i < len);
+  return &hblkref(o, i);   
+}")
+
+(%definition "/* procedures */")
+(%definition "extern int isprocedure(obj o);")
+(%definition "extern int procedurelen(obj o);")
+(%definition "extern obj* procedureref(obj o, int i);")
 
 (define-inline (procedure? o)
-  (%prim "{ /* procedure? */
-    obj o = obj_from_$arg;
-    if (is_bool_obj(o)) $return bool(0);
-    else if (isaptr(o) && !isobjptr(o)) $return bool(1);
-    else if (!isobjptr(o)) $return bool(0);
-    else { obj h = objptr_from_obj(o)[-1];
-    $return bool(notaptr(h) && size_from_obj(h) >= 1 && isaptr(hblkref(o, 0))); } }" o))
+  (%prim "bool(isprocedure(obj_from_$arg))" o))
 
 
-; apply and dotted lambda list (make-improper-lambda)
+; apply, dotted lambda list, argc dispatch
 
 (%definition "/* apply and dotted lambda list */")
 (%definition "extern obj appcases[];")
 (%localdef "/* apply/dotted lambda adapter entry points */")
 (%localdef "static obj apphost(obj);")
-(%localdef "obj appcases[3] = { (obj)apphost,  (obj)apphost,  (obj)apphost };")
+(%localdef "obj appcases[4] = { (obj)apphost,  (obj)apphost,  (obj)apphost,  (obj)apphost };")
 (%localdef "/* apphost procedure */
+#define APPLY_MAX_REGS 1024 /* limit on rc for apply & friends */
 static obj apphost(obj pc)
 {
   register obj *r = cxg_regs;
@@ -2110,13 +2131,14 @@ case 0: /* apply */
     /* clo k f arg... arglist */
     assert(rc >= 4);
     { int i; obj l;
-    rreserve(rc+2);
+    rreserve(APPLY_MAX_REGS);
     l = r[--rc];
     r[0] = r[2];
     /* k in r[1] */
     for (i = 3; i < rc; ++i) r[i-1] = r[i];
     for (--rc; l != mknull(); l = cdr(l)) r[rc++] = car(l);
     /* f k arg... arg... */
+    assert(rc <= APPLY_MAX_REGS);
     pc = objptr_from_obj(r[0])[0];
     goto jump; }
 
@@ -2151,6 +2173,15 @@ case 2: /* void continuation adapter */
     rc = 3;
     goto jump; }
 
+case 3: /* argc dispatch lambda adapter */
+    /* clo k arg... */
+    { obj* p = objptr_from_obj(r[0]);
+    obj pv = p[1]; int vl = vectorlen(pv); assert(vl > 0);
+    if (rc-2 < vl-1) r[0] = vectorref(pv, rc-2); /* matching slot */
+    else r[0] = vectorref(pv, vl-1); /* catch-all slot */ 
+    pc = objptr_from_obj(r[0])[0];
+    goto jump; }
+
 default: /* inter-host call */
     cxg_hp = hp;
     cxm_rgc(r, 1);
@@ -2178,6 +2209,13 @@ default: /* inter-host call */
     *--hp = obj_from_$arg;
     *--hp = obj_from_objptr(appcases+2);
     $return obj(hendblk(2)); }" k))
+
+(define-inline (make-argc-dispatch-lambda pv)
+  (%prim* "{ /* make-argc-dispatch-lambda */
+    hreserve(hbsz(2), $live); /* $live live regs */
+    *--hp = obj_from_$arg;
+    *--hp = obj_from_objptr(appcases+3);
+    $return obj(hendblk(2)); }" pv))
 
 
 ; delay & force
@@ -2368,7 +2406,13 @@ default: /* inter-host call */
     for (s = buf; *s != 0; s++) if (*s == 'e' || *s == '.') break;
     if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
     $return void(fputs(buf, oportdata(obj_from_$arg))); }" x p)]
-    [_ %residual-display-flonum])) 
+    [_ %residual-display-flonum]))
+    
+(define-syntax display-procedure
+  (syntax-rules ()
+    [(_ n) (display-procedure n (current-output-port))]
+    [(_ n p) (%prim! "void(fprintf(oportdata(obj_from_$arg), \"#<procedure @%p>\", objptr_from_obj(obj_from_$arg)))" p n)]
+    [_ %residual-display-procedure])) 
 
 (define-syntax char-ready?
   (syntax-rules ()
@@ -2644,7 +2688,7 @@ default: /* inter-host call */
         [(string? x) (if d? (write-string x p) (sub-write-string x p))]
         [(vector? x) (sub-write-vector x d? p)]
         [(box? x) (sub-write-box x d? p)]
-        [(procedure? x) (write-string "#<procedure>" p)]
+        [(procedure? x) (display-procedure x p)]
         [else (write-string "#<unknown>" p)]))
         
     (lambda (x d? p) ; body of write-datum
@@ -3221,9 +3265,9 @@ default: /* inter-host call */
     [(_ f s)
      (lambda args
        (let loop ([args args])
-         (if (null? args)
-             s
-             (f (car args) (loop (cdr args))))))]))
+         (cond [(null? args) s]
+               [(null? (cdr args)) (car args)]
+               [else (f (car args) (loop (cdr args)))])))]))
 
 (define %residual-make-string (unary-binary-adaptor make-string))
 
@@ -3254,6 +3298,7 @@ default: /* inter-host call */
 
 (define %residual-display-fixnum (unary-binary-adaptor display-fixnum))
 (define %residual-display-flonum (unary-binary-adaptor display-flonum))
+(define %residual-display-procedure (unary-binary-adaptor display-procedure))
 
 (define %residual-write-char (unary-binary-adaptor write-char))
 (define %residual-write-string (unary-binary-adaptor write-string))
