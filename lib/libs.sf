@@ -877,14 +877,14 @@ long fxflo(double f) {
 
 (define-syntax fl+
   (syntax-rules ()
-    [(_) (%prim* "flonum(0.0)")] [(_ x) x]
+    [(_) (%prim* "flonum($live, 0.0)")] [(_ x) x]
     [(_ x y) (%prim* "flonum($live, flonum_from_$arg + flonum_from_$arg)" x y)]
     [(_ x y z ...) (fl+ x (fl+ y z ...))]
     [_ %residual-fl+]))
 
 (define-syntax fl*
   (syntax-rules ()
-    [(_) (%prim* "flonum(1.0)")] [(_ x) x]
+    [(_) (%prim* "flonum($live, 1.0)")] [(_ x) x]
     [(_ x y) (%prim* "flonum($live, flonum_from_$arg * flonum_from_$arg)" x y)]
     [(_ x y z ...) (fl* x (fl* y z ...))]
     [_ %residual-fl*]))
@@ -1192,7 +1192,7 @@ long fxflo(double f) {
 (%definition "#define is_fixnum_char(i) ((void)(i), 0)")
 (%definition "#define is_char_flonum(i) ((void)(i), 0)")
 (%definition "#define is_flonum_char(i) ((void)(i), 0)")
-(%definition "#define char_from_obj(o) (getimms(o, CHAR_ITAG))")
+(%definition "#define char_from_obj(o) ((int)getimms(o, CHAR_ITAG))")
 (%definition "#define char_from_char(i) (i)")
 (%definition "#define bool_from_char(i) ((void)(i), 1)")
 (%definition "#define void_from_char(i) (void)(i)")
@@ -1276,6 +1276,7 @@ long fxflo(double f) {
 (%definition "extern cxtype_t *STRING_NTAG;")
 (%definition "#define isstring(o) (isnative(o, STRING_NTAG))")
 (%definition "#define stringdata(o) ((int*)getnative(o, STRING_NTAG))")
+(%definition "#define sdatachars(d) ((char*)((d)+1))")
 (%definition "#define stringlen(o) (*stringdata(o))")
 (%definition "#define stringchars(o) ((char*)(stringdata(o)+1))")
 (%definition "#define hpushstr(l, s) hpushptr(s, STRING_NTAG, l)")
@@ -2270,32 +2271,58 @@ default: /* inter-host call */
   (%prim "bool(iseof(obj_from_$arg))" x))
 
 
+; i/o ports
 
-; input ports
+(define-inline (open-file* fn mode) ;=> #f (i.e. NULL) or foreign ptr
+  (%prim*?! "obj((obj)fopen(stringchars(obj_from_$arg), stringchars(obj_from_$arg)))" fn mode))
+
+
+; generic input ports
 
 (%definition "/* input ports */")
-(%localdef "static void ipclose(void *vp) {
-  /* FILE *fp = vp; assert(fp); 
-   * cannot fclose(fp) here because of FILE reuse! */ 
-}")
-(%localdef "static cxtype_t cxt_iport = { \"iport\", ipclose };")
-(%localdef "cxtype_t *IPORT_NTAG = &cxt_iport;")
-(%definition "extern cxtype_t *IPORT_NTAG;")
-(%definition "#define isiport(o) (isnative(o, IPORT_NTAG))")
-(%definition "#define iportdata(o) ((FILE*)getnative(o, IPORT_NTAG))")
-(%definition "#define mkiport(l, fp) hpushptr(fp, IPORT_NTAG, l)")
+(%definition "typedef struct { /* extends cxtype_t */
+  const char *tname;
+  void (*free)(void*);
+  int (*close)(void*);
+  int (*getc)(void*);
+  int (*ungetc)(int, void*);
+} cxtype_iport_t;")
+
+(%definition "extern cxtype_t *IPORT_FILE_NTAG;")
+(%definition "extern cxtype_t *IPORT_STRING_NTAG;")
+(%definition "static cxtype_iport_t *iportvt(obj o) { 
+  cxtype_t *pt; if (!isobjptr(o)) return NULL;
+  pt = (cxtype_t*)objptr_from_obj(o)[-1];
+  if (pt == IPORT_FILE_NTAG || pt == IPORT_STRING_NTAG) return (cxtype_iport_t*)pt;
+  else return NULL; }")
+(%definition "#define iportdata(o) ((void*)(*objptr_from_obj(o)))")
+
+(define-inline (close-input-port p)
+  (%prim?! "{ /* close-input-port */
+    obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o); assert(vt);
+    $return void(vt->close(iportdata(o))); }" p)) 
+
+
+; file input ports
+
+(%localdef "static void ffree(void *vp) {
+  /* FILE *fp = vp; assert(fp); cannot fclose(fp) here because of FILE reuse! */ }")
+(%localdef "static cxtype_iport_t cxt_iport_file = {
+  \"file-input-port\", ffree, (int (*)(void*))fclose,
+  (int (*)(void*))fgetc, (int (*)(int, void*))ungetc };")
+(%localdef "cxtype_t *IPORT_FILE_NTAG = (cxtype_t *)&cxt_iport_file;")
+(%definition "#define mkiport_file(l, fp) hpushptr(fp, IPORT_FILE_NTAG, l)")
 
 (define-inline (input-port? x)
-  (%prim "bool(isiport(obj_from_$arg))" x))
+  (%prim "bool(iportvt(obj_from_$arg) != NULL)" x))
 
-(define *current-input-port* (%prim* "obj(mkiport($live, stdin))"))
+(define *current-input-port* (%prim* "obj(mkiport_file($live, stdin))"))
 (define-inline (current-input-port) *current-input-port*)
 
 (define-inline (open-input-file fn)
-  (%prim*?! "obj(mkiport($live, cxm_cknull(fopen(stringchars(obj_from_$arg), \"r\"), \"fopen\")))" fn))
-
-(define-inline (close-input-port p)
-  (%prim?! "void(fclose(iportdata(obj_from_$arg)))" p))
+  (let ([file* (open-file* fn "r")])
+    (if file* (%prim*?! "obj(mkiport_file($live, (void*)(obj_from_$arg)))" file*)
+        (error 'open-input-file "cannot open file" fn))))
   
 (define-inline (call-with-input-file fn proc)      ; proc must return 1 value!
   (let* ([p (open-input-file fn)] [v (proc p)])
@@ -2311,8 +2338,35 @@ default: /* inter-host call */
       v)))
 
 
+; string input ports 
 
-; output ports
+(%definition "/* string input ports */")
+(%definition "typedef struct { char *p; void *base; } sifile_t;")
+(%localdef "sifile_t *sialloc(char *p, void *base) { 
+  sifile_t *fp = cxm_cknull(malloc(sizeof(sifile_t)), \"malloc(sifile)\");
+  fp->p = p; fp->base = base; return fp; }")
+(%definition "extern sifile_t *sialloc(char *p, void *base);")
+(%localdef "static void sifree(sifile_t *fp) { 
+  assert(fp); if (fp->base) free(fp->base); free(fp); }")
+(%localdef "static void siclose(sifile_t *fp) { 
+  assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = \"\"; }")
+(%localdef "static int sigetc(sifile_t *fp) {
+  int c; assert(fp && fp->p); if (!(c = *(fp->p))) return EOF; ++(fp->p); return c; }")
+(%localdef "static int siungetc(int c, sifile_t *fp) {
+  assert(fp && fp->p); --(fp->p); assert(c == *(fp->p)); return c; }")
+(%localdef "static cxtype_iport_t cxt_iport_string = {
+  \"string-input-port\", (void (*)(void*))sifree, (int (*)(void*))siclose,
+  (int (*)(void*))sigetc, (int (*)(int, void*))siungetc };")
+(%localdef "cxtype_t *IPORT_STRING_NTAG = (cxtype_t *)&cxt_iport_string;")
+(%definition "#define mkiport_string(l, fp) hpushptr(fp, IPORT_STRING_NTAG, l)")
+
+(define-inline (open-input-string s)
+  (%prim*? "{ /* open-input-string */
+    int *d = dupstring(stringdata(obj_from_$arg));
+    $return obj(mkiport_string($live, sialloc(sdatachars(d), d))); }" s))
+
+
+; file output ports
 
 (%definition "/* output ports */")
 (%localdef "static void opclose(void *vp) {
@@ -2335,7 +2389,9 @@ default: /* inter-host call */
 (define-inline (current-error-port) *current-error-port*)
 
 (define-inline (open-output-file fn)
-  (%prim*?! "obj(mkoport($live, cxm_cknull(fopen(stringchars(obj_from_$arg), \"w\"), \"fopen\")))" fn))
+  (let ([file* (open-file* fn "w")])
+    (if file* (%prim*?! "obj(mkoport($live, (void*)(obj_from_$arg)))" file*)
+        (error 'open-output-file "cannot open file" fn))))
 
 (define-inline (flush-output-port p)
   (%prim?! "void(fflush(oportdata(obj_from_$arg)))" p))
@@ -2362,16 +2418,24 @@ default: /* inter-host call */
 (define-syntax read-char
   (syntax-rules ()
     [(_) (read-char (current-input-port))]
-    [(_ p) (%prim?! ("{ int c = fgetc(iportdata(obj_from_$arg));\n"
+    [(_ p) (%prim?! ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
+                "    int c; assert(vt); c = vt->getc(iportdata(o));\n"
                 "    $return obj(c == EOF ? mkeof() : obj_from_char(c)); }") p)]
     [_ %residual-read-char]))
 
 (define-syntax peek-char
   (syntax-rules ()
     [(_) (peek-char (current-input-port))]
-    [(_ p) (%prim? ("{ FILE *p = iportdata(obj_from_$arg); int c = fgetc(p); ungetc(c, p);\n"
+    [(_ p) (%prim? ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
+                "    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);\n"
                 "    $return obj(c == EOF ? mkeof() : obj_from_char(c)); }") p)]
     [_ %residual-peek-char]))
+
+(define-syntax char-ready?
+  (syntax-rules ()
+    [(_) (char-ready? (current-input-port))]
+    [(_ p) #t] ; no better solution for FILE/STRING ports
+    [_ %residual-char-ready?]))
 
 (define-syntax write-char
   (syntax-rules ()
@@ -2414,11 +2478,11 @@ default: /* inter-host call */
     [(_ n p) (%prim! "void(fprintf(oportdata(obj_from_$arg), \"#<procedure @%p>\", objptr_from_obj(obj_from_$arg)))" p n)]
     [_ %residual-display-procedure])) 
 
-(define-syntax char-ready?
+(define-syntax display-input-port
   (syntax-rules ()
-    [(_) (char-ready? (current-input-port))]
-    [(_ p) #t] ; no better solution for FILE ports
-    [_ %residual-char-ready?]))
+    [(_ n) (display-input-port n (current-output-port))]
+    [(_ n p) (%prim! "void(fprintf(oportdata(obj_from_$arg), \"#<%s>\", ((cxtype_iport_t*)cxm_cknull(iportvt(obj_from_$arg), \"iportvt\"))->tname))" p n)]
+    [_ %residual-display-procedure])) 
 
 
 ; equivalence and case
@@ -2676,7 +2740,7 @@ default: /* inter-host call */
     (define (sub-write x d? p)
       (cond
         [(eof-object? x) (write-string "#<eof>" p)]
-        [(input-port? x) (write-string "#<iport>" p)]
+        [(input-port? x) (display-input-port x p)]
         [(output-port? x) (write-string "#<oport>" p)]
         [(symbol? x) (write-string (symbol->string x) p)]
         [(pair? x) (sub-write-pair x d? p)]
@@ -3056,6 +3120,16 @@ default: /* inter-host call */
                (set-cdr! there '())
                (set! *current-dynamic-state* there)
                (before)))))
+
+; time
+
+(%include <time.h>)
+
+(define-inline (current-jiffy)
+  (%prim*! "flonum($live, clock())"))
+
+(define-inline (jiffies-per-second)
+  (%prim* "flonum($live, CLOCKS_PER_SEC)"))
 
 
 ; miscellaneous / system
