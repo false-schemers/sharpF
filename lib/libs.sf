@@ -1069,7 +1069,8 @@ long fxflo(double f) {
 
 (define-syntax +
   (syntax-rules ()
-    [(_) 0] [(_ x) x]
+    [(_) 0] 
+    [(_ x) x]
     [(_ x y) (real-binop x y fx+ fl+)]
     [(_ x y z ...) (+ x (+ y z ...))]
     [_ %residual+]))
@@ -1108,13 +1109,26 @@ long fxflo(double f) {
 (define-inline (modulo x y)
   (real-binop x y fxmodulo flmodulo))
 
-(define-inline (gcd x y)
-  (real-binop x y fxgcd flgcd))
-  
-(define (lcm x y)
+(define-syntax gcd
+  (syntax-rules ()
+    [(_) 0] 
+    [(_ x) x]
+    [(_ x y) (real-binop x y fxgcd flgcd)]
+    [(_ x y z ...) (gcd x (gcd y z ...))]
+    [_ %residual-gcd]))
+
+(define (lcm/2 x y)
   (let ([g (gcd x y)])
     (if (zero? g) g (* (quotient (abs x) g) (abs y)))))
-  
+
+(define-syntax lcm
+  (syntax-rules ()
+    [(_) 1] 
+    [(_ x) x]
+    [(_ x y) (lcm/2 x y)]
+    [(_ x y z ...) (lcm/2 x (lcm y z ...))]
+    [_ %residual-lcm]))
+
 ; no div
 ; no mod  
 
@@ -2111,13 +2125,13 @@ long fxflo(double f) {
   (%prim "bool(isprocedure(obj_from_$arg))" o))
 
 
-; apply, dotted lambda list, argc dispatch
+; apply, dotted lambda list, argc dispatch, case-lambda
 
 (%definition "/* apply and dotted lambda list */")
 (%definition "extern obj appcases[];")
 (%localdef "/* apply/dotted lambda adapter entry points */")
 (%localdef "static obj apphost(obj);")
-(%localdef "obj appcases[4] = { (obj)apphost,  (obj)apphost,  (obj)apphost,  (obj)apphost };")
+(%localdef "obj appcases[5] = { (obj)apphost,  (obj)apphost,  (obj)apphost,  (obj)apphost ,  (obj)apphost };")
 (%localdef "/* apphost procedure */
 #define APPLY_MAX_REGS 1024 /* limit on rc for apply & friends */
 static obj apphost(obj pc)
@@ -2174,12 +2188,22 @@ case 2: /* void continuation adapter */
     rc = 3;
     goto jump; }
 
-case 3: /* argc dispatch lambda adapter */
+case 3: /* argc dispatcher */
     /* clo k arg... */
     { obj* p = objptr_from_obj(r[0]);
     obj pv = p[1]; int vl = vectorlen(pv); assert(vl > 0);
     if (rc-2 < vl-1) r[0] = vectorref(pv, rc-2); /* matching slot */
     else r[0] = vectorref(pv, vl-1); /* catch-all slot */ 
+    pc = objptr_from_obj(r[0])[0];
+    goto jump; }
+
+case 4: /* case lambda dispatcher */
+    /* clo k arg... */
+    { obj* p = objptr_from_obj(r[0]); int bl = hblklen(p), i;
+    for (i = 1; i < bl; i += 3) {
+    int min = fixnum_from_obj(hblkref(p, i)), max = fixnum_from_obj(hblkref(p, i+1));
+    if (min <= rc-2 && rc-2 <= max) { r[0] = hblkref(p, i+2); break; }
+    } assert(i < bl); /* at least one of the cases should match! */ 
     pc = objptr_from_obj(r[0])[0];
     goto jump; }
 
@@ -2217,6 +2241,35 @@ default: /* inter-host call */
     *--hp = obj_from_$arg;
     *--hp = obj_from_objptr(appcases+3);
     $return obj(hendblk(2)); }" pv))
+
+(define-syntax make-case-lambda 
+  (syntax-rules ()
+    [(_ x ...) ; order is: min1 max1 lambda1 min2 max2 lambda2 ...
+     (%prim*/rev "{ /* make-case-lambda */
+    hreserve(hbsz($argc+1), $live); /* $live live regs */
+    ${*--hp = obj_from_$arg;
+    $}*--hp = obj_from_objptr(appcases+4);
+    $return obj(hendblk($argc+1)); }" x ...)]
+    [_ %residual-make-case-lambda]))
+
+(define-syntax case-lambda
+  (letrec-syntax
+    ([min-accepted
+      (syntax-rules ()
+        [(_ () N) N] [(_ (a . d) N) (min-accepted d #&(+ 1 N))] [(_ ra N) N])]
+     [max-accepted
+      (syntax-rules ()
+        [(_ () N) N] [(_ (a . d) N) (max-accepted d #&(+ 1 N))] [(_ ra N) (%prim "fixnum(FIXNUM_MAX)")])]
+     [unroll-cases
+      (syntax-rules ()
+        [(_ () c ...) 
+         (make-case-lambda c ... 0 (%prim "fixnum(FIXNUM_MAX)") %fail-lambda)]
+        [(_ ([formals . body] . more) c ...)
+         (unroll-cases more c ... 
+           (min-accepted formals 0) (max-accepted formals 0) (lambda formals . body))])])
+     (syntax-rules ()
+       [(_ [formals . body] ...)
+        (unroll-cases ([formals . body] ...))])))
 
 
 ; delay & force
@@ -2529,8 +2582,6 @@ default: /* inter-host call */
 (%definition "extern int isequal(obj x, obj y);")
 (%localdef "int isequal(obj x, obj y) {
   obj h; int i, n; loop: if (x == y) return 1;
-  if (is_fixnum_obj(x) && is_flonum_obj(y)) return (flonum_t)fixnum_from_obj(x) == flonum_from_obj(y);
-  if (is_fixnum_obj(y) && is_flonum_obj(x)) return (flonum_t)fixnum_from_obj(y) == flonum_from_obj(x);
   if (!x || !y || notaptr(x) || notaptr(y) || notobjptr(x) || notobjptr(y)) return 0;
   if ((h = objptr_from_obj(x)[-1]) != objptr_from_obj(y)[-1]) return 0;
   if (h == (obj)FLONUM_NTAG) return flonum_from_obj(x) == flonum_from_obj(y); 
@@ -2583,9 +2634,7 @@ default: /* inter-host call */
 
 (define-inline (eqv? x y)
   (or (eq? x y) ; covers fx=?
-      (if (fixnum? x)
-          (and (flonum? y) (fl=? (fixnum->flonum x) y))
-          (and (flonum? x) (flonum? y) (fl=? x y)))))
+      (and (flonum? x) (flonum? y) (fl=? x y))))
 
 (define-inline (equal? x y)
   (%prim? "bool(isequal(obj_from_$arg, obj_from_$arg))" x y))
@@ -3251,6 +3300,8 @@ default: /* inter-host call */
 (define %residual-fl* (addmul-reducer fl* 1.0))
 (define %residual+ (addmul-reducer + 0))
 (define %residual* (addmul-reducer * 1))
+(define %residual-gcd (addmul-reducer gcd 0))
+(define %residual-lcm (addmul-reducer lcm 1))
 
 (define-syntax subdiv-reducer
   (syntax-rules ()
@@ -3365,6 +3416,18 @@ default: /* inter-host call */
 
 (define %residual-number->string (unary-binary-adaptor number->string))
 (define %residual-string->number (unary-binary-adaptor string->number))
+
+(define (%fail-lambda . args)
+  (error 'case-lambda "unexpected number of arguments" args))
+
+(define (%residual-make-case-lambda . l)
+  (%prim* "{ /* %residual-make-case-lambda */
+    obj l; int i, c = fixnum_from_$arg;
+    hreserve(hbsz(c+1), $live); /* $live live regs */
+    l = obj_from_$arg; /* gc-safe */
+    for (i = 0; i < c; ++i, l = cdr(l)) hp[i-c] = car(l);
+    hp -= c; *--hp = obj_from_objptr(appcases+4);
+    $return obj(hendblk(c+1)); }" (length l) l))
 
 (define %residual-read-char (nullary-unary-adaptor read-char))
 (define %residual-peek-char (nullary-unary-adaptor peek-char))
