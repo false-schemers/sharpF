@@ -121,14 +121,14 @@ In addition to R^5RS-level functionality, LibS supports many popular extensions
 defined in pre-R^5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
 
   *  many fixnum (`fx`) and flonum (`fl`) - specific operations
-  *  `letrec*`, `rec`, `receive`, `let-values`, `let*-values` forms
+  *  `letrec*`, `rec`, `receive`, `let-values`, `let*-values`, `case-lambda` forms
   *  `reverse!`, `for-all`, `exists`, `fold-left`, `fold-right`
   *  `filter`, `partition`, `remq`, `remv`, `remove`, `remp`, `memp`, `assp`
   *  `list-sort!`, `list-sort`, `list-merge`, `vector-sort!`
   *  operations on boxes: `box?`, `box`, `unbox`, `set-box!`
   *  `error`, `assertion-violation` (not based on exceptions)
   *  `file-exists?`, `delete-file`, `rename-file`, `open-input-string`
-  *  `exit`, `abort`, `reset`, `argv-ref`, `command-line`
+  *  `exit`, `abort`, `reset`, `command-line`
   *  `get-environment-variable`, `system`, `current-jiffy`, `jiffies-per-second` 
 
 
