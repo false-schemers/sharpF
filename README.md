@@ -55,7 +55,7 @@ The files can be seen here:
 [tmain.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/compiled/tmain.c)
 
 There's no need to compile all .sf files in a single run. Doing it one file
-at a time is just as good. Dependant units (files) are scanned for macros during
+at a time is just as good. Dependent units (files) are scanned for macros during
 compilation of a unit, so they should be present and in a good shape. Dependencies
 are declared via `(load "foo.sf")` special form (or its syntactic shortcut `#fload "foo.sf"`), 
 which serves two purposes: to tell
@@ -91,7 +91,7 @@ $ sfc libs.sf myprog.sf     # sfc produces 2 C files
 $ gcc libs.c myprog.c       # gcc produces a.out
 ```
 
-To dress an exisiting pre-R^6RS Scheme source file as a #F program that
+To dress an existing pre-R^6RS Scheme source file as a #F program that
 uses LibS, one has to add `(load "libs.sf")` line to the beginning of the
 file and `(define (main argv) #f)` to the end. LibS generally targets
 R^5RS feature set, but it has the following known limitations:
@@ -99,7 +99,7 @@ R^5RS feature set, but it has the following known limitations:
   *  SFC reader used to read #F source code is case-sensitive
   *  `read` and `string->symbol` are also case-sensitive
   *  there is no support for `eval` and environment functions
-  *  no dynamic `load` or dymamic macroexpansion/compilation
+  *  no dynamic `load` or dynamic macroexpansion/compilation
   *  fixnums are limited to 24 bits, flonums are doubles
   *  no support for bignums/rational/complex numbers
   *  `max` and `min` do not preserve inexactness
@@ -115,7 +115,7 @@ programs:
   *  there is a noticeable performance penalty related to use of `apply` and functions with improper argument lists
   *  compared to #F's native `letcc`/`withcc`, there is a performance penalty for using `call/cc` because of `dynamic-wind`'s need to preserve multiple return values in a list
   *  run-time errors such as fixnum overflows trigger asserts in C code unless `NDEBUG` is defined during compilation
-  *  decyphering syntax errors in the source code can be tricky
+  *  deciphering syntax errors in the source code can be tricky
 
 In addition to R^5RS-level functionality, LibS supports many popular extensions
 defined in pre-R^5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
@@ -131,14 +131,17 @@ defined in pre-R^5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
   *  `exit`, `abort`, `reset`, `command-line`
   *  `get-environment-variable`, `system`, `current-jiffy`, `jiffies-per-second` 
 
+Please check the `/lib` directory to see the full list of available libraries. Some of them have corresponding interpreters
+to simplify development and debugging. Interpreters are located in the '/int' directory.
+
 
 ## Interoperability with C code
 
 
 #F memory model was designed to be C-friendly. #F programs can freely 
 use pointers to C objects because #F's garbage collector does not scan
-pointers pointing outside its heap. For #F's wrapped C objects requiring finalisation,
-the collector provides support for a finalisation call. Finalization
+pointers pointing outside its heap. For #F's wrapped C objects requiring finalization,
+the collector provides support for a finalization call. Finalization
 procedures are registered on per-datatype basis, e.g.:
 
 ```
@@ -287,8 +290,6 @@ The rest is up to you - the compiler has no dependencies and can be run from any
 
 The documentation is not yet complete and might be slightly out-of-date.
 The .html files are located in the `doc` subdirectory of the master tree.
-
-[Preview via RawGit](https://rawgit.com/false-schemers/sharpF/master/doc/intro.html)
 
 
 ## Examples
