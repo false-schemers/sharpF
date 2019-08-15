@@ -13,6 +13,7 @@ Please note that to dress an exisiting Scheme source file as a #F program that
 uses a library like LibS, one has to add `(load "libs.sf")` line to the beginning of the
 file and `(define (main argv) #f)` to the end.
 
+
 ## LibXXS (Extra Extra Small) Library
 
 LibXXS (see [libxxs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libxxs.sf)) provides bare-bones Scheme-like functionality. It has the following known limitations:
@@ -41,10 +42,20 @@ LibXXS supports the following additional functions:
   *  `exit`, `abort`, and `reset`
 
 
+## LibXS (Extra Small) Library
+
+LibXS (see [libxs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libxs.sf)) is an extended version of LibXXS. It has the following additional functionality:
+
+  *  support for flonums, generic math is mixed fixnum/flonum
+  *  many flonum (`fl`) - specific operations
+  *  `sqrt` and trigonometry functions are available in (`fl`) form (e.g. `flsqrt`)
+  *  `andmap`, `ormap` forms implemented as macros
+
+
 ## LibS (Small) Library
 
 LibS (see [libs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libs.sf)) generally targets
-R^5RS feature set; most of the forms and procedures behave as expected. It has the following known limitations:
+R^5RS feature set; most of the forms and procedures behave as expected. Compared to a regular R^5RS system, it has the following known limitations:
 
   *  SFC reader used to read #F source code is case-sensitive
   *  `read` and `string->symbol` are also case-sensitive
