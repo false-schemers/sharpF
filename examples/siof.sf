@@ -2174,8 +2174,8 @@ default: /* inter-host call */
   const char *tname;
   void (*free)(void*);
   int (*close)(void*);
-  int (*getc)(void*);
-  int (*ungetc)(int, void*);
+  int (*getch)(void*);
+  int (*ungetch)(int, void*);
 } cxtype_iport_t;")
 
 (%definition "extern cxtype_t *IPORT_FILE_NTAG;")
@@ -2199,7 +2199,7 @@ default: /* inter-host call */
   /* FILE *fp = vp; assert(fp); cannot fclose(fp) here because of FILE reuse! */ }")
 (%localdef "static cxtype_iport_t cxt_iport_file = {
   \"file-input-port\", ffree, (int (*)(void*))fclose,
-  (int (*)(void*))fgetc, (int (*)(int, void*))ungetc };")
+  (int (*)(void*))(fgetc), (int (*)(int, void*))(ungetc) };")
 (%localdef "cxtype_t *IPORT_FILE_NTAG = (cxtype_t *)&cxt_iport_file;")
 (%definition "#define mkiport_file(l, fp) hpushptr(fp, IPORT_FILE_NTAG, l)")
 
@@ -2240,13 +2240,13 @@ default: /* inter-host call */
   assert(fp); if (fp->base) free(fp->base); free(fp); }")
 (%localdef "static void siclose(sifile_t *fp) { 
   assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = \"\"; }")
-(%localdef "static int sigetc(sifile_t *fp) {
+(%localdef "static int sigetch(sifile_t *fp) {
   int c; assert(fp && fp->p); if (!(c = *(fp->p))) return EOF; ++(fp->p); return c; }")
-(%localdef "static int siungetc(int c, sifile_t *fp) {
+(%localdef "static int siungetch(int c, sifile_t *fp) {
   assert(fp && fp->p); --(fp->p); assert(c == *(fp->p)); return c; }")
 (%localdef "static cxtype_iport_t cxt_iport_string = {
   \"string-input-port\", (void (*)(void*))sifree, (int (*)(void*))siclose,
-  (int (*)(void*))sigetc, (int (*)(int, void*))siungetc };")
+  (int (*)(void*))sigetch, (int (*)(int, void*))siungetch };")
 (%localdef "cxtype_t *IPORT_STRING_NTAG = (cxtype_t *)&cxt_iport_string;")
 (%definition "#define mkiport_string(l, fp) hpushptr(fp, IPORT_STRING_NTAG, l)")
 
@@ -2309,7 +2309,7 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_) (read-char (current-input-port))]
     [(_ p) (%prim?! ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
-                "    int c; assert(vt); c = vt->getc(iportdata(o));\n"
+                "    int c; assert(vt); c = vt->getch(iportdata(o));\n"
                 "    $return obj(c == EOF ? mkeof() : obj_from_char(c)); }") p)]
     [_ %residual-read-char]))
 
@@ -2317,7 +2317,7 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_) (peek-char (current-input-port))]
     [(_ p) (%prim? ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
-                "    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);\n"
+                "    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);\n"
                 "    $return obj(c == EOF ? mkeof() : obj_from_char(c)); }") p)]
     [_ %residual-peek-char]))
 

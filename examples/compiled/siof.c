@@ -667,8 +667,8 @@ typedef struct { /* extends cxtype_t */
   const char *tname;
   void (*free)(void*);
   int (*close)(void*);
-  int (*getc)(void*);
-  int (*ungetc)(int, void*);
+  int (*getch)(void*);
+  int (*ungetch)(int, void*);
 } cxtype_iport_t;
 extern cxtype_t *IPORT_FILE_NTAG;
 extern cxtype_t *IPORT_STRING_NTAG;
@@ -682,7 +682,7 @@ static void ffree(void *vp) {
   /* FILE *fp = vp; assert(fp); cannot fclose(fp) here because of FILE reuse! */ }
 static cxtype_iport_t cxt_iport_file = {
   "file-input-port", ffree, (int (*)(void*))fclose,
-  (int (*)(void*))fgetc, (int (*)(int, void*))ungetc };
+  (int (*)(void*))(fgetc), (int (*)(int, void*))(ungetc) };
 cxtype_t *IPORT_FILE_NTAG = (cxtype_t *)&cxt_iport_file;
 #define mkiport_file(l, fp) hpushptr(fp, IPORT_FILE_NTAG, l)
 /* string input ports */
@@ -695,13 +695,13 @@ static void sifree(sifile_t *fp) {
   assert(fp); if (fp->base) free(fp->base); free(fp); }
 static void siclose(sifile_t *fp) { 
   assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = ""; }
-static int sigetc(sifile_t *fp) {
+static int sigetch(sifile_t *fp) {
   int c; assert(fp && fp->p); if (!(c = *(fp->p))) return EOF; ++(fp->p); return c; }
-static int siungetc(int c, sifile_t *fp) {
+static int siungetch(int c, sifile_t *fp) {
   assert(fp && fp->p); --(fp->p); assert(c == *(fp->p)); return c; }
 static cxtype_iport_t cxt_iport_string = {
   "string-input-port", (void (*)(void*))sifree, (int (*)(void*))siclose,
-  (int (*)(void*))sigetc, (int (*)(int, void*))siungetc };
+  (int (*)(void*))sigetch, (int (*)(int, void*))siungetch };
 cxtype_t *IPORT_STRING_NTAG = (cxtype_t *)&cxt_iport_string;
 #define mkiport_string(l, fp) hpushptr(fp, IPORT_STRING_NTAG, l)
 /* output ports */
@@ -8370,7 +8370,7 @@ case 253: /* clo k p in-string? */
     r += 1; /* shift reg. wnd */
     /* k p in-string? char-delimiter? */
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[4] = (c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(0+1), 5); /* 5 live regs */
     *--hp = obj_from_case(254);
@@ -8472,7 +8472,7 @@ s_loop_v26009: /* k c l cc char-delimiter? p rev-digits->char in-string? */
   } else {
   if ((bool_from_obj(r[7]) && (char_from_obj(r[1]) == (';')))) {
     { obj o = r[5];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     r[8+0] = r[6];  
     pc = objptr_from_obj(r[8+0])[0];
@@ -8591,10 +8591,10 @@ s_l_v26011: /* ek r loop p cc c rev-digits->char l k */
     goto jump;
   } else {
     { obj o = r[3];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     { obj o = r[3];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[9] = (c == EOF ? mkeof() : obj_from_char(c)); }
     { /* cons */ 
     hreserve(hbsz(3), 10); /* 10 live regs */
@@ -8629,7 +8629,7 @@ case 257: /* clo k c p */
     r += 1; /* shift reg. wnd */
     /* k c p char-delimiter? dot */
     { obj o = r[2];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[5] = (c == EOF ? mkeof() : obj_from_char(c)); }
     { /* cons */ 
     hreserve(hbsz(3), 6); /* 6 live regs */
@@ -8825,10 +8825,10 @@ s_l_v25988: /* ek r loop p c k dot hash? l */
   } else {
   if ((char_from_obj(r[4]) == ('#'))) {
     { obj o = r[3];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     { obj o = r[3];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[9] = (c == EOF ? mkeof() : obj_from_char(c)); }
     { /* cons */ 
     hreserve(hbsz(3), 10); /* 10 live regs */
@@ -8851,10 +8851,10 @@ s_l_v25988: /* ek r loop p c k dot hash? l */
     if (p) r[9] = obj_from_fixnum(p-s); else r[9] = obj_from_bool(0); }
   if (bool_from_obj(r[9])) {
     { obj o = r[3];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     { obj o = r[3];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[9] = (c == EOF ? mkeof() : obj_from_char(c)); }
     { /* cons */ 
     hreserve(hbsz(3), 10); /* 10 live regs */
@@ -9281,7 +9281,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
     *--hp = obj_from_case(270);
     r[9] = (hendblk(7+1));
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[10] = (c == EOF ? mkeof() : obj_from_char(c)); }
   if ((iseof((r[10])))) {
     /* r[0] */    
@@ -9404,7 +9404,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((char_from_obj(r[10]) == (';'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[11] = (c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(3+1), 12); /* 12 live regs */
     *--hp = r[0];  
@@ -9421,7 +9421,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((char_from_obj(r[10]) == (','))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[11] = (c == EOF ? mkeof() : obj_from_char(c)); }
   if ((iseof((r[11])))) {
     r[12+0] = (cx_error);
@@ -9436,7 +9436,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((char_from_obj(r[11]) == ('@'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(1+1), 12); /* 12 live regs */
     *--hp = r[0];  
@@ -9481,7 +9481,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((char_from_obj(r[10]) == ('#'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[11] = (c == EOF ? mkeof() : obj_from_char(c)); }
   if ((iseof((r[11])))) {
     r[12+0] = (cx_error);
@@ -9496,7 +9496,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((tolower(char_from_obj(r[11])) == tolower(('t')))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     r[12] = obj_from_bool(1);
     r[13+0] = r[0];  
@@ -9510,7 +9510,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((tolower(char_from_obj(r[11])) == tolower(('f')))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     r[12] = obj_from_bool(0);
     r[13+0] = r[0];  
@@ -9535,7 +9535,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((char_from_obj(r[11]) == (';'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(3+1), 12); /* 12 live regs */
     *--hp = r[0];  
@@ -9556,7 +9556,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((char_from_obj(r[11]) == ('|'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(3+1), 12); /* 12 live regs */
     *--hp = r[0];  
@@ -9570,7 +9570,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((char_from_obj(r[11]) == ('('))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(1+1), 12); /* 12 live regs */
     *--hp = r[0];  
@@ -9594,10 +9594,10 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((char_from_obj(r[11]) == (92))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[12] = (c == EOF ? mkeof() : obj_from_char(c)); }
   if ((iseof((r[12])))) {
     r[13+0] = (cx_error);
@@ -9612,7 +9612,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
   } else {
   if ((('x') == char_from_obj(r[12]))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(4+1), 13); /* 13 live regs */
     *--hp = (r[12]);
@@ -9622,7 +9622,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
     *--hp = obj_from_case(284);
     r[13] = (hendblk(4+1));
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[14] = (c == EOF ? mkeof() : obj_from_char(c)); }
     r[15+0] = r[3];  
     pc = objptr_from_obj(r[15+0])[0];
@@ -9651,7 +9651,7 @@ s_sub_2Dread: /* k p dot char-delimiter? sub-read-x-char-escape sub-read-number-
     goto s_sub_2Dread_2Dcarefully;
   } else {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     r[13] = (r[12]);
     r[14+0] = r[0];  
@@ -9783,7 +9783,7 @@ s_loop_v25881: /* k c p */
     goto jump;
   } else {
     { obj o = r[2];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[3] = (c == EOF ? mkeof() : obj_from_char(c)); }
     /* r[0] */    
     r[1] = r[3];  
@@ -9874,7 +9874,7 @@ s_loop_v25846: /* k l sub-read-x-char-escape p */
     *--hp = obj_from_case(276);
     r[4] = (hendblk(2+1));
     { obj o = r[3];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[5] = (c == EOF ? mkeof() : obj_from_char(c)); }
   if ((iseof((r[5])))) {
     r[6+0] = (cx_error);
@@ -9889,7 +9889,7 @@ s_loop_v25846: /* k l sub-read-x-char-escape p */
   } else {
   if ((char_from_obj(r[5]) == (92))) {
     { obj o = r[3];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[6] = (c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(6+1), 7); /* 7 live regs */
     *--hp = r[1];  
@@ -10125,7 +10125,7 @@ s_recur_v25831: /* k p */
     *--hp = obj_from_case(280);
     r[2] = (hendblk(1+1));
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[3] = (c == EOF ? mkeof() : obj_from_char(c)); }
   if ((iseof((r[3])))) {
     r[4+0] = (cx_error);
@@ -10140,7 +10140,7 @@ s_recur_v25831: /* k p */
   } else {
   if ((char_from_obj(r[3]) == ('|'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[4] = (c == EOF ? mkeof() : obj_from_char(c)); }
   if ((iseof((r[4])))) {
     r[5+0] = (cx_error);
@@ -10155,7 +10155,7 @@ s_recur_v25831: /* k p */
   } else {
   if ((char_from_obj(r[4]) == ('#'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[5] = (c == EOF ? mkeof() : obj_from_char(c)); }
     r[6+0] = r[0];  
     pc = objptr_from_obj(r[6+0])[0];
@@ -10174,7 +10174,7 @@ s_recur_v25831: /* k p */
   } else {
   if ((char_from_obj(r[3]) == ('#'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[4] = (c == EOF ? mkeof() : obj_from_char(c)); }
   if ((iseof((r[4])))) {
     r[5+0] = (cx_error);
@@ -10189,7 +10189,7 @@ s_recur_v25831: /* k p */
   } else {
   if ((char_from_obj(r[4]) == ('|'))) {
     { obj o = r[1];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     (void)(c == EOF ? mkeof() : obj_from_char(c)); }
     hreserve(hbsz(2+1), 5); /* 5 live regs */
     *--hp = r[0];  
@@ -13962,12 +13962,12 @@ case 394: /* clo k args */
     /* k args */
   if ((isnull((r[1])))) {
     { obj o = (cx__2Acurrent_2Dinput_2Dport_2A); cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[2] = (c == EOF ? mkeof() : obj_from_char(c)); }
   } else {
     r[2] = (car((r[1])));
     { obj o = r[2];   cxtype_iport_t *vt = iportvt(o);
-    int c; assert(vt); c = vt->getc(iportdata(o));
+    int c; assert(vt); c = vt->getch(iportdata(o));
     r[2] = (c == EOF ? mkeof() : obj_from_char(c)); }
   }
     r[3+0] = r[0];  
@@ -13985,12 +13985,12 @@ case 395: /* clo k args */
     /* k args */
   if ((isnull((r[1])))) {
     { obj o = (cx__2Acurrent_2Dinput_2Dport_2A); cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[2] = (c == EOF ? mkeof() : obj_from_char(c)); }
   } else {
     r[2] = (car((r[1])));
     { obj o = r[2];   cxtype_iport_t *vt = iportvt(o);
-    int c; void *p; assert(vt); p = iportdata(o); c = vt->getc(p); if (c != EOF) vt->ungetc(c, p);
+    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);
     r[2] = (c == EOF ? mkeof() : obj_from_char(c)); }
   }
     r[3+0] = r[0];  
