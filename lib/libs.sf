@@ -1,5 +1,5 @@
 
-;  LibS: RNRS compatibility library for #F, fixnum/flonum arithmetics 
+;  LibS: Small RNRS compatibility library for #F, fixnum/flonum arithmetics 
 
 ;  #F's predefined forms: 
 ;
@@ -174,18 +174,13 @@
 
 ; control
                
-(define-syntax do
-  (let-syntax ([do-step (syntax-rules () [(_ x) x] [(_ x y) y])])
-    (syntax-rules ()
-      [(_ ([var init step ...] ...)
-         [test expr ...]
-          command ...)
-       (let loop ([var init] ...)
-         (if test
-             (begin (if #f #f) expr ...)
-             (let () 
-               command ...
-               (loop (do-step var step ...) ...))))])))
+(define-syntax when
+  (syntax-rules ()
+    [(_ test . body) (if test (let-syntax () . body))]))
+
+(define-syntax unless
+  (syntax-rules ()
+    [(_ test . body) (if test (if #f #f) (let-syntax () . body))]))
 
 (define-syntax cond
   (syntax-rules (else =>)
@@ -209,6 +204,18 @@
     [(_ test) (let () test)]
     [(_ test . tests) (let ([x test]) (if x x (or . tests)))]))
 
+(define-syntax do
+  (let-syntax ([do-step (syntax-rules () [(_ x) x] [(_ x y) y])])
+    (syntax-rules ()
+      [(_ ([var init step ...] ...)
+         [test expr ...]
+          command ...)
+       (let loop ([var init] ...)
+         (if test
+             (begin (if #f #f) expr ...)
+             (let () 
+               command ...
+               (loop (do-step var step ...) ...))))])))
 
 
 ;------------------------------------------------------------------------------
@@ -487,6 +494,15 @@ long fxflo(double f) {
 }
 #endif")
 
+(%definition "extern long fxpow(long x, long y);")
+(%localdef "long fxpow(long x, long y) { 
+  assert(y >= 0);
+  retry: if (y == 0) return 1; if (y == 1) return x;
+  if (y % 2 == 1) x *= fxpow(x, y-1); 
+  else { x *= x; y /= 2; assert(x <= FIXNUM_MAX); goto retry; }
+  assert(x <= FIXNUM_MAX); return x;
+}")
+
 (%definition "extern int fxifdv(long x, long y, long *pi, double *pd);")
 (%localdef "int fxifdv(long x, long y, long *pi, double *pd) { 
   assert(y); 
@@ -732,6 +748,9 @@ long fxflo(double f) {
 
 (define-inline (fxgcd x y)
   (%prim "fixnum(fxgcd(fixnum_from_$arg, fixnum_from_$arg))" x y))
+
+(define-inline (fxexpt x y)
+  (%prim* "fixnum(fxpow(fixnum_from_$arg, fixnum_from_$arg))" x y))
 
 (define-inline (fxnot x)
   (%prim "fixnum(~fixnum_from_$arg)" x))
@@ -1184,9 +1203,8 @@ long fxflo(double f) {
     [(_ y x) (flatan (real->flonum y) (real->flonum x))]
     [_ %residual-atan]))
 
-; need exact version?
 (define-inline (expt x y)
-  (flexpt (real->flonum x) (real->flonum y)))
+  (real-binop x y fxexpt flexpt))
 
 
 ; characters
@@ -2190,10 +2208,9 @@ case 2: /* void continuation adapter */
 
 case 3: /* argc dispatcher */
     /* clo k arg... */
-    { obj* p = objptr_from_obj(r[0]);
-    obj pv = p[1]; int vl = vectorlen(pv); assert(vl > 0);
-    if (rc-2 < vl-1) r[0] = vectorref(pv, rc-2); /* matching slot */
-    else r[0] = vectorref(pv, vl-1); /* catch-all slot */ 
+    { obj* p = objptr_from_obj(r[0]); int bl = hblklen(p);
+    if (rc < bl) r[0] = hblkref(p, rc-1); /* matching slot */
+    else r[0] = hblkref(p, bl-1); /* catch-all slot */ 
     pc = objptr_from_obj(r[0])[0];
     goto jump; }
 
@@ -2235,12 +2252,15 @@ default: /* inter-host call */
     *--hp = obj_from_objptr(appcases+2);
     $return obj(hendblk(2)); }" k))
 
-(define-inline (make-argc-dispatch-lambda pv)
-  (%prim* "{ /* make-argc-dispatch-lambda */
-    hreserve(hbsz(2), $live); /* $live live regs */
-    *--hp = obj_from_$arg;
-    *--hp = obj_from_objptr(appcases+3);
-    $return obj(hendblk(2)); }" pv))
+(define-syntax make-argc-dispatch-lambda 
+  (syntax-rules ()
+    [(_ x ... r) ; lambda0 lambda1 lambda2 ... lambda
+     (%prim*/rev "{ /* make-argc-dispatch-lambda */
+    hreserve(hbsz($argc+1), $live); /* $live live regs */
+    ${*--hp = obj_from_$arg;
+    $}*--hp = obj_from_objptr(appcases+3);
+    $return obj(hendblk($argc+1)); }" x ... r)]
+    [_ %residual-make-argc-dispatch-lambda]))
 
 (define-syntax make-case-lambda 
   (syntax-rules ()
@@ -2826,32 +2846,44 @@ default: /* inter-host call */
 
 ; simple errors
 
-(define (error who msg . args)
+(define (print-error-message prefix args ep)
+  (define (pr-where args ep)
+    (when (pair? args) 
+      (cond [(not (car args)) 
+             (write-string ": " ep)
+             (pr-msg (cdr args) ep)]
+            [(symbol? (car args)) 
+             (write-string " in " ep) (write (car args) ep) (write-string ": " ep)
+             (pr-msg (cdr args) ep)]
+            [else 
+             (write-string ": " ep)
+             (pr-msg args ep)]))) 
+  (define (pr-msg args ep)
+    (when (pair? args) 
+      (cond [(string? (car args))
+             (display (car args) ep)
+             (pr-rest (cdr args) ep)]
+            [else (pr-rest args ep)])))
+   (define (pr-rest args ep)
+     (when (pair? args)
+       (write-char #\space ep) (write (car args) ep)
+       (pr-rest (cdr args) ep)))
+   (cond [(or (string? prefix) (symbol? prefix)) 
+          (write-string prefix ep)]
+         [else (write-string "Error" ep)])
+   (pr-where args ep)
+   (newline ep))
+
+(define (error . args)
   (let ([ep (current-error-port)])
-    (write-string "\n" ep)
-    (if who
-        (begin
-          (write-string "Error in " ep)
-          (write who ep)
-          (write-string ": " ep))
-        (write-string "Error: " ep))
-    (display msg ep)
-    (for-each (lambda (arg) (write-char #\space ep) (write arg ep)) args)
-    (write-string ".\n" ep)
+    (newline ep)
+    (print-error-message "Error" args ep)
     (reset)))
 
-(define (assertion-violation who msg . args)
+(define (assertion-violation . args)
   (let ([ep (current-error-port)])
-    (write-string "\n" ep)
-    (if who
-        (begin
-          (write-string "Assertion violation in " ep)
-          (write who ep)
-          (write-string ": " ep))
-        (write-string "Assertion violation: " ep))
-    (display msg ep)
-    (for-each (lambda (arg) (write-char #\space ep) (write arg ep)) args)
-    (write-string ".\n" ep)
+    (newline ep)
+    (print-error-message "Assertion violation" args ep)
     (%prim! "{ assert(0); exit(1); $return void(0); }")))
 
 
@@ -3419,6 +3451,15 @@ default: /* inter-host call */
 
 (define (%fail-lambda . args)
   (error 'case-lambda "unexpected number of arguments" args))
+
+(define (%residual-make-argc-dispatch-lambda . l)
+  (%prim* "{ /* %residual-make-argc-dispatch-lambda */
+    obj l; int i, c = fixnum_from_$arg;
+    hreserve(hbsz(c+1), $live); /* $live live regs */
+    l = obj_from_$arg; /* gc-safe */
+    for (i = 0; i < c; ++i, l = cdr(l)) hp[i-c] = car(l);
+    hp -= c; *--hp = obj_from_objptr(appcases+3);
+    $return obj(hendblk(c+1)); }" (length l) l))
 
 (define (%residual-make-case-lambda . l)
   (%prim* "{ /* %residual-make-case-lambda */
