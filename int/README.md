@@ -4,7 +4,7 @@ This directory contains interpreters for #F compatibility libraries. Each interp
 
 ```
 $ sfc libs.sf ints.sf     # sfc produces 2 C files
-$ gcc libs.c ints.c       # gcc produces a.out
+$ gcc -lm libs.c ints.c   # gcc produces a.out (libs refers to math functions, so -lm may be needed)
 ```
 
 ## IntS, an Interpreter for LibS (Small) Library
