@@ -88,7 +88,7 @@ manner:
 
 ```
 $ sfc libs.sf myprog.sf     # sfc produces 2 C files
-$ gcc libs.c myprog.c       # gcc produces a.out
+$ gcc -lm libs.c myprog.c   # gcc produces a.out (libs refers to math functions, so -lm may be needed)
 ```
 
 To dress an existing pre-R^6RS Scheme source file as a #F program that
