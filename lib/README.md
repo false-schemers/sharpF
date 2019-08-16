@@ -4,7 +4,7 @@ This directory contains #F libraries for some subsets of Scheme. Each library is
 
 ```
 $ sfc libs.sf myprog.sf     # sfc produces 2 C files
-$ gcc libs.c myprog.c       # gcc produces a.out
+$ gcc -lm libs.c myprog.c   # gcc produces a.out (libs refers to math functions, so -lm may be needed)
 ```
 
 All libraries adhere to #F's minimalistic approach to error checking: run-time errors are checked with C asserts, so programs compiled in debug mode report them and exit; there is no error checking in release mode. If you need to debug your code that uses one of these libraries, you may use the corresponding interpreter with traditional error checking (interpreters are located in the `/int` subdirectory).
