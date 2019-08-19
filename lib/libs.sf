@@ -1216,6 +1216,7 @@ long fxflo(double f) {
 (%definition "/* characters */")
 (%definition "#define CHAR_ITAG 2")  
 (%definition "typedef int char_t;")
+(%definition "#define ischar(o) (isimm(o, CHAR_ITAG))")
 (%definition "#define is_char_obj(o) (isimm(o, CHAR_ITAG))")
 (%definition "#define is_char_char(i) ((void)(i), 1)")
 (%definition "#define is_char_bool(i) ((void)(i), 0)")
@@ -2208,9 +2209,10 @@ case 2: /* void continuation adapter */
 
 case 3: /* argc dispatcher */
     /* clo k arg... */
-    { obj* p = objptr_from_obj(r[0]); int bl = hblklen(p);
-    if (rc < bl) r[0] = hblkref(p, rc-1); /* matching slot */
-    else r[0] = hblkref(p, bl-1); /* catch-all slot */ 
+    { obj* p = objptr_from_obj(r[0]);
+    obj pv = p[1]; int vl = vectorlen(pv); assert(vl > 0);
+    if (rc-2 < vl-1) r[0] = vectorref(pv, rc-2); /* matching slot */
+    else r[0] = vectorref(pv, vl-1); /* catch-all slot */
     pc = objptr_from_obj(r[0])[0];
     goto jump; }
 
@@ -2252,15 +2254,21 @@ default: /* inter-host call */
     *--hp = obj_from_objptr(appcases+2);
     $return obj(hendblk(2)); }" k))
 
-(define-syntax make-argc-dispatch-lambda 
+(define-inline (make-argc-dispatch-lambda pv)
+  (%prim* "{ /* make-argc-dispatch-lambda */
+    hreserve(hbsz(2), $live); /* $live live regs */
+    *--hp = obj_from_$arg;
+    *--hp = obj_from_objptr(appcases+3);
+    $return obj(hendblk(2)); }" pv))
+
+(define-syntax argc-dispatch-lambda
   (syntax-rules ()
-    [(_ x ... r) ; lambda0 lambda1 lambda2 ... lambda
-     (%prim*/rev "{ /* make-argc-dispatch-lambda */
-    hreserve(hbsz($argc+1), $live); /* $live live regs */
-    ${*--hp = obj_from_$arg;
-    $}*--hp = obj_from_objptr(appcases+3);
-    $return obj(hendblk($argc+1)); }" x ... r)]
-    [_ %residual-make-argc-dispatch-lambda]))
+    [(_ x ...) (make-argc-dispatch-lambda (vector x ...))]))
+
+(define-inline (argc-dispatch-lambda? x)
+  (%prim "{ /* argc-dispatch-lambda? */
+    obj x = obj_from_$arg;
+    $return bool(isprocedure(x) && *procedureref(x, 0) == obj_from_objptr(appcases+3)); }" x))
 
 (define-syntax make-case-lambda 
   (syntax-rules ()
@@ -2368,7 +2376,9 @@ default: /* inter-host call */
   pt = (cxtype_t*)objptr_from_obj(o)[-1];
   if (pt == IPORT_FILE_NTAG || pt == IPORT_STRING_NTAG) return (cxtype_iport_t*)pt;
   else return NULL; }")
+(%definition "#define isiport(o) (iportvt(o) != NULL)")
 (%definition "#define iportdata(o) ((void*)(*objptr_from_obj(o)))")
+
 
 (define-inline (close-input-port p)
   (%prim?! "{ /* close-input-port */
@@ -2387,7 +2397,7 @@ default: /* inter-host call */
 (%definition "#define mkiport_file(l, fp) hpushptr(fp, IPORT_FILE_NTAG, l)")
 
 (define-inline (input-port? x)
-  (%prim "bool(iportvt(obj_from_$arg) != NULL)" x))
+  (%prim "bool(isiport(obj_from_$arg))" x))
 
 (define *current-input-port* (%prim* "obj(mkiport_file($live, stdin))"))
 (define-inline (current-input-port) *current-input-port*)
@@ -3451,15 +3461,6 @@ default: /* inter-host call */
 
 (define (%fail-lambda . args)
   (error 'case-lambda "unexpected number of arguments" args))
-
-(define (%residual-make-argc-dispatch-lambda . l)
-  (%prim* "{ /* %residual-make-argc-dispatch-lambda */
-    obj l; int i, c = fixnum_from_$arg;
-    hreserve(hbsz(c+1), $live); /* $live live regs */
-    l = obj_from_$arg; /* gc-safe */
-    for (i = 0; i < c; ++i, l = cdr(l)) hp[i-c] = car(l);
-    hp -= c; *--hp = obj_from_objptr(appcases+3);
-    $return obj(hendblk(c+1)); }" (length l) l))
 
 (define (%residual-make-case-lambda . l)
   (%prim* "{ /* %residual-make-case-lambda */
