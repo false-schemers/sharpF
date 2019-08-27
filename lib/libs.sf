@@ -1538,34 +1538,6 @@ long fxflo(double f) {
       [(fx=? i n)]
       (vector-set! v i x))))
 
-(define (vector-sort! less? v) 
-  (let qsort ([li 0] [ri (fx- (vector-length v) 1)])
-    (if (fx<? li ri)
-        (let ([p (vector-ref v ri)]) 
-          (let bumpij ([i (fx- li 1)] [j ri])
-            (let bumpi ([i i])
-              (let ([i (fx+ i 1)]) 
-                (if (and (fx<? i ri) (less? (vector-ref v i) p)) 
-                    (bumpi i)
-                    (let bumpj ([j j]) 
-                      (let ([j (fx- j 1)]) 
-                        (if (and (fx>? j li) (less? p (vector-ref v j))) 
-                            (bumpj j) 
-                            (let ([t (vector-ref v i)]) 
-                              (vector-set! v i (vector-ref v j)) 
-                              (vector-set! v j t) 
-                              (if (fx<? i j) 
-                                  (bumpij i j) 
-                                  (begin 
-                                    (vector-set! v j (vector-ref v i)) 
-                                    (vector-set! v i (vector-ref v ri)) 
-                                    (vector-set! v ri t) 
-                                    (let ([mi i]) 
-                                      (if (fx<? (fx- mi li) (fx- ri mi)) 
-                                          (begin (qsort li (fx- mi 1)) 
-                                                 (qsort (fx+ mi 1) ri)) 
-                                          (begin (qsort (fx+ mi 1) ri) 
-                                                 (qsort li (fx- mi 1)))))))))))))))))))
 
 ; boxes
 
@@ -1809,120 +1781,6 @@ long fxflo(double f) {
          (if (null? l) (void) (begin (f (car l)) (loop (cdr l))))))]
     [(_ fun lst . l*) (%residual-for-each fun lst . l*)]
     [_ %residual-for-each]))
-
-(define-syntax for-all
-  (syntax-rules ()
-    [(_ fun lst)
-     (let ([f fun] [l lst]) 
-       (or (null? l) 
-           (let loop ([l l]) 
-             (if (null? (cdr l))
-                 (f (car l))
-                 (and (f (car l)) (loop (cdr l)))))))]
-    [(_ fun lst . l*) (%residual-for-all fun lst . l*)]
-    [_ %residual-for-all]))
-
-(define-syntax exists
-  (syntax-rules ()
-    [(_ fun lst)
-     (let ([f fun] [l lst]) 
-       (and (not (null? l)) 
-            (let loop ([l l]) 
-              (if (null? (cdr l))
-                  (f (car l))
-                  (or (f (car l)) (loop (cdr l)))))))]
-    [(_ fun lst . l*) (%residual-exists fun lst . l*)]
-    [_ %residual-exists]))
-
-(define-syntax fold-left
-  (syntax-rules ()
-    [(_ fun nil lst)
-     (let ([f fun]) 
-       (let loop ([n nil] [l lst]) 
-         (if (null? l) n (loop (f n (car l)) (cdr l)))))]
-    [(_ fun nil lst . l*) (%residual-fold-left fun nil lst . l*)]
-    [_ %residual-fold-left]))
-
-(define-syntax fold-right
-  (syntax-rules ()
-    [(_ fun nil lst)
-     (let ([f fun] [n nil]) 
-       (let loop ([l lst]) 
-         (if (null? l) n (f (car l) (loop (cdr l))))))]
-    [(_ fun nil lst . l*) (%residual-fold-right fun nil lst . l*)]
-    [_ %residual-fold-right]))
-
-(define-inline (find f l)
-  (let loop ([l l])
-    (if (null? l) 
-        #f 
-        (or (f (car l)) (loop (cdr l)))))) 
-
-(define (filter f l)
-  (let loop ([l l])
-    (if (null? l) '()
-      (let ([a (car l)]) 
-        (if (f a)
-            (cons a (loop (cdr l)))
-            (loop (cdr l))))))) 
-
-(define (partition f l)
-  (let loop ([l l] [y '()] [n '()])
-    (if (null? l) 
-      (%residual-values (reverse! y) (reverse! n))
-      (let ([a (car l)] [d (cdr l)]) 
-        (if (f a)
-            (loop d (cons a y) n)
-            (loop d y (cons a n)))))))
-
-(define (remp f l)
-  (let loop ([l l])
-    (if (null? l) '()
-      (let ([a (car l)]) 
-        (if (f a)
-            (loop (cdr l))
-            (cons a (loop (cdr l)))))))) 
-
-(define (memp f l)
-  (let loop ([l l])
-    (if (null? l) 
-        #f
-        (if (f (car l)) l (loop (cdr l)))))) 
-
-(define (assp f l)
-  (let loop ([l l])
-    (if (null? l) 
-        #f
-        (if (f (caar l)) (car l) (loop (cdr l))))))
-
-(define (list-merge! less? l1 l2) 
-  (cond [(null? l1) l2]
-        [(null? l2) l1]
-        [(less? (car l2) (car l1))
-         (set-cdr! l2 (list-merge! less? l1 (cdr l2))) l2]
-        [else (set-cdr! l1 (list-merge! less? (cdr l1) l2)) l1]))
-
-(define (list-split! l)
-  (cond [(null? l) l]
-        [else (let loop ([hd l] [tl (cdr l)])
-                (if (or (null? tl) (null? (cdr tl)))
-                    (let ([x (cdr hd)]) (set-cdr! hd '()) x)
-                    (loop (cdr hd) (cddr tl))))]))
-
-(define (list-sort! less? l) 
-  (cond [(null? l) '()]
-        [(null? (cdr l)) l]
-        [else (let ([l2 (list-split! l)])
-                (list-merge! less? 
-                  (list-sort! less? l) 
-                  (list-sort! less? l2)))]))
-
-(define (list-sort less? l) 
-  (list-sort! less? (list-copy l)))
-
-(define (list-merge less? l1 l2)
-  (list-merge! less? (list-copy l1) (list-copy l2)))
-        
 
 
 ; symbols
@@ -2565,7 +2423,13 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_ n) (display-input-port n (current-output-port))]
     [(_ n p) (%prim! "void(fprintf(oportdata(obj_from_$arg), \"#<%s>\", ((cxtype_iport_t*)cxm_cknull(iportvt(obj_from_$arg), \"iportvt\"))->tname))" p n)]
-    [_ %residual-display-procedure])) 
+    [_ %residual-display-input-port])) 
+
+(define-syntax display-output-port
+  (syntax-rules ()
+    [(_ n) (display-input-port n (current-output-port))]
+    [(_ n p) (write-string "#<oport>" p)]
+    [_ %residual-display-output-port])) 
 
 
 ; equivalence and case
@@ -2699,7 +2563,7 @@ default: /* inter-host call */
 
 
 
-; equivalence-based member, assoc, remove
+; equivalence-based member, assoc
 
 (define-inline (memq x l)
   (%prim? "{ /* memq */
@@ -2724,22 +2588,6 @@ default: /* inter-host call */
 
 (define-inline (assoc x l)
   (%prim? "obj(isassoc(obj_from_$arg, obj_from_$arg))" x l)) 
-
-(define-integrable (remq x l)
-  (if (null? l) '()
-    (let ([a (car l)] [d (cdr l)])
-      (if (eq? x a) (remq x d) (cons a (remq x d))))))
-
-(define-integrable (remv x l)
-  (if (null? l) '()
-    (let ([a (car l)] [d (cdr l)])
-      (if (eqv? x a) (remv x d) (cons a (remv x d))))))
-
-(define-integrable (remove x l)
-  (if (null? l) '()
-    (let ([a (car l)] [d (cdr l)])
-      (if (equal? x a) (remove x d) (cons a (remove x d))))))
-
 
 
 ; quasiquote
@@ -2820,7 +2668,7 @@ default: /* inter-host call */
       (cond
         [(eof-object? x) (write-string "#<eof>" p)]
         [(input-port? x) (display-input-port x p)]
-        [(output-port? x) (write-string "#<oport>" p)]
+        [(output-port? x) (display-output-port x p)]
         [(symbol? x) (write-string (symbol->string x) p)]
         [(pair? x) (sub-write-pair x d? p)]
         [(fixnum? x) (display-fixnum x p)]
@@ -3393,40 +3241,6 @@ default: /* inter-host call */
         (if (pair? (car l*))
             (begin (apply p (map car l*)) (loop (map cdr l*)))))))
 
-(define (%residual-for-all f l . l*)
-  (if (null? l*) 
-      (for-all f l)
-      (let loop ([l* (cons l l*)])
-        (cond [(null? (car l*)) #t]
-              [(null? (cdar l*)) (apply f (map car l*))]
-              [else (and (apply f (map car l*)) (loop (map cdr l*)))])))) 
-            
-(define (%residual-exists f l . l*)
-  (if (null? l*) 
-      (exists f l)
-      (let loop ([l* (cons l l*)])
-        (cond [(null? (car l*)) #f]
-              [(null? (cdar l*)) (apply f (map car l*))]
-              [else (or (apply f (map car l*)) (loop (map cdr l*)))]))))
-
-(define (%residual-fold-left f n l . l*)               
-  (if (null? l*) 
-      (fold-left f n l)
-      (let loop ([n n] [l* (cons l l*)])
-        (if (null? (car l*)) 
-            n
-            (loop (apply f n (map car l*)) (map cdr l*))))))
-
-(define (%residual-fold-right f n l . l*)               
-  (if (null? l*) 
-      (fold-right f n l)
-      (let loop ([l* (cons l l*)])
-        (if (null? (car l*)) 
-            n
-            (apply f 
-              (let lp ([ll l*]) 
-                (if (null? ll) (loop (map cdr l*)) (cons (caar ll) (lp (cdr ll))))))))))
-
 (define-syntax append-reducer
   (syntax-rules ()
     [(_ f s)
@@ -3478,6 +3292,8 @@ default: /* inter-host call */
 (define %residual-display-fixnum (unary-binary-adaptor display-fixnum))
 (define %residual-display-flonum (unary-binary-adaptor display-flonum))
 (define %residual-display-procedure (unary-binary-adaptor display-procedure))
+(define %residual-display-input-port (unary-binary-adaptor display-input-port))
+(define %residual-display-output-port (unary-binary-adaptor display-output-port))
 
 (define %residual-write-char (unary-binary-adaptor write-char))
 (define %residual-write-string (unary-binary-adaptor write-string))
