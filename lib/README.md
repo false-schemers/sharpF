@@ -37,7 +37,6 @@ LibXXS supports the following additional functions:
 
   *  many fixnum (`fx`) - specific operations
   *  `letrec*`, `let-values`, `let*-values`, `rec`, `when`, `unless` forms
-  *  `fold-left`, `fold-right` forms implemented as macros
   *  `error` macro (not based on exceptions)
   *  `exit`, `abort`, and `reset`
 
@@ -49,7 +48,6 @@ LibXS (see [libxs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/ma
   *  support for flonums, generic math is mixed fixnum/flonum
   *  many flonum (`fl`) - specific operations
   *  `sqrt` and trigonometry functions are available in (`fl`) form (e.g. `flsqrt`)
-  *  `andmap`, `ormap` forms implemented as macros
 
 
 ## LibS (Small) Library
