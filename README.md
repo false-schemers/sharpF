@@ -122,9 +122,6 @@ defined in pre-R^5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
 
   *  many fixnum (`fx`) and flonum (`fl`) - specific operations
   *  `letrec*`, `rec`, `receive`, `let-values`, `let*-values`, `case-lambda` forms
-  *  `reverse!`, `for-all`, `exists`, `fold-left`, `fold-right`
-  *  `filter`, `partition`, `remq`, `remv`, `remove`, `remp`, `memp`, `assp`
-  *  `list-sort!`, `list-sort`, `list-merge`, `vector-sort!`
   *  operations on boxes: `box?`, `box`, `unbox`, `set-box!`
   *  `error`, `assertion-violation` (not based on exceptions)
   *  `file-exists?`, `delete-file`, `rename-file`, `open-input-string`
