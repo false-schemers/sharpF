@@ -28,3 +28,11 @@ Here is the list of IntS additions and things that behave differently between In
   *  `load` is a procedure that dynamically loads and interprets Scheme code via `eval` 
   *  command-line file arguments are dynamically loaded 
   *  there is a traditional REPL (read-eval-print loop)
+
+
+## IntM, an Interpreter for LibM (Medium) Library
+
+IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intm.sf)) is an extended version of IntS, based on LibM. It has the following additional functionality:
+
+  *  support for bytevectors, with basic set of operations
+  
