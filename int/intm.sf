@@ -1,48 +1,49 @@
-;;; #F Scheme Interpreter (LibM) -- esl
-;;;
-; based on:
-; 1) SCHEME -- A Scheme interpreter written by Marc Feeley.
-; 2) Al Petrofsky's macroexpander for scheme v1.65, which is:
-; Copyright 2002-2004,2006,2007 Al Petrofsky <alexpander@petrofsky.org>
-; LICENSING (3-clause BSD or GNU GPL 2 and up)
-; 
-; Redistribution and use in source and binary forms, with or without
-; modification, are permitted provided that the following conditions
-; are met:
-; 
-;   Redistributions of source code must retain the above copyright
-;     notice, this list of conditions and the following disclaimer.
-; 
-;   Redistributions in binary form must reproduce the above copyright
-;     notice, this list of conditions and the following disclaimer in
-;     the documentation and/or other materials provided with the
-;     distribution.
-; 
-;   Neither the name of the author nor the names of its contributors
-;     may be used to endorse or promote products derived from this
-;     software without specific prior written permission.
-; 
-; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-; "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-; LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-; A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-; HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-; INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-; BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
-; OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
-; AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-; LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
-; WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-; POSSIBILITY OF SUCH DAMAGE.
+
+;  #F Scheme Interpreter (LibM) -- esl
+
+
+;  parts of the code are derived from the following sources:
+
+;  1) SCHEME -- A Scheme interpreter written by Marc Feeley.
+;  2) alexpander.scm v1.65 2007/11/05 02:50:34 (see license below)
+ 
+;  Copyright 2002-2004,2006,2007 Al Petrofsky <alexpander@petrofsky.org>
 ;
-; Alternatively, you may redistribute, use, or modify this software
-; according to the terms of the GNU General Public License as
-; published by the Free Software Foundation (fsf.org); either version
-; 2, or (at your option) any later version.
+;  Redistribution and use in source and binary forms, with or without
+;  modification, are permitted provided that the following conditions
+;  are met:
+;  
+;    Redistributions of source code must retain the above copyright
+;      notice, this list of conditions and the following disclaimer.
+;  
+;    Redistributions in binary form must reproduce the above copyright
+;      notice, this list of conditions and the following disclaimer in
+;      the documentation and/or other materials provided with the
+;      distribution.
+;  
+;    Neither the name of the author nor the names of its contributors
+;      may be used to endorse or promote products derived from this
+;      software without specific prior written permission.
+;  
+;  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+;  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+;  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+;  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+;  HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+;  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+;  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+;  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+;  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+;  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+;  WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;  POSSIBILITY OF SUCH DAMAGE.
+
 
 (load "libm.sf")
 
-;;; assorted utils
+;------------------------------------------------------------------------------
+
+; assorted utils
 
 (define-syntax andmap
   (letrec-syntax 
@@ -92,17 +93,20 @@
         (and (pred? x (car r))
           (pairwise-andmap pred? r))))))
 
-;;; errors
 
-;; expansion-time 
+;------------------------------------------------------------------------------
+
+; errors
+
+; expansion-time 
 (define-syntax x-error
   (syntax-rules () [(_ r a ...) (error 'macroexpander r a ...)]))
 
-;; compile-time 
+; compile-time 
 (define-syntax c-error
   (syntax-rules () [(_ r a ...) (error 'compiler r a ...)]))
 
-;; run-time 
+; run-time 
 (define (r-error msg . args)
   (let loop ([args args] [a* '()])
     (cond [(null? args) (apply error #f msg (reverse! a*))]
@@ -116,7 +120,7 @@
 
 ;------------------------------------------------------------------------------
 
-; macroexpander TODO: treat syntax-error as primitive, add #&(char? x) test, allow vectors to be self-evaluating
+; macroexpander 
 
 (define (sid? sexp) (or (symbol? sexp) (renamed-sid? sexp)))
 (define (renamed-sid? sexp) (and (vector? sexp) (not (= (vector-length sexp) 1)))) ;** (len is always 3)
@@ -544,7 +548,7 @@
     (for-each check formals) 
     (make-expander (cons 'syntax-lambda (cdr synlambda)) env))) ;*** fixed in 153s
   
-;;++ : pattern matcher extension
+; ++ : pattern matcher extension
 
 (define (sbox->sexp-list b)  (cdr (unbox b)))
 
@@ -963,8 +967,9 @@
       (set-car! *current-macro-store* store) (set-cdr! *current-macro-store* loc-n) outputs)))
 
 
+;------------------------------------------------------------------------------
 
-;;; procedure hacks and argument checking
+; procedure hacks and argument checking
 
 (define-inline (%procedure-length p)
   (%prim "fixnum(procedurelen(obj_from_$arg))" p))
@@ -1715,8 +1720,9 @@
       (and (fx<=? cmin argc) (fx<=? argc cmax)))))  
 
 
-;;; wrappers for argc checking
+;------------------------------------------------------------------------------
 
+; wrappers for argc checking
 
 (define-syntax scheme-call
   (syntax-rules ()
@@ -1737,7 +1743,9 @@
      (make-annotated-procedure (lambda formals . body) (rest-argc->annotation n))]))
 
 
-;;; compiler (used on macroexpander output)
+;------------------------------------------------------------------------------
+
+; compiler (used on macroexpander output)
 
 (define (variable x)
   (if (not (symbol? x)) (c-error "identifier expected" x)))
@@ -1833,7 +1841,10 @@
           [else (gen-combination (comp (car expr)) (map comp (cdr expr)))]))
   (comp expr))     
 
-;; code generator
+
+;------------------------------------------------------------------------------
+
+; code generator
 
 ; global value store locations are kept in linked alist, value is stored in the cdr
 (define-inline (value-store-location-ref i) (cdr i))
@@ -2108,8 +2119,9 @@
     (scheme-apply argc (oper rte) (evaluate args rte))))
 
 
+;------------------------------------------------------------------------------
 
-;;; evaluator
+; evaluator
 
 (define (scheme-compile-run expr)
   (let ([code (scheme-compile expr '())]) ;no locals on top level
@@ -2128,7 +2140,9 @@
   (scheme-expand-compile-run expr (if (null? ?environment) *current-environment* (car ?environment))))
 
 
-;;;  interpreter global value store and initialization
+;------------------------------------------------------------------------------
+
+;  interpreter global value store and initialization
 
 (define *current-value-store* '())
 
@@ -2264,14 +2278,17 @@
 (def-arg-checker (* obj oport ?)         (mark-argcheck ARGCHECK_OBJ_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 (def-arg-checker (* char oport ?)        (mark-argcheck ARGCHECK_CHAR_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 
-;;; R5RS
 
-;; 6.1  Equivalence predicates
+;------------------------------------------------------------------------------
+
+; R5RS
+
+; 6.1  Equivalence predicates
 (def-global eqv? (mark-argcheck EQV_OBJ_OBJ eqv?))
 (def-global eq? (mark-argcheck EQ_OBJ_OBJ eq?))
 (def-global (equal? obj obj))
 
-;; 6.2.5  Numerical operations
+; 6.2.5  Numerical operations
 (def-global (number? obj))
 (def-global (complex? obj)) 
 (def-global (real? obj))
@@ -2327,15 +2344,15 @@
 (def-global (exact->inexact z)) ; r7rs name: exact
 (def-global (inexact->exact z)) ; r7rs name: inexact
 
-;; 6.2.6  Numerical input and output
+; 6.2.6  Numerical input and output
 (def-global (number->string z radix ?))
 (def-global (string->number string radix ?))
 
-;; 6.3.1  Booleans
+; 6.3.1  Booleans
 (def-global not (mark-argcheck NOT_OBJ not))
 (def-global (boolean? obj))
 
-;; 6.3.2  Pairs and lists
+; 6.3.2  Pairs and lists
 (def-global (pair? obj))
 (def-global (cons obj obj))
 (def-global car (mark-argcheck CAR_PAIR car))
@@ -2388,12 +2405,12 @@
 (def-global (assv obj alist))
 (def-global (assoc obj alist))
 
-;; 6.3.3  Symbols
+; 6.3.3  Symbols
 (def-global (symbol? obj))
 (def-global (symbol->string symbol))
 (def-global (string->symbol string))
 
-;; 6.3.4  Characters
+; 6.3.4  Characters
 (def-global (char? obj))
 (def-global (char=? char char))
 (def-global (char<? char char))
@@ -2415,7 +2432,7 @@
 (def-global (char-upcase char))
 (def-global (char-downcase char))
 
-;; 6.3.5  Strings
+; 6.3.5  Strings
 (def-global (string? obj))
 (def-global (make-string k char ?))
 (def-global (string char ...))
@@ -2439,7 +2456,7 @@
 (def-global (string-copy string))
 (def-global (string-fill! string char))
 
-;; 6.3.6  Vectors
+; 6.3.6  Vectors
 (def-global (vector? obj))
 (def-global (make-vector k obj ?))
 (def-global (vector obj ...))
@@ -2450,7 +2467,7 @@
 (def-global (list->vector list))
 (def-global (vector-fill! vector obj))
 
-;; 6.4  Control features
+; 6.4  Control features
 (define *values-tag* (list 'values))
 ;(def-global *values-tag* *values-tag*)
 (def-global (procedure? obj))
@@ -2475,7 +2492,7 @@
          (scheme-call 1 consumer v)))))
 (def-global (dynamic-wind thunk thunk thunk))
 
-;; 6.5  Eval
+; 6.5  Eval
 ;(eval expression environment-specifier)
 (def-global (eval obj environment ?)
   (argc-dispatch-lambda #f 
@@ -2486,8 +2503,8 @@
 (def-global (null-environment n) (lambda (version) *current-environment*))
 (def-global (interaction-environment) (lambda () *current-environment*))
 
-;; 6.6  Input and output
-;; 6.6.1  Ports
+; 6.6  Input and output
+; 6.6.1  Ports
 (def-global (call-with-input-file string proc1ip))
 (def-global (call-with-output-file string proc1op))
 (def-global (input-port? obj))
@@ -2501,20 +2518,20 @@
 (def-global (close-input-port iport))
 (def-global (close-output-port oport))
 
-;; 6.6.2  Input
+; 6.6.2  Input
 (def-global (read iport ?))
 (def-global (read-char iport ?))
 (def-global (peek-char iport ?))
 (def-global (eof-object? obj))
 (def-global (char-ready? iport ?))
 
-;; 6.6.3  Output
+; 6.6.3  Output
 (def-global (write obj oport ?))
 (def-global (display obj oport ?))
 (def-global (write-char char oport ?))
 (def-global (newline oport ?))
 
-;; 6.6.4  System interface
+; 6.6.4  System interface
 (def-global (load string)                          ; filename
   (lambda (fn)
     (call-with-input-file fn
@@ -2529,14 +2546,16 @@
 ;(transcript-off)
 
 
-;;; R7RS Extras
+;------------------------------------------------------------------------------
 
-;; 4.2.9. Case-lambda
+; selected R7RS extras
+
+; 4.2.9. Case-lambda
 (def-global (make-case-lambda obj ...) ; macro is in init
   (lambda clargs
      (make-annotated-procedure (apply make-case-lambda clargs) (rest-argc->annotation 1))))
 
-;; 6.9  Bytevectors
+; 6.9  Bytevectors
 (def-global (bytevector? obj))
 (def-global (make-bytevector k u8 ?))
 (def-global (bytevector u8 ...))
@@ -2548,14 +2567,14 @@
 (def-global (bytevector->list u8vector))
 (def-global (list->bytevector u8list))
 
-;; 6.11. Exceptions
+; 6.11. Exceptions
 (def-global (error string obj ...))
 
-;; 6.12. Environments and evaluation
+; 6.12. Environments and evaluation
 (def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
 
 
-;; 6.14. System interface 
+; 6.14. System interface 
 (def-global (file-exists? string))    ; filename
 (def-global (delete-file string))     ; filename
 (def-global (command-line))
@@ -2566,11 +2585,14 @@
 (def-global (features)
   (lambda () '(sharpf sharpf-interpreter sharpf-ints)))
 
-;;; #F Extras
+
+;------------------------------------------------------------------------------
+
+; #F extras
 
 (def-global (byte? obj))
 
-;; misc
+; misc
 (def-global (void))
 (def-global (reverse! list)) ; used in init code
 (def-global (exit n ?))
@@ -2591,7 +2613,9 @@
     (lambda (x environment) (cons *values-tag* (scheme-expand-to-list x environment)))))
 
 
-;;; Code to feed the interpreter at initialization time
+;------------------------------------------------------------------------------
+
+; Code to feed the interpreter at initialization time
 
 (%localdef #<<EOS
 /* initialization code */
@@ -2850,7 +2874,9 @@ EOS
       (scheme-eval x) (loop (read p)))))
 
 
-;;; environments
+;------------------------------------------------------------------------------
+
+; post-initialization environments
 
 (define *initial-value-environment*
   (let loop ([l *current-value-store*] [e '()])
@@ -2866,7 +2892,9 @@ EOS
           [else (loop (cdr l) e)])))
 
 
-;;; REPL
+;------------------------------------------------------------------------------
+
+; REPL and main
 
 (define (fprintf* port fstr olst)
   (let loop ([flst (string->list fstr)] [olst olst])
@@ -2932,7 +2960,7 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "IntM Scheme Interpreter 1.0~%")
+    (printf "IntM Scheme Interpreter 1.1~%")
     (set! *greeting* #f)))
 
 (define (ints-repl port)
@@ -2949,7 +2977,7 @@ EOS
 
 (define (main argv)
   (define (about)
-    (printf "intm 1.0~%")
+    (printf "intm 1.1~%")
     (printf "Usage: ints [-qx] file ...~%")
     (printf "-q  suppress greeting~%")
     (printf "-x  exit after loading files on the command line~%"))

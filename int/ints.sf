@@ -1,25 +1,49 @@
-;;; #F Scheme Interpreter (LibS) -- esl
-;;;
-;;; based on:
-;;; 1) SCHEME -- A Scheme interpreter written by Marc Feeley.
-;;; 2) Al Petrofsky's macroexpander for scheme; see alexp's license below
-;;; This version is derived from alexpander.scm v1.58 2004/10/29 00:41:35,
-;;; available on the net at <http://petrofsky.org/src/alexpander.scm>.
-;;; See the original for documentation and extensive comments.
-;;; Copyright 2002-2004 Al Petrofsky <alexpander@petrofsky.org>
-;;; You may redistribute and/or modify this software under the terms of
-;;; the GNU General Public License as published by the Free Software
-;;; Foundation (fsf.org); either version 2, or (at your option) any
-;;; later version.
-;;; You should have received a copy of the GNU General Public License
-;;; along with this program; if not, see
-;;; http://www.fsf.org/licenses/gpl.txt, or write to the Free Software
-;;; Foundation, 59 Temple Pl Ste 330, Boston MA 02111, U.S.A..
-;;; Feel free to ask me for different licensing terms. 
+
+;  #F Scheme Interpreter (LibS) -- esl
+
+
+;  parts of the code are derived from the following sources:
+
+;  1) SCHEME -- A Scheme interpreter written by Marc Feeley.
+;  2) alexpander.scm v1.65 2007/11/05 02:50:34 (see license below)
+ 
+;  Copyright 2002-2004,2006,2007 Al Petrofsky <alexpander@petrofsky.org>
+;
+;  Redistribution and use in source and binary forms, with or without
+;  modification, are permitted provided that the following conditions
+;  are met:
+;  
+;    Redistributions of source code must retain the above copyright
+;      notice, this list of conditions and the following disclaimer.
+;  
+;    Redistributions in binary form must reproduce the above copyright
+;      notice, this list of conditions and the following disclaimer in
+;      the documentation and/or other materials provided with the
+;      distribution.
+;  
+;    Neither the name of the author nor the names of its contributors
+;      may be used to endorse or promote products derived from this
+;      software without specific prior written permission.
+;  
+;  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+;  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+;  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+;  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+;  HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+;  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+;  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+;  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+;  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+;  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+;  WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;  POSSIBILITY OF SUCH DAMAGE.
+
 
 (load "libs.sf")
 
-;;; assorted utils
+;------------------------------------------------------------------------------
+
+; assorted utils
 
 (define-syntax andmap
   (letrec-syntax 
@@ -69,17 +93,19 @@
         (and (pred? x (car r))
           (pairwise-andmap pred? r))))))
 
-;;; errors
+;------------------------------------------------------------------------------
 
-;; expansion-time 
+; errors
+
+; expansion-time 
 (define-syntax x-error
   (syntax-rules () [(_ r a ...) (error 'macroexpander r a ...)]))
 
-;; compile-time 
+; compile-time 
 (define-syntax c-error
   (syntax-rules () [(_ r a ...) (error 'compiler r a ...)]))
 
-;; run-time 
+; run-time 
 (define (r-error msg . args)
   (let loop ([args args] [a* '()])
     (cond [(null? args) (apply error #f msg (reverse! a*))]
@@ -91,25 +117,20 @@
           [else (loop (cdr args) (cons (car args) a*))])))
 
 
-;;; macroexpander
+;------------------------------------------------------------------------------
+
+; macroexpander 
 
 (define (sid? sexp) (or (symbol? sexp) (renamed-sid? sexp)))
-(define (renamed-sid? sexp) (and (vector? sexp) (< 1 (vector-length sexp))))
+(define (renamed-sid? sexp) (and (vector? sexp) (not (= (vector-length sexp) 1)))) ;** (len is always 3)
 (define (svector? sexp) (and (vector? sexp) (= 1 (vector-length sexp))))
 (define (svector->list sexp) (vector-ref sexp 0))
 (define (list->svector l) (vector l))
 
-(define (make-sid name renamed-id location)
-  (if (eq? name location)
-      (vector name renamed-id)
-      (vector name renamed-id location)))
-
+(define (make-sid name renamed-id location) (vector name renamed-id location)) ;**
 (define (sid-name sid) (if (symbol? sid) sid (vector-ref sid 0)))
 (define (sid-id sid) (if (symbol? sid) sid (vector-ref sid 1)))
-(define (sid-location sid)
-  (if (symbol? sid)
-      sid
-      (vector-ref sid (if (= 2 (vector-length sid)) 0 2))))
+(define (sid-location sid) (if (symbol? sid) sid (vector-ref sid 2))) ;**
 
 (define (list1? x) (and (pair? x) (null? (cdr x))))
 (define (list2? x) (and (pair? x) (list1? (cdr x))))
@@ -155,11 +176,13 @@
 
 (define (acons key val alist) (cons (cons key val) alist))
 
-(define empty-env '())
-(define empty-store '())
-
 (define (lookup-sid sid env)
-  (cond [(assv (sid-id sid) env) => cdr] [else (sid-location sid)]))
+  (define id (sid-id sid))
+  (let loop ([env env])
+    (cond [(null? env) (sid-location sid)]
+          [(procedure? env) (if (symbol? sid) (env sid) (sid-location sid))] ;++ global mapping support
+          [(eqv? (caar env) id) (cdar env)]
+          [else (loop (cdr env))])))
 
 (define (lookup-location location store)
   (cond [(assv location store) => cdr]
@@ -176,6 +199,7 @@
 (define (extend-env env id location) (acons id location env))
 (define (extend-store store loc val) (acons loc val store))
 
+#;(define substitute-in-store extend-store) ;** preserve all store history verbatim
 (define (substitute-in-store store loc val)
   (let ([store
          (if (assv loc store)
@@ -209,6 +233,9 @@
 (define (make-begin outputs)
   (if (list1? outputs) (car outputs) (cons 'begin outputs)))
 
+(define (make-letrec bindings expr)
+  (if (null? bindings) expr (list 'letrec bindings expr)))
+
 (define (expand-lambda formals expr id-n env store loc-n)
   (define (flatten-dotted x)
     (if (pair? x) (cons (car x) (flatten-dotted (cdr x))) (list x)))
@@ -237,6 +264,15 @@
                    [vars (if dotted? (dot-flattened vars) vars)])
               (list vars (expand-expr expr id-n env store loc-n))))))))
 
+(define (expand-letcc formal expr id-n env store loc-n)
+  (if (sid? formal)
+      (let* ([var (intloc->var loc-n formal)]
+             [env (extend-env env (sid-id formal) loc-n)]
+             [store (extend-store store loc-n var)]
+             [loc-n (+ 1 loc-n)]) ;*** fixed in 153s
+        (list var (expand-expr expr id-n env store loc-n)))
+      (x-error "non-identifier: " formal " used as letcc formal")))
+
 (define (check-syntax-bindings bindings)
   (or (list? bindings)
       (x-error "non-list syntax bindings list: " bindings))
@@ -264,6 +300,7 @@
                 (loop store (cdr vals) (cdr bs)))
               (k store loc-n))))))
 
+;++ support for syntax-lambda
 (define (apply-expander syntax sexp id-n env store loc-n lsd? ek sk dk bk)
   (case (sid-name (caar syntax))
     [(syntax-rules)
@@ -297,10 +334,11 @@
   (define (get-ek sexp) (get-k ek sexp "expression"))
   (define (get-sk sexp) (get-k sk sexp "syntax"))
   (define (get-dk sexp) (get-k dk sexp "definition"))
+  (define (get-bk sexp) (get-k dk sexp "begin"))
   (define (expand-subexpr sexp)
     (expand-expr sexp id-n env store loc-n))
-  (define (expand-subexpr-top sexp) ;++ : expand converted constants in empty env
-    (expand-expr sexp id-n empty-env store loc-n))
+  (define (expand-subexpr-root sexp) ;++ : expand converted constants in root env
+    (expand-expr sexp id-n root-environment store loc-n))
   (define (handle-syntax-use syntax head store loc-n)
     (let* ([tail (cdr sexp)] [sexp (cons head tail)])
       (if (expander? syntax)
@@ -340,17 +378,16 @@
                (let ([syn (compile-syntax-lambda sexp env)])
                  ((get-sk sexp) syn sexp store loc-n))]
               [(begin)
-               (cond
-                 [bk (bk sexp id-n env store loc-n)]
-                 [(null? tail)
-                  (x-error "empty begin expression: " sexp)]
-                 [else (make-begin (map expand-subexpr tail))])]
+               (or ek (get-bk sexp)) ;** as in v1.65
+               (cond [bk (bk sexp id-n env store loc-n)]
+                     [(null? tail) (x-error "empty begin expression: " sexp)]
+                     [else (ek (make-begin (map expand-subexpr tail)))])] ;** as in v1.65
               [(define define-syntax)
                (or (and (= 2 len) (sid? (car tail)))
                    (and (= 1 len) (eq? builtin 'define))
                    (x-error "malformed definition: " sexp))
                ((get-dk sexp) builtin sexp id-n env store loc-n)]
-              [else ((get-ek sexp) (handle-expr-builtin))])))))
+              [else (get-ek sexp) (ek (handle-expr-builtin))]))))) ;** as in v1.65
   (define (handle-combination output)
     (ek (if (and (pair? output) (eq? 'lambda (car output))
                  (null? (cadr output)) (null? (cdr sexp)))
@@ -366,17 +403,15 @@
                ((get-sk sexp) val sexp store loc-n))
            ((get-ek sexp)
             (if (expanded-code? val) (code-output val) val))))]
-    [(null? sexp)
-     (x-error "null used as an expression or syntax: " sexp)]
-    [(list? sexp)
-     (expand-any (car sexp)
-       id-n env store loc-n #f
-       (and ek handle-combination) handle-syntax-use
-       #f #f)]
-    [(or (number? sexp) (boolean? sexp) (string? sexp) (char? sexp))
+    [(and (pair? sexp) (list? sexp)) ;** as in v1.65
+     (expand-any (car sexp) id-n env store loc-n #f
+       (and ek handle-combination) handle-syntax-use #f #f)]
+    [(or (number? sexp) (boolean? sexp) (string? sexp) (char? sexp)
+         (procedure? sexp)) ; wrapped 'micro-syntax'
      ((get-ek sexp) sexp)]
     [else
      (x-error (cond [(pair? sexp) "improper list: "]
+                    [(null? sexp) "empty list: "] ;** as in v1.65
                     [(vector? sexp) "vector: "]
                     [else "unexpected type of s-expression: "])
        sexp " used as an expression, syntax, or definition.")]))
@@ -392,14 +427,12 @@
   (expand-any sexp id-n env store loc-n #f (lambda (x) x) #f #f #f))
 
 (define (expand-body sexps id-n env store loc-n lsd? ek sk dk bk)
-  (define
-   (expand-def sexp vds sds exprs id-n env store loc-n k ek)
+  (define (expand-def sexp vds sds exprs id-n env store loc-n k dek) ;** ek&dek, as in v1.65
     (define (dk builtin sexp id-n env store loc-n)
+      (or ek (eq? builtin 'define-syntax)
+          (x-error "non-syntax definition in a syntax body: " sexp))
       (if (list2? sexp)
-          (if exprs
-              (k vds sds (cons (cadr sexp) exprs)
-                 id-n env store loc-n)
-              (x-error "non-syntax definition in a syntax body: " sexp))
+          (k vds sds (cons (cadr sexp) exprs) id-n env store loc-n)
           (let* ([sid (cadr sexp)]
                  [id (sid-id sid)]
                  [env (extend-env env id loc-n)])
@@ -415,8 +448,6 @@
                  (k vds (cons sexp sds) exprs
                     id-n env store (+ loc-n 1))]
                 [(define)
-                 (or exprs
-                     (x-error "variable definition in a syntax body: " sexp))
                  (let* ([var (intloc->var loc-n sid)]
                         [store (extend-store store loc-n var)]
                         [loc-n (+ loc-n 1)])
@@ -424,7 +455,7 @@
                       id-n env store loc-n))])))))
     (define (bk sexp id-n env store loc-n)
       (let loop ([sexps (cdr sexp)] [vds vds] [sds sds] [exprs exprs]
-                 [id-n id-n] [env env] [store store] [loc-n loc-n] [ek ek])
+                 [id-n id-n] [env env] [store store] [loc-n loc-n] [dek dek])
         (if (null? sexps)
             (k vds sds exprs id-n env store loc-n)
             (expand-def (car sexps) vds sds exprs
@@ -432,15 +463,15 @@
               (lambda (vds sds exprs id-n env store loc-n)
                 (loop (cdr sexps) vds sds exprs
                   id-n env store loc-n #f))
-              (and ek
+              (and dek
                    (lambda (out)
                      (define (expand-one sexp)
                        (expand-expr sexp id-n env store loc-n))
                      (let ([rest (map expand-one (cdr sexps))])
-                       (ek (make-begin (cons out rest))))))))))
-    (expand-any sexp id-n env store loc-n #f ek #f dk bk))
+                       (dek (make-begin (cons out rest))))))))))
+    (expand-any sexp id-n env store loc-n #f dek #f dk bk))
   (let loop ([first (car sexps)] [rest (cdr sexps)] 
-             [vds '()] [sds '()] [exprs (and ek '())] 
+             [vds '()] [sds '()] [exprs '()] ;** as in v1.65 
              [id-n id-n] [env env] [store store] [loc-n loc-n])
     (define (finish-body boundary-exp-output)
       (expand-syntax-bindings
@@ -450,9 +481,7 @@
             (expand-expr sexp id-n env store loc-n))
           (define (expand-vd vd)
             (list (lookup2 (cadr vd) env store) (iexpand (caddr vd))))
-          (define (make-letrec bindings expr)
-            (if (null? bindings) expr (list 'letrec bindings expr)))
-          (if (and (null? rest) (null? vds) (not (pair? exprs)))
+          (if (and (null? rest) (null? vds) (null? exprs))
               (expand-any first id-n env store loc-n lsd? ek sk dk bk)
               (ek (make-letrec
                     (map expand-vd (reverse vds))
@@ -473,9 +502,9 @@
                   id-n env store loc-n))
           (and ek finish-body)))))
 
-(define (expand-top-level-forms forms store loc-n k)
+(define (expand-top-level-forms forms top-env store loc-n k)
   (define (finalize store loc-n acc) (k (reverse acc) store loc-n))
-  (let expand ([sexps (wrap-vecs forms)] [id-n 0] [env empty-env]
+  (let expand ([sexps (wrap-vecs forms)] [id-n 0] [env top-env]
                [store store] [loc-n loc-n] [acc '()] [k finalize])
     (if (null? sexps)
         (k store loc-n acc)
@@ -486,7 +515,8 @@
             (if (list2? sexp)
                 (ek (expand-expr (cadr sexp) id-n* env* store loc-n))
                 (let* ([tail (cdr sexp)] [sid (car tail)]
-                       [loc (sid-location sid)] [init (cadr tail)])
+                       [loc (lookup-sid sid env*)] ;** as in v1.65
+                       [init (cadr tail)])
                   (if (eq? builtin 'define)
                       (let* ([expr (expand-expr init id-n* env* store loc-n)]
                              [var (loc->var loc sid)]
@@ -515,7 +545,7 @@
     (for-each check formals) 
     (make-expander (cons 'syntax-lambda (cdr synlambda)) env))) ;*** fixed in 153s
   
-;;++ : pattern matcher extension
+; ++ : pattern matcher extension
 
 (define (sbox->sexp-list b)  (cdr (unbox b)))
 
@@ -630,7 +660,7 @@
     (and (sid? x)
          (if ellipsis-id
              (eqv? ellipsis-id (sid-id x))
-             (eq? '... (lookup-sid x env)))))
+             (eq? (lookup-sid x env) ellipsis-location)))) ;** was '...
   (define (check-lit lit)
     (or (sid? lit)
         (x-error "non-id: " lit " in literals list of: " synrules))
@@ -756,38 +786,14 @@
             (let collect ([x tmpl] [lits '()])
               (cond
                 [(ellipsis? x) lits]
-                [(sid? x)
-                 (if (assv (sid-id x) pat-env) lits (cons (sid-id x) lits))]
+                [(sid? x) (if (assv (sid-id x) pat-env) lits (cons (sid-id x) lits))]
                 [(vector? x) (collect (svector->list x) lits)]
                 [(box? x) (collect (template-sbox->sexp x) lits)]
                 [(pair? x) (collect (car x) (collect (cdr x) lits))]
                 [else lits]))))))
-    (define (reduce-env lits)
-      (define (list-dots-ids x ids)
-        (cond
-          [(sid? x)
-           (if (eq? '... (sid-location x)) (cons (sid-id x) ids) ids)]
-          [(vector? x) 
-           (list-dots-ids (svector->list x) ids)]
-          [(box? x)
-           (list-dots-ids (sbox->sexp-list x) ids)]
-          [(pair? x)
-           (list-dots-ids (car x) (list-dots-ids (cdr x) ids))]
-          [else ids]))
-      (let loop ([ids (if ellipsis-id lits (list-dots-ids rules lits))]
-                 [reduced-env empty-env])
-        (if (null? ids)
-            reduced-env
-            (loop
-              (cdr ids)
-              (let ([id (car ids)])
-                (cond
-                  [(and (not (assv id reduced-env)) (assv id env))
-                   => (lambda (binding) (cons binding reduced-env))]
-                  [else reduced-env]))))))
-    (let* ([lits (append* (cons pat-literals (map check-rule rules)))]
-           [env (reduce-env lits)])
-      (make-expander (cons 'syntax-rules (cdr synrules)) env)))) ;*** fixed in 153s
+    (or (list? rules) (x-error "malformed syntax rules: " rules))
+    (for-each check-rule rules) ;** reduction is dropped
+    (make-expander (cons 'syntax-rules (cdr synrules)) env)))
 
 (define (apply-synrules transformer sexp id-n env k)
   (let* ([synrules (expander-form transformer)]
@@ -803,7 +809,7 @@
       (and (sid? x)
            (if ellipsis-id
                (eqv? ellipsis-id (sid-id x))
-               (eq? '... (lookup-sid x mac-env)))))
+               (eq? (lookup-sid x mac-env) ellipsis-location)))) ;** was '...
     (define (list-ids x include-scalars pred?)
       (let collect ([x x] [inc include-scalars] [l '()])
         (cond [(sid? x)
@@ -931,33 +937,36 @@
                [else
                 (loop (cdr rules))])))))) 
 
-(define builtins-store
-  (let loop ([bs '(begin define define-syntax if lambda quote
-                   set! syntax-rules syntax-lambda)]
-             [store empty-store])
-    (if (null? bs)
-        store
-        (loop (cdr bs)
-          (extend-store store (car bs) (make-builtin (car bs)))))))
+(define root-environment ;++ replaces empty-env
+ '((syntax-lambda . -10) (syntax-rules . -9)
+   (set! . -8) (quote . -7) (lambda . -6) (if . -5)
+   (define-syntax . -4) (define . -3) (begin . -2)
+   (... . -1))) ;; todo: add (_ . -11) -- specially treated by syntax-rules
 
-(define null-prog '())
-(define null-stuff 
-  (expand-top-level-forms null-prog builtins-store 0 
-    (lambda (acc store loc-n) (list acc store loc-n)))) ; *
-(define null-output (car null-stuff))
-(define null-store (cadr null-stuff))
-(define null-loc-n (caddr null-stuff))
+(define root-macro-store ;++ replaces null-store, null-loc-n 
+ '(((-10 (builtin) syntax-lambda) (-9 (builtin) syntax-rules)
+    (-8 (builtin) set!) (-7 (builtin) quote) (-6 (builtin) lambda) (-5 (builtin) if)
+    (-4 (builtin) define-syntax) (-3 (builtin) define) (-2 (builtin) begin)
+    (-1 (builtin) ...)
+    ) . 0))
 
+(define ellipsis-location -1) ;++ used to be '...
 
-(define (null-mstore) (cons null-store null-loc-n))
+(define *current-environment*
+  root-environment) ; replaced by derived environments, root-environment itself is not mutated
 
-(define (expand-top-level-forms! forms mstore) ;=> (output form ...)
-  (expand-top-level-forms forms (car mstore) (cdr mstore)
+(define *current-macro-store* ; pair itself is mutated by expand-top-level-forms!
+  (cons (car root-macro-store) (cdr root-macro-store))) ; root-macro-store is not mutated
+
+(define (expand-top-level-forms! forms environment)
+  (expand-top-level-forms forms environment (car *current-macro-store*) (cdr *current-macro-store*)
     (lambda (outputs store loc-n)
-      (set-car! mstore store) (set-cdr! mstore loc-n) outputs)))
+      (set-car! *current-macro-store* store) (set-cdr! *current-macro-store* loc-n) outputs)))
 
 
-;;; procedure hacks and argument checking
+;------------------------------------------------------------------------------
+
+; procedure hacks and argument checking
 
 (define-inline (%procedure-length p)
   (%prim "fixnum(procedurelen(obj_from_$arg))" p))
@@ -1028,8 +1037,10 @@
   ARGCHECK_PAIR,
   ARGCHECK_PAIR_OBJ,
   ARGCHECK_LIST,
+  ARGCHECK_LIST_ETC,
   ARGCHECK_LIST_ETC_OBJ_OPT,
   ARGCHECK_OBJ_LIST,
+  ARGCHECK_ALIST,
   ARGCHECK_OBJ_ALIST,
   ARGCHECK_SYMBOL,
   ARGCHECK_CHAR,
@@ -1056,6 +1067,8 @@
   ARGCHECK_STRING_THUNK,
   ARGCHECK_STRING_PROC1IP,
   ARGCHECK_STRING_PROC1OP,
+  ARGCHECK_ENVIRONMENT,
+  ARGCHECK_OBJ_ENVIRONMENT_OPT,
   ARGCHECK_IPORT,
   ARGCHECK_IPORT_OPT,
   ARGCHECK_OPORT,
@@ -1115,6 +1128,19 @@
     else if (!ispair(l) || !ispair(car(l))) return 0;
     else if ((l = cdr(l)) == s) return 0;
     else if (isnull(l)) return 1;
+    else if (!ispair(l) || !ispair(car(l))) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else s = cdr(s); 
+  }
+}")
+
+(%localdef "static int isenvironment(obj l) {
+  obj s = l;
+  for (;;) {
+    if (isnull(l) || isprocedure(l)) return 1;
+    else if (!ispair(l) || !ispair(car(l))) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else if (isnull(l) || isprocedure(l)) return 1;
     else if (!ispair(l) || !ispair(car(l))) return 0;
     else if ((l = cdr(l)) == s) return 0;
     else s = cdr(s); 
@@ -1297,6 +1323,11 @@
           obj o; if (l) o = car(l); else o = va_arg(args, obj); 
           if (!islist(o)) res = ACRES_BADTYPE; 
         } break;
+      case ARGCHECK_LIST_ETC:
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!islist(o)) { res = ACRES_BADTYPE; break; }
+        } break;
       case ARGCHECK_LIST_ETC_OBJ_OPT:
         while (ac-- > 1) { 
           obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
@@ -1306,6 +1337,11 @@
         if (ac != 2) res = ACRES_BADARGC; else { 
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
           if (!islist(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_ALIST:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isalist(o)) res = ACRES_BADTYPE; 
         } break;
       case ARGCHECK_OBJ_ALIST:
         if (ac != 2) res = ACRES_BADARGC; else { 
@@ -1455,6 +1491,19 @@
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
           if (!isstring(o1) || !isproc1op(o2)) res = ACRES_BADTYPE;
         } break;
+      case ARGCHECK_ENVIRONMENT:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isenvironment(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_OBJ_ENVIRONMENT_OPT:
+        if (ac == 1) {
+          /* ok, obj requires no check */
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isenvironment(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
       case ARGCHECK_IPORT_OPT:
         if (ac == 0) break; /* else fall thru */ 
       case ARGCHECK_IPORT:
@@ -1594,8 +1643,7 @@
       (and (fx<=? cmin argc) (fx<=? argc cmax)))))  
 
 
-;;; wrappers for argc checking
-
+; wrappers for argc checking
 
 (define-syntax scheme-call
   (syntax-rules ()
@@ -1616,21 +1664,9 @@
      (make-annotated-procedure (lambda formals . body) (rest-argc->annotation n))]))
 
 
-;;; compiler (used on macroexpander output)
+;------------------------------------------------------------------------------
 
-(define (push-frame frame env)
-  (if (null? frame) 
-      env 
-      (cons (cons (car env) frame) (cdr env))))
-
-(define (lookup-var name env)
-  (let loop1 ([chain (car env)] [up 0])
-    (if (null? chain)
-        name
-        (let loop2 ([chain chain] [up up] [frame (cdr chain)] [over 1])
-          (cond [(null? frame) (loop1 (car chain) (+ up 1))]
-                [(eq? (car frame) name) (cons up over)]
-                [else (loop2 chain up (cdr frame) (+ over 1))])))))
+; compiler (used on macroexpander output)
 
 (define (variable x)
   (if (not (symbol? x)) (c-error "identifier expected" x)))
@@ -1647,52 +1683,12 @@
           [(and (> n 0) (pair? l)) (loop (- n 1) (cdr l))]
           [else (c-error "ill-constructed form" form)])))
 
-(define (comp-var expr env)
-  (variable expr) 
-  (gen-var-ref (lookup-var expr env)))
-
-(define (comp-self-eval expr env) 
-  (gen-cst expr))
-
-(define (comp-quote expr env) 
-  (shape expr 2) 
-  (gen-cst (cadr expr)))
-
-(define (comp-set! expr env)
-  (shape expr 3)
-  (variable (cadr expr))
-  (gen-var-set
-    (lookup-var (cadr expr) env) (scheme-comp (caddr expr) env)))
-
-(define (comp-lambda expr env)
-  (shape expr 3)
-  (let ([parms (cadr expr)])
-    (let ([frame (parms->frame parms)])
-      (let ([nb-vars (length frame)]
-            [code (scheme-comp (caddr expr) (push-frame frame env))])
-        (if (rest-param? parms)
-            (gen-lambda-rest nb-vars code)
-            (gen-lambda nb-vars code))))))
-
 (define (parms->frame parms)
   (cond [(null? parms) '()]
         [(pair? parms)
          (let ([x (car parms)])
            (variable x) (cons x (parms->frame (cdr parms))))]
         [else (variable parms) (list parms)]))
-
-(define (rest-param? parms)
-  (cond [(pair? parms) (rest-param? (cdr parms))]
-        [(null? parms) #f]
-        [else #t]))
-
-(define (comp-if expr env)
-  (shape+ expr 3)
-  (let ([code1 (scheme-comp (cadr expr) env)]
-        [code2 (scheme-comp (caddr expr) env)])
-    (if (pair? (cdddr expr))
-        (gen-if code1 code2 (scheme-comp (cadddr expr) env))
-        (gen-when code1 code2))))
 
 (define (bindings->vars bindings)
   (if (pair? bindings)
@@ -1708,60 +1704,77 @@
         (cons (cadr binding) (bindings->vals (cdr bindings))))
       '()))
 
-(define (comp-letrec expr env)
-  (shape expr 3)
-  (let ([bindings (cadr expr)])
-    (let ([new-env (push-frame (bindings->vars bindings) env)])
-      (gen-letrec 
-        (comp-vals (bindings->vals bindings) new-env)
-        (scheme-comp (caddr expr) new-env)))))
+(define (scheme-compile expr cte)
+  (define (cons-cte frame cte)
+    (if (null? frame) cte (cons cte frame))) 
+  (define (lookup name)
+    (let loop1 ([chain cte] [up 0])
+      (if (null? chain)
+          name
+          (let loop2 ([chain chain] [up up] [frame (cdr chain)] [over 1])
+            (cond [(null? frame) (loop1 (car chain) (fx+ up 1))]
+                  [(eq? (car frame) name) (cons up over)]
+                  [else (loop2 chain up (cdr frame) (fx+ over 1))])))))
+  (define (comp expr)
+    (cond [(symbol? expr) (variable expr) 
+           (gen-var-ref (lookup expr))]
+          [(not (pair? expr)) 
+           (gen-cst expr)]
+          [(eq? (car expr) 'quote) (shape expr 2) 
+           (gen-cst (cadr expr))]
+          [(eq? (car expr) 'set!) (shape expr 3) (variable (cadr expr))
+           (gen-var-set (lookup (cadr expr)) (comp (caddr expr)))]
+          [(eq? (car expr) 'lambda) (shape expr 3)
+           (let ([parms (cadr expr)])
+             (let ([frame (parms->frame parms)])
+               (let ([nb-vars (length frame)]
+                     [code (scheme-compile (caddr expr) (cons-cte frame cte))])
+                 (if (list? parms)
+                     (gen-lambda nb-vars code)
+                     (gen-lambda-rest nb-vars code)))))]
+          [(eq? (car expr) 'if) (shape+ expr 3)
+           (let ([code1 (comp (cadr expr))] [code2 (comp (caddr expr))])
+             (if (pair? (cdddr expr))
+                 (gen-if code1 code2 (comp (cadddr expr)))
+                 (gen-when code1 code2)))]
+          [(eq? (car expr) 'letrec) (shape expr 3)
+           (let ([bindings (cadr expr)])
+             (let ([new-cte (cons-cte (bindings->vars bindings) cte)])
+               (let loop ([vals (bindings->vals bindings)] [codes '()])
+                 (if (null? vals)
+                     (gen-letrec (reverse codes) (scheme-compile (caddr expr) new-cte))
+                     (loop (cdr vals) (cons (scheme-compile (car vals) new-cte) codes))))))]
+          [(eq? (car expr) 'begin) (shape+ expr 2)
+           (let loop ([expr0 (cadr expr)] [exprs (cddr expr)])
+             (let ([code (comp expr0)])
+               (if (null? exprs) 
+                   code
+                   (gen-sequence code (loop (car exprs) (cdr exprs))))))]
+          [(eq? (car expr) 'define) (shape expr 3) (variable (cadr expr))
+           (gen-sequence ; returns symbol to simplify interactive debugging
+             (gen-var-set (lookup (cadr expr)) (comp (caddr expr)))
+             (gen-cst (cadr expr)))]
+          [(symbol? (car expr)) (variable (car expr))
+           (let ([var (lookup (car expr))])
+             (if (pair? var) ; local
+                 (gen-combination (comp (car expr)) (map comp (cdr expr)))
+                 (gen-glo-combination var (map comp (cdr expr)))))]
+          [else (gen-combination (comp (car expr)) (map comp (cdr expr)))]))
+  (comp expr))     
 
-(define (comp-vals l env)
-  (if (pair? l)
-      (cons (scheme-comp (car l) env) (comp-vals (cdr l) env))
-      '()))
 
-(define (comp-begin expr env)
-  (shape+ expr 2) (comp-sequence (cdr expr) env))
+;------------------------------------------------------------------------------
 
-(define (comp-sequence exprs env)
-  (if (pair? exprs) (comp-sequence-aux exprs env) (gen-cst '())))
+; code generator
 
-(define (comp-sequence-aux exprs env)
-  (let ([code (scheme-comp (car exprs) env)] [rest (cdr exprs)])
-    (if (pair? rest)
-        (gen-sequence code (comp-sequence-aux rest env))
-        code)))
-
-(define (comp-define expr env)
-  (shape expr 3)
-  (variable (cadr expr))
-  (gen-sequence ; returns symbol to simplify interactive debugging
-    (gen-var-set
-      (lookup-var (cadr expr) env) (scheme-comp (caddr expr) env))
-    (gen-cst (cadr expr))))
-
-(define (comp-var-combination expr env)
-  (variable (car expr))
-  (let ([var (lookup-var (car expr) env)])
-    (if (pair? var) ; local
-        (comp-combination expr env)
-        (gen-glo-combination var (comp-vals (cdr expr) env)))))
-
-(define (comp-combination expr env)
-  (gen-combination
-    (scheme-comp (car expr) env) (comp-vals (cdr expr) env)))
-
-;; code generator
-
-; global vars are pairs, value is stored in the cdr
-(define-inline (scheme-global-var-ref i) (cdr i))
-(define-inline (scheme-global-var-set! i val) (set-cdr! i val))
+; global value store locations are kept in linked alist, value is stored in the cdr
+(define-inline (value-store-location-ref i) (cdr i))
+(define-inline (value-store-location-set! i val) (set-cdr! i val))
 
 (define (gen-var-ref var)
   (if (pair? var)
       (gen-rte-ref (car var) (cdr var))
-      (gen-glo-ref (scheme-global-var var))))
+      (gen-glo-ref (value-store-lookup var))))
 
 (define (gen-rte-ref up over)
   (case up
@@ -1789,7 +1802,7 @@
   (lambda (rte) (code (vector-ref (vector-ref rte 0) 0))))
 
 (define (gen-glo-ref i) 
-  (lambda (rte) (scheme-global-var-ref i)))
+  (lambda (rte) (value-store-location-ref i)))
 
 (define (gen-cst val)
   (case val
@@ -1806,7 +1819,7 @@
 (define (gen-var-set var code)
   (if (pair? var)
       (gen-rte-set (car var) (cdr var) code)
-      (gen-glo-set (scheme-global-var var) code)))
+      (gen-glo-set (value-store-lookup var) code)))
 
 (define (gen-rte-set up over code)
   (case up
@@ -1839,7 +1852,7 @@
     [else (lambda (rte) (vector-set! (up (vector-ref rte 0)) i (code rte)))]))
 
 (define (gen-glo-set i code)
-  (lambda (rte) (scheme-global-var-set! i (code rte))))
+  (lambda (rte) (value-store-location-set! i (code rte))))
 
 (define (gen-lambda-rest nb-vars body)
   (case nb-vars
@@ -1961,7 +1974,7 @@
       (body x))))
 
 (define (gen-glo-combination var args)
-  (let ([i (scheme-global-var var)] [argc (length args)])
+  (let ([i (value-store-lookup var)] [argc (length args)])
     (case argc
       [(0) (gen-glo-combination-0 i)]
       [(1) (gen-glo-combination-1 i (car args))]
@@ -1971,19 +1984,19 @@
       [else (gen-glo-combination-n argc i args)])))
 
 (define (gen-glo-combination-0 i) 
-  (lambda (rte) (scheme-call 0 (scheme-global-var-ref i))))
+  (lambda (rte) (scheme-call 0 (value-store-location-ref i))))
 
 (define (gen-glo-combination-1 i arg1)
-  (lambda (rte) (scheme-call 1 (scheme-global-var-ref i) (arg1 rte))))
+  (lambda (rte) (scheme-call 1 (value-store-location-ref i) (arg1 rte))))
 
 (define (gen-glo-combination-2 i arg1 arg2)
-  (lambda (rte) (scheme-call 2 (scheme-global-var-ref i) (arg1 rte) (arg2 rte))))
+  (lambda (rte) (scheme-call 2 (value-store-location-ref i) (arg1 rte) (arg2 rte))))
 
 (define (gen-glo-combination-3 i arg1 arg2 arg3)
-  (lambda (rte) (scheme-call 3 (scheme-global-var-ref i) (arg1 rte) (arg2 rte) (arg3 rte))))
+  (lambda (rte) (scheme-call 3 (value-store-location-ref i) (arg1 rte) (arg2 rte) (arg3 rte))))
 
 (define (gen-glo-combination-4 i arg1 arg2 arg3 arg4)
-  (lambda (rte) (scheme-call 4 (scheme-global-var-ref i) (arg1 rte) (arg2 rte) (arg3 rte) (arg4 rte))))
+  (lambda (rte) (scheme-call 4 (value-store-location-ref i) (arg1 rte) (arg2 rte) (arg3 rte) (arg4 rte))))
 
 (define (gen-glo-combination-n argc i args)
   (lambda (rte)
@@ -1991,7 +2004,7 @@
       (if (pair? l)
           (cons ((car l) rte) (evaluate (cdr l) rte))
           '()))
-    (scheme-apply argc (scheme-global-var-ref i) (evaluate args rte))))
+    (scheme-apply argc (value-store-location-ref i) (evaluate args rte))))
 
 (define (gen-combination oper args)
   (let ([argc (length args)])
@@ -2026,67 +2039,54 @@
           '()))
     (scheme-apply argc (oper rte) (evaluate args rte))))
 
-(define (scheme-comp expr env)
-  (cond [(symbol? expr) (comp-var expr env)]
-        [(not (pair? expr)) (comp-self-eval expr env)]
-        [(eq? (car expr) 'quote) (comp-quote expr env)]
-        [(eq? (car expr) 'set!) (comp-set! expr env)]
-        [(eq? (car expr) 'lambda) (comp-lambda expr env)]
-        [(eq? (car expr) 'if) (comp-if expr env)]
-        [(eq? (car expr) 'letrec) (comp-letrec expr env)]
-        [(eq? (car expr) 'begin) (comp-begin expr env)]
-        [(eq? (car expr) 'define) (comp-define expr env)]
-        [(symbol? (car expr)) (comp-var-combination expr env)]
-        [else (comp-combination expr env)]))
 
+;------------------------------------------------------------------------------
 
-;;; evaluator
+; evaluator
 
-(define scheme-global-environment
-  (cons '()             ; environment chain
-        (null-mstore))) ; syntax mstore
+(define (scheme-compile-run expr)
+  (let ([code (scheme-compile expr '())]) ;no locals on top level
+    (code #f))) ;no local frames at run time
 
-(define (scheme-compile-run expr genv)
-  (let ([code (scheme-comp expr genv)])
-    (code #f)))
-
-(define (scheme-expand-compile-run form genv)
-  (let loop ([outs (expand-top-level-forms! (list form) (cdr genv))])
+(define (scheme-expand-compile-run form environment)
+  (let loop ([outs (expand-top-level-forms! (list form) environment)])
      (cond [(null? outs) (void)]
-           [(null? (cdr outs)) (scheme-compile-run (car outs) genv)] ; tail call
-           [else (scheme-compile-run (car outs) genv) (loop (cdr outs))])))
+           [(null? (cdr outs)) (scheme-compile-run (car outs))] ; tail call
+           [else (scheme-compile-run (car outs)) (loop (cdr outs))])))
 
-(define (scheme-expand-to-list expr)
-  (expand-top-level-forms! (list expr) (cdr scheme-global-environment)))
+(define (scheme-expand-to-list expr . ?environment)
+  (expand-top-level-forms! (list expr) (if (null? ?environment) *current-environment* (car ?environment))))
 
-(define (scheme-eval expr)
-  (scheme-expand-compile-run expr scheme-global-environment))
+(define (scheme-eval expr . ?environment)
+  (scheme-expand-compile-run expr (if (null? ?environment) *current-environment* (car ?environment))))
 
 
-;;;  interpreter globals and initialization
+;------------------------------------------------------------------------------
 
-(define (scheme-global-var name)
-  (let ([x (assq name scheme-global-variables)])
+;  interpreter global value store and initialization
+
+(define *current-value-store* '())
+
+(define (value-store-lookup name) ;=> store location
+  (let ([x (assq name *current-value-store*)])
     (if x
         x
         ;; default value of a global var is its own symbol (simplifies bug reporting)
         (let ([y (cons name name)])
-          (set! scheme-global-variables (cons y scheme-global-variables))
+          (set! *current-value-store* (cons y *current-value-store*))
           y))))
 
-(define scheme-global-variables '())
-
 (define (reverse-global-lookup val)
-  (let loop ([al scheme-global-variables])
+  (let loop ([al *current-value-store*])
     (cond [(null? al) #f]
           [(eq? (cdar al) val) (caar al)]
           [else (loop (cdr al))])))
 
 (define (get-global name)
-  (scheme-global-var-ref (scheme-global-var name)))
+  (value-store-location-ref (value-store-lookup name)))
 
 (define (set-global! name value)
-  (scheme-global-var-set! (scheme-global-var name) value))
+  (value-store-location-set! (value-store-lookup name) value))
 
 (define-syntax def-global
   (syntax-rules ()
@@ -2152,6 +2152,8 @@
 (def-arg-checker (* pair)                (mark-argcheck ARGCHECK_PAIR *))
 (def-arg-checker (* pair obj)            (mark-argcheck ARGCHECK_PAIR_OBJ *))
 (def-arg-checker (* list)                (mark-argcheck ARGCHECK_LIST *))
+(def-arg-checker (* list ...)            (mark-argcheck ARGCHECK_LIST_ETC *))
+(def-arg-checker (* alist)               (mark-argcheck ARGCHECK_ALIST *))
 (def-arg-checker (* obj list)            (mark-argcheck ARGCHECK_OBJ_LIST *))
 (def-arg-checker (* obj alist)           (mark-argcheck ARGCHECK_OBJ_ALIST *))
 (def-arg-checker (* symbol)              (mark-argcheck ARGCHECK_SYMBOL *))
@@ -2180,6 +2182,8 @@
 (def-arg-checker (* string thunk)        (mark-argcheck ARGCHECK_STRING_THUNK *))
 (def-arg-checker (* thunk proc)          (mark-argcheck ARGCHECK_THUNK_PROC *))
 (def-arg-checker (* thunk thunk thunk)   (mark-argcheck ARGCHECK_THUNK_THUNK_THUNK *))
+(def-arg-checker (* environment)         (mark-argcheck ARGCHECK_ENVIRONMENT *))
+(def-arg-checker (* obj environment ?)   (mark-argcheck ARGCHECK_OBJ_ENVIRONMENT_OPT *))
 (def-arg-checker (* iport)               (mark-argcheck ARGCHECK_IPORT *))
 (def-arg-checker (* oport)               (mark-argcheck ARGCHECK_OPORT *))
 (def-arg-checker (* iport ?)             (mark-argcheck ARGCHECK_IPORT_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) #f)))
@@ -2187,14 +2191,17 @@
 (def-arg-checker (* obj oport ?)         (mark-argcheck ARGCHECK_OBJ_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 (def-arg-checker (* char oport ?)        (mark-argcheck ARGCHECK_CHAR_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 
-;;; R5RS
 
-;; 6.1  Equivalence predicates
+;------------------------------------------------------------------------------
+
+; R5RS
+
+; 6.1  Equivalence predicates
 (def-global eqv? (mark-argcheck EQV_OBJ_OBJ eqv?))
 (def-global eq? (mark-argcheck EQ_OBJ_OBJ eq?))
 (def-global (equal? obj obj))
 
-;; 6.2.5  Numerical operations
+; 6.2.5  Numerical operations
 (def-global (number? obj))
 (def-global (complex? obj)) 
 (def-global (real? obj))
@@ -2250,15 +2257,15 @@
 (def-global (exact->inexact z)) ; r7rs name: exact
 (def-global (inexact->exact z)) ; r7rs name: inexact
 
-;; 6.2.6  Numerical input and output
+; 6.2.6  Numerical input and output
 (def-global (number->string z radix ?))
 (def-global (string->number string radix ?))
 
-;; 6.3.1  Booleans
+; 6.3.1  Booleans
 (def-global not (mark-argcheck NOT_OBJ not))
 (def-global (boolean? obj))
 
-;; 6.3.2  Pairs and lists
+; 6.3.2  Pairs and lists
 (def-global (pair? obj))
 (def-global (cons obj obj))
 (def-global car (mark-argcheck CAR_PAIR car))
@@ -2311,12 +2318,12 @@
 (def-global (assv obj alist))
 (def-global (assoc obj alist))
 
-;; 6.3.3  Symbols
+; 6.3.3  Symbols
 (def-global (symbol? obj))
 (def-global (symbol->string symbol))
 (def-global (string->symbol string))
 
-;; 6.3.4  Characters
+; 6.3.4  Characters
 (def-global (char? obj))
 (def-global (char=? char char))
 (def-global (char<? char char))
@@ -2338,7 +2345,7 @@
 (def-global (char-upcase char))
 (def-global (char-downcase char))
 
-;; 6.3.5  Strings
+; 6.3.5  Strings
 (def-global (string? obj))
 (def-global (make-string k char ?))
 (def-global (string char ...))
@@ -2362,7 +2369,7 @@
 (def-global (string-copy string))
 (def-global (string-fill! string char))
 
-;; 6.3.6  Vectors
+; 6.3.6  Vectors
 (def-global (vector? obj))
 (def-global (make-vector k obj ?))
 (def-global (vector obj ...))
@@ -2373,7 +2380,7 @@
 (def-global (list->vector list))
 (def-global (vector-fill! vector obj))
 
-;; 6.4  Control features
+; 6.4  Control features
 (define *values-tag* (list 'values))
 ;(def-global *values-tag* *values-tag*)
 (def-global (procedure? obj))
@@ -2398,18 +2405,19 @@
          (scheme-call 1 consumer v)))))
 (def-global (dynamic-wind thunk thunk thunk))
 
-;; 6.5  Eval
+; 6.5  Eval
 ;(eval expression environment-specifier)
-(def-global eval                             
-  (mark-range-argc 1 2 ; ignore optional env for now
-    (lambda (x . ignored) (scheme-eval x))))
-; stubs for now
-(def-global (scheme-report-environment n) (lambda (version) (= version 5)))
-(def-global (null-environment n) (lambda (version) (= version 5)))
-(def-global (interaction-environment) (lambda () #t))
+(def-global (eval obj environment ?)
+  (argc-dispatch-lambda #f 
+    (lambda (x) (scheme-eval x))
+    (lambda (x environment) (scheme-eval x environment))))
+; stubs for now, will sort out later
+(def-global (scheme-report-environment n) (lambda (version) *current-environment*))
+(def-global (null-environment n) (lambda (version) *current-environment*))
+(def-global (interaction-environment) (lambda () *current-environment*))
 
-;; 6.6  Input and output
-;; 6.6.1  Ports
+; 6.6  Input and output
+; 6.6.1  Ports
 (def-global (call-with-input-file string proc1ip))
 (def-global (call-with-output-file string proc1op))
 (def-global (input-port? obj))
@@ -2423,20 +2431,20 @@
 (def-global (close-input-port iport))
 (def-global (close-output-port oport))
 
-;; 6.6.2  Input
+; 6.6.2  Input
 (def-global (read iport ?))
 (def-global (read-char iport ?))
 (def-global (peek-char iport ?))
 (def-global (eof-object? obj))
 (def-global (char-ready? iport ?))
 
-;; 6.6.3  Output
+; 6.6.3  Output
 (def-global (write obj oport ?))
 (def-global (display obj oport ?))
 (def-global (write-char char oport ?))
 (def-global (newline oport ?))
 
-;; 6.6.4  System interface
+; 6.6.4  System interface
 (def-global (load string)                          ; filename
   (lambda (fn)
     (call-with-input-file fn
@@ -2451,17 +2459,23 @@
 ;(transcript-off)
 
 
-;;; R7RS Extras
+;------------------------------------------------------------------------------
 
-;; 4.2.9. Case-lambda
+; selected R7RS extras
+
+; 4.2.9. Case-lambda
 (def-global (make-case-lambda obj ...) ; macro is in init
   (lambda clargs
      (make-annotated-procedure (apply make-case-lambda clargs) (rest-argc->annotation 1))))
 
-;; 6.11. Exceptions
+; 6.11. Exceptions
 (def-global (error string obj ...))
 
-;; 6.14. System interface 
+; 6.12. Environments and evaluation
+(def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
+
+
+; 6.14. System interface 
 (def-global (file-exists? string))    ; filename
 (def-global (delete-file string))     ; filename
 (def-global (command-line))
@@ -2469,23 +2483,38 @@
 (def-global (current-jiffy))
 (def-global (jiffies-per-second))
 (def-global (open-input-string string))
+(def-global (features)
+  (lambda () '(sharpf sharpf-interpreter sharpf-ints)))
 
 
-;;; #F Extras
+;------------------------------------------------------------------------------
 
-;; misc
+; #F extras
+
+; misc
 (def-global (void))
 (def-global (reverse! list)) ; used in init code
 (def-global (exit n ?))
 (def-global (system string))
 (def-global write-string (get-global 'display)) ;alias?
 (def-global (print-procedure proc))
-;(def-global (print-globals) 
-;  (lambda () (write scheme-global-variables) (newline)))
-(def-global (expand obj)
-  (lambda (x) (cons *values-tag* (scheme-expand-to-list x))))
+(def-global (current-environment)  (lambda () *current-environment*))
+(def-global (set-current-environment! environment)  (lambda (e) (set! *current-environment* e)))
+(def-global (current-macro-store)  (lambda () *current-macro-store*))
+(def-global (current-value-store)  (lambda () *current-value-store*))
+(def-global (root-environment)     (lambda () root-environment))
+(def-global (initial-value-environment)  (lambda () *initial-value-environment*))
+(def-global (initial-macro-environment)  (lambda () *initial-macro-environment*))
 
-;;; Code to feed the interpreter at initialization time
+(def-global (expand obj environment ?)                             
+  (argc-dispatch-lambda #f 
+    (lambda (x) (cons *values-tag* (scheme-expand-to-list x)))
+    (lambda (x environment) (cons *values-tag* (scheme-expand-to-list x environment)))))
+
+
+;------------------------------------------------------------------------------
+
+; Code to feed the interpreter at initialization time
 
 (%localdef #<<EOS
 /* initialization code */
@@ -2744,7 +2773,27 @@ EOS
       (scheme-eval x) (loop (read p)))))
 
 
-;;; REPL
+;------------------------------------------------------------------------------
+
+; post-initialization environments
+
+(define *initial-value-environment*
+  (let loop ([l *current-value-store*] [e '()])
+    (cond [(null? l) e]
+          [(symbol? (caar l)) (loop (cdr l) (cons (cons (caar l) (caar l)) e))]
+          [else (loop (cdr l) e)])))
+
+(define *initial-macro-environment*
+  (let loop ([l (car *current-macro-store*)] 
+             [e (append '((unquote . unquote) (unquote-splicing . unquote-splicing) (=> . =>) (else . else)) root-environment)])
+    (cond [(null? l) e]
+          [(symbol? (caar l)) (loop (cdr l) (cons (cons (caar l) (caar l)) e))]
+          [else (loop (cdr l) e)])))
+
+
+;------------------------------------------------------------------------------
+
+; REPL and main
 
 (define (fprintf* port fstr olst)
   (let loop ([flst (string->list fstr)] [olst olst])
@@ -2810,7 +2859,7 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "IntS Scheme Interpreter 1.0~%")
+    (printf "IntS Scheme Interpreter 1.1~%")
     (set! *greeting* #f)))
 
 (define (ints-repl port)
@@ -2827,7 +2876,7 @@ EOS
 
 (define (main argv)
   (define (about)
-    (printf "ints 1.0~%")
+    (printf "ints 1.1~%")
     (printf "Usage: ints [-qx] file ...~%")
     (printf "-q  suppress greeting~%")
     (printf "-x  exit after loading files on the command line~%"))
