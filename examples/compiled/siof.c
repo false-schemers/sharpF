@@ -1090,7 +1090,7 @@ obj argcheck(obj p, long ac, obj l, ...) {
         } break;
       case ARGCHECK_LIST_ETC_OBJ_OPT:
         while (ac-- > 1) { 
-          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
           if (!islist(o)) { res = ACRES_BADTYPE; break; }
         } break;
       case ARGCHECK_OBJ_LIST:
@@ -1120,7 +1120,7 @@ obj argcheck(obj p, long ac, obj l, ...) {
         } break;
       case ARGCHECK_CHAR_ETC:
         while (ac-- > 0) { 
-          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
           if (!ischar(o)) { res = ACRES_BADTYPE; break; }
         } break;
       case ARGCHECK_STRING:
@@ -1140,7 +1140,7 @@ obj argcheck(obj p, long ac, obj l, ...) {
         } break;
       case ARGCHECK_STRING_ETC:
         while (ac-- > 0) { 
-          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
           if (!isstring(o)) { res = ACRES_BADTYPE; break; }
         } break;
       case ARGCHECK_STRING_OBJ_ETC: 
