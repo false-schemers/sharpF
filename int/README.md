@@ -35,4 +35,5 @@ Here is the list of IntS additions and things that behave differently between In
 IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intm.sf)) is an extended version of IntS, based on LibM. It has the following additional functionality:
 
   *  support for bytevectors, with basic set of operations
+  *  support for `define-record-type` records
   
