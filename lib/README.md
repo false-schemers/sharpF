@@ -53,7 +53,7 @@ LibXS (see [libxs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/ma
 ## LibS (Small) Library
 
 LibS (see [libs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libs.sf)) generally targets
-R^5RS feature set; most of the forms and procedures behave as expected. Compared to a regular R^5RS system, it has the following known limitations:
+R5RS feature set; most of the forms and procedures behave as expected. Compared to a regular R5RS system, it has the following known limitations:
 
   *  SFC reader used to read #F source code is case-sensitive
   *  `read` and `string->symbol` are also case-sensitive
@@ -66,8 +66,8 @@ R^5RS feature set; most of the forms and procedures behave as expected. Compared
   *  `set!` to built-in bindings is not allowed
   *  there is no REPL and no transcript functions
 
-In addition to R^5RS-level functionality, LibS supports some popular extensions
-defined in pre-R^5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
+In addition to R5RS-level functionality, LibS supports some popular extensions
+defined in pre-R5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
 
   *  many fixnum (`fx`) and flonum (`fl`) - specific operations
   *  `letrec*`, `rec`, `receive`, `let-values`, `let*-values`, `when`, `unless`, `case-lambda` forms
@@ -76,3 +76,10 @@ defined in pre-R^5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
   *  `file-exists?`, `delete-file`, `rename-file`, `open-input-string`
   *  `exit`, `abort`, `reset`, `command-line`
   *  `get-environment-variable`, `system`, `current-jiffy`, `jiffies-per-second` 
+
+
+## LibM (Medium) Library
+
+LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libm.sf)) is an extended version of LibS. It has the following additional functionality:
+
+  *  support for bytevectors, with basic set of operations
