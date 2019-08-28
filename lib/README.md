@@ -83,3 +83,5 @@ defined in pre-R5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
 LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libm.sf)) is an extended version of LibS. It has the following additional functionality:
 
   *  support for bytevectors, with basic set of operations
+  *  support for `define-record-type` records
+ 
