@@ -1962,6 +1962,86 @@ long fxflo(double f) {
   (%prim "bool(getsymbol(obj_from_$arg) == getsymbol(obj_from_$arg))" x y))
 
 
+; records
+
+(%definition "/* records */")
+(%definition "#define RECORD_BTAG 4")  
+(%definition "#define isrecord(o) istagged(o, RECORD_BTAG)")  
+(%definition "#define recordrtd(r) *taggedref(r, RECORD_BTAG, 0)")  
+(%definition "#define recordref(r, i) *taggedref(r, RECORD_BTAG, (i)+1)")  
+(%definition "#define recordlen(r) (taggedlen(r, RECORD_BTAG)-1)")  
+
+(define-syntax record?
+  (syntax-rules ()
+    [(_ o) (%prim "bool(isrecord(obj_from_$arg))" o)]
+    [(_ o t) (%prim "{ /* record? */
+    obj o = obj_from_$arg, t = obj_from_$arg; 
+    if (!isrecord(o)) $return bool(0);
+    else $return bool(recordrtd(o) == t); }" o t)]
+    [_ %residual-record?]))
+
+(define-inline (make-record rtd n)
+  (%prim* "{ /* make-record */
+    int i = 0, c = fixnum_from_$arg;
+    hreserve(hbsz(c+2), $live); /* $live live regs */
+    while (i++ < c) *--hp = obj_from_bool(0);
+    *--hp = obj_from_$arg; /* gc-safe */
+    *--hp = obj_from_size(RECORD_BTAG);
+    $return obj(hendblk(c+2)); }" n rtd))
+
+(define-inline (record-type-descriptor r)
+  (%prim "obj(recordrtd(obj_from_$arg))" r))
+
+(define-inline (record-length r)
+  (%prim "fixnum(recordlen(obj_from_$arg))" r))
+
+(define-inline (record-ref r i)
+  (%prim? "obj(recordref(obj_from_$arg, fixnum_from_$arg))" r i))
+
+(define-inline (record-set! r i x)
+  (%prim! "void(recordref(obj_from_$arg, fixnum_from_$arg) = obj_from_$arg)" r i x))
+
+(define-inline (new-record-type name fields) ; stub
+  (cons name fields))
+
+; works on top and locally, but field names cannot be hygienically generated on top level
+(define-syntax define-record-type
+  (letrec-syntax
+    ([id-eq?? ; see http://okmij.org/ftp/Scheme/macro-symbol-p.txt
+      (syntax-rules ()
+        [(_ id b kt kf)
+         ((syntax-lambda (id ok) ((syntax-rules () [(_ b) (id)]) ok))
+          (syntax-rules () [(_) kf]) (syntax-rules () [(_) kt]))])]
+     [id-assq??
+      (syntax-rules ()
+        [(_ id () kt kf) kf]
+        [(_ id ([id0 . r0] . idr*) kt kf) (id-eq?? id id0 (kt . r0) (id-assq?? id idr* kt kf))])]
+     [init
+      (syntax-rules ()
+        [(_  r () fi* (x ...)) (begin x ... r)]
+        [(_  r (id0 . id*) fi* (x ...))
+         (id-assq?? id0 fi* 
+           (syntax-rules () [(_ i0) (init r id* fi* (x ... (record-set! r i0 id0)))]) 
+           (syntax-error "id in define-record-type constructor is not a field:" id0))])]
+     [unroll
+      (syntax-rules ()
+        [(_ rtn (consn id ...) predn () ([f i] ...) ([a ia] ...) ([m im] ...))
+         (begin
+            (define rtn (new-record-type 'rtn '(f ...)))
+            (define consn (lambda (id ...) (let ([r (make-record rtn #&(length (f ...)))]) (init r (id ...) ([f i] ...) ()))))
+            (define predn (lambda (obj) (record? obj rtn)))
+            (define a (lambda (obj) (record-ref obj ia))) ...
+            (define m (lambda (obj val) (record-set! obj im val))) ...)]
+        [(_ rtn cf* predn ([fn accn] fam ...) (fi ...) (ai ...) (mi ...))
+         (unroll rtn cf* predn (fam ...) 
+           (fi ... [fn #&(length (fi ...))]) (ai ... [accn #&(length (fi ...))]) (mi ...))]
+        [(_  rtn cf* predn ([fn accn modn] fam ...) (fi ...) (ai ...) (mi ...))
+         (unroll rtn cf* predn (fam ...) 
+           (fi ... [fn #&(length (fi ...))]) (ai ... [accn #&(length (fi ...))]) (mi ... [modn #&(length (fi ...))]))])])
+    (syntax-rules ()
+      [(_ rtn (consn id ...) predn (fn . am) ...)
+       (unroll rtn (consn id ...) predn ((fn . am) ...) () () ())])))
+
 
 ; conversions
 
@@ -2800,7 +2880,16 @@ default: /* inter-host call */
     (define (sub-write-box x d? p)
       (write-string "#&" p)
       (sub-write (unbox x) d? p))
-      
+
+    (define (sub-write-record x d? p)
+      (write-string "#<record " p)
+      (sub-write (record-type-descriptor x) d? p) 
+      (let ([size (record-length x)])
+        (let loop ([i 0])
+          (when (fx<? i size) 
+            (write-char #\space p) (sub-write (record-ref x i) d? p) (loop (fx+ i 1)))))
+      (write-char #\> p))
+
     (define (sub-write x d? p)
       (cond
         [(eof-object? x) (write-string "#<eof>" p)]
@@ -2817,6 +2906,7 @@ default: /* inter-host call */
         [(vector? x) (sub-write-vector x d? p)]
         [(bytevector? x) (sub-write-bytevector x p)]
         [(box? x) (sub-write-box x d? p)]
+        [(record? x) (sub-write-record x d? p)]
         [(procedure? x) (display-procedure x p)]
         [else (write-string "#<unknown>" p)]))
         
@@ -3265,7 +3355,6 @@ default: /* inter-host call */
 
 ;------------------------------------------------------------------------------
 
-
 ; stubs
 
 (define-inline (make-rectangular r i)
@@ -3448,6 +3537,8 @@ default: /* inter-host call */
 
 (define %residual-append (append-reducer append '()))
 
+(define %residual-record? (unary-binary-adaptor record?))
+
 (define %residual-number->string (unary-binary-adaptor number->string))
 (define %residual-string->number (unary-binary-adaptor string->number))
 
@@ -3485,14 +3576,13 @@ default: /* inter-host call */
 (define %residual-exit (nullary-unary-adaptor exit))
 
 ; development plan:
-; + make vectors self-evaluating
 ; + add bytevectors with minimal function set
+; + add records: new-record-type record? make-record record-type-descriptor record-ref record-set! define-record-type 
 ; - add binary file ports, corresponding operations from r7rs
 ; - upgrade all existing operations to r7rs (member, assoc, ...)?
 ; - add bytevector input ports
 ; - add string output ports
 ; - add bytevector output ports
-; - add record basics: new-record-type record? make-record record-type-descriptor record-ref record-set!
 ; - upgrade current port procedures to parameters, add parameterize
 
 #;(define (main argv)

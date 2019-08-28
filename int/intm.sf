@@ -1070,6 +1070,10 @@
   ARGCHECK_U8VECTOR_INDEX,
   ARGCHECK_U8VECTOR_INDEX_U8,
   ARGCHECK_U8VECTOR_START_END,
+  ARGCHECK_OBJ_K,
+  ARGCHECK_RECORD,
+  ARGCHECK_RECORD_INDEX,
+  ARGCHECK_RECORD_INDEX_OBJ,
   ARGCHECK_PROC,
   ARGCHECK_PROC_OBJ_ETC_LIST,
   ARGCHECK_PROC1CC,
@@ -1523,6 +1527,28 @@
           if (!isbytevector(o1) || !is_fixnum_obj(o2) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
           else { long len = bytevectorlen(o1), s = fixnum_from_obj(o2), e = fixnum_from_obj(o3); 
                  if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_OBJ_K:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!is_fixnum_obj(o2) || fixnum_from_obj(o2) < 0) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_RECORD:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isrecord(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_RECORD_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isrecord(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = recordlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_RECORD_INDEX_OBJ:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isrecord(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = recordlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
         } break;
       case ARGCHECK_PROC:
         if (ac != 1) res = ACRES_BADARGC; else { 
@@ -2199,6 +2225,7 @@
 (def-arg-checker (*)                     (mark-argc 0 *))
 (def-arg-checker (* obj)                 (mark-argc 1 *))
 (def-arg-checker (* obj obj)             (mark-argc 2 *))
+(def-arg-checker (* obj obj ?)           (mark-range-argc 1 2 *))
 (def-arg-checker (* obj ...)             (mark-rest-argc 1 *))
 (def-arg-checker (* n)                   (mark-argcheck ARGCHECK_N *))
 (def-arg-checker (* n n)                 (mark-argcheck ARGCHECK_N_N *))
@@ -2262,6 +2289,10 @@
 (def-arg-checker (* u8vector index)      (mark-argcheck ARGCHECK_U8VECTOR_INDEX *))
 (def-arg-checker (* u8vector index u8)   (mark-argcheck ARGCHECK_U8VECTOR_INDEX_U8 *))
 (def-arg-checker (* u8vector start end)  (mark-argcheck ARGCHECK_U8VECTOR_START_END *))
+(def-arg-checker (* obj k)               (mark-argcheck ARGCHECK_OBJ_K *))
+(def-arg-checker (* record)              (mark-argcheck ARGCHECK_RECORD *))
+(def-arg-checker (* record index)        (mark-argcheck ARGCHECK_RECORD_INDEX *))
+(def-arg-checker (* record index obj)    (mark-argcheck ARGCHECK_RECORD_INDEX_OBJ *))
 (def-arg-checker (* proc)                (mark-argcheck ARGCHECK_PROC *))
 (def-arg-checker (* proc1cc)             (mark-argcheck ARGCHECK_PROC1CC *))
 (def-arg-checker (* string proc1ip)      (mark-argcheck ARGCHECK_STRING_PROC1IP *))
@@ -2592,6 +2623,15 @@
 
 (def-global (byte? obj))
 
+; record internals
+(def-global (record? obj obj ?))
+(def-global (make-record obj k))
+(def-global (record-type-descriptor record))
+(def-global (record-length record))
+(def-global (record-ref record index))
+(def-global (record-set! record index obj))
+(def-global (new-record-type obj list))
+
 ; misc
 (def-global (void))
 (def-global (reverse! list)) ; used in init code
@@ -2863,6 +2903,43 @@ static char *ints_init_code =
 "      (let loop ([l* (cons l l*)])"
 "        (if (not (null? (car l*))) "
 "            (begin (apply p (map car l*)) (loop (map cdr l*)))))))"
+""
+"(define-syntax define-record-type"
+"  (letrec-syntax"
+"    ([id-eq??"
+"      (syntax-rules ()"
+"        [(_ id b kt kf)"
+"         ((syntax-lambda (id ok) ((syntax-rules () [(_ b) (id)]) ok))"
+"          (syntax-rules () [(_) kf]) (syntax-rules () [(_) kt]))])]"
+"     [id-assq??"
+"      (syntax-rules ()"
+"        [(_ id () kt kf) kf]"
+"        [(_ id ([id0 . r0] . idr*) kt kf) (id-eq?? id id0 (kt . r0) (id-assq?? id idr* kt kf))])]"
+"     [init"
+"      (syntax-rules ()"
+"        [(_  r () fi* (x ...)) (begin x ... r)]"
+"        [(_  r (id0 . id*) fi* (x ...))"
+"         (id-assq?? id0 fi* "
+"           (syntax-rules () [(_ i0) (init r id* fi* (x ... (record-set! r i0 id0)))]) "
+"           (syntax-error \"id in define-record-type constructor is not a field:\" id0))])]"
+"     [unroll"
+"      (syntax-rules ()"
+"        [(_ rtn (consn id ...) predn () ([f i] ...) ([a ia] ...) ([m im] ...))"
+"         (begin"
+"            (define rtn (new-record-type 'rtn '(f ...)))"
+"            (define consn (lambda (id ...) (let ([r (make-record rtn #&(length (f ...)))]) (init r (id ...) ([f i] ...) ()))))"
+"            (define predn (lambda (obj) (record? obj rtn)))"
+"            (define a (lambda (obj) (record-ref obj ia))) ..."
+"            (define m (lambda (obj val) (record-set! obj im val))) ...)]"
+"        [(_ rtn cf* predn ([fn accn] fam ...) (fi ...) (ai ...) (mi ...))"
+"         (unroll rtn cf* predn (fam ...) "
+"           (fi ... [fn #&(length (fi ...))]) (ai ... [accn #&(length (fi ...))]) (mi ...))]"
+"        [(_  rtn cf* predn ([fn accn modn] fam ...) (fi ...) (ai ...) (mi ...))"
+"         (unroll rtn cf* predn (fam ...) "
+"           (fi ... [fn #&(length (fi ...))]) (ai ... [accn #&(length (fi ...))]) (mi ... [modn #&(length (fi ...))]))])])"
+"    (syntax-rules ()"
+"      [(_ rtn (consn id ...) predn (fn . am) ...)"
+"       (unroll rtn (consn id ...) predn ((fn . am) ...) () () ())])))"
 ;
 EOS
 )
