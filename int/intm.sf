@@ -2604,6 +2604,17 @@
 ; 6.12. Environments and evaluation
 (def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
 
+; 6.13.1. Ports
+(def-global (open-binary-input-file string))
+(def-global (open-input-string string))
+(def-global (open-input-bytevector u8vector))
+(def-global (open-binary-output-file string))
+
+; 6.13.2. Input
+(def-global (eof-object))
+(def-global (read-u8 iport ?))
+(def-global (peek-u8 iport ?))
+(def-global (u8-ready? iport ?))
 
 ; 6.14. System interface 
 (def-global (file-exists? string))    ; filename
@@ -2612,7 +2623,6 @@
 (def-global (get-environment-variable string))
 (def-global (current-jiffy))
 (def-global (jiffies-per-second))
-(def-global (open-input-string string))
 (def-global (features)
   (lambda () '(sharpf sharpf-interpreter sharpf-ints)))
 

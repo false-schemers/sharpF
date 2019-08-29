@@ -1584,6 +1584,13 @@ long fxflo(double f) {
   return d;
 }")
 
+(%definition "extern int *dupbytevector(int *d);")
+(%localdef "int *dupbytevector(int *d0) {
+  int *d1 = mallocbvdata(*d0); *d1 = *d0; 
+  memcpy(bvdatabytes(d1), bvdatabytes(d0), *d0); 
+  return d1;
+}")
+
 (%definition "extern int bytevectoreq(int *d0, int *d1);")
 (%localdef "int bytevectoreq(int *d0, int *d1) {
   int l0 = *d0, l1 = *d1;
@@ -2434,20 +2441,19 @@ default: /* inter-host call */
 
 (%definition "extern cxtype_t *IPORT_FILE_NTAG;")
 (%definition "extern cxtype_t *IPORT_STRING_NTAG;")
+(%definition "extern cxtype_t *IPORT_BYTEVECTOR_NTAG;")
 (%definition "static cxtype_iport_t *iportvt(obj o) { 
   cxtype_t *pt; if (!isobjptr(o)) return NULL;
   pt = (cxtype_t*)objptr_from_obj(o)[-1];
-  if (pt == IPORT_FILE_NTAG || pt == IPORT_STRING_NTAG) return (cxtype_iport_t*)pt;
-  else return NULL; }")
+  if (pt != IPORT_FILE_NTAG && pt != IPORT_STRING_NTAG && pt != IPORT_BYTEVECTOR_NTAG) return NULL; 
+  else return (cxtype_iport_t*)pt; }")
 (%definition "#define isiport(o) (iportvt(o) != NULL)")
 (%definition "#define iportdata(o) ((void*)(*objptr_from_obj(o)))")
-
 
 (define-inline (close-input-port p)
   (%prim?! "{ /* close-input-port */
     obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o); assert(vt);
     $return void(vt->close(iportdata(o))); }" p)) 
-
 
 ; file input ports
 
@@ -2469,7 +2475,12 @@ default: /* inter-host call */
   (let ([file* (open-file* fn "r")])
     (if file* (%prim*?! "obj(mkiport_file($live, (void*)(obj_from_$arg)))" file*)
         (error 'open-input-file "cannot open file" fn))))
-  
+
+(define-inline (open-binary-input-file fn)
+  (let ([file* (open-file* fn "rb")])
+    (if file* (%prim*?! "obj(mkiport_file($live, (void*)(obj_from_$arg)))" file*)
+        (error 'open-binary-input-file "cannot open file" fn))))
+
 (define-inline (call-with-input-file fn proc)      ; proc must return 1 value!
   (let* ([p (open-input-file fn)] [v (proc p)])
     (close-input-port p)
@@ -2482,7 +2493,6 @@ default: /* inter-host call */
       (close-input-port p1)
       (set! *current-input-port* p0)
       v)))
-
 
 ; string input ports 
 
@@ -2511,6 +2521,33 @@ default: /* inter-host call */
     int *d = dupstring(stringdata(obj_from_$arg));
     $return obj(mkiport_string($live, sialloc(sdatachars(d), d))); }" s))
 
+; bytevector input ports 
+
+(%definition "/* bytevector input ports */")
+(%definition "typedef struct { unsigned char *p, *e; void *base; } bvifile_t;")
+(%localdef "bvifile_t *bvialloc(unsigned char *p, unsigned char *e, void *base) { 
+  bvifile_t *fp = cxm_cknull(malloc(sizeof(bvifile_t)), \"malloc(bvifile)\");
+  fp->p = p; fp->e = e; fp->base = base; return fp; }")
+(%definition "extern bvifile_t *bvialloc(unsigned char *p, unsigned char *e, void *base);")
+(%localdef "static void bvifree(bvifile_t *fp) { 
+  assert(fp); if (fp->base) free(fp->base); free(fp); }")
+(%localdef "static void bviclose(bvifile_t *fp) { 
+  assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = fp->e = (unsigned char *)\"\"; }")
+(%localdef "static int bvigetch(bvifile_t *fp) {
+  assert(fp && fp->p && fp->e); return (fp->p >= fp->e) ? EOF : (0xff & *(fp->p)++); }")
+(%localdef "static int bviungetch(int c, bvifile_t *fp) {
+  assert(fp && fp->p && fp->e); --(fp->p); assert(c == *(fp->p)); return c; }")
+(%localdef "static cxtype_iport_t cxt_iport_bytevector = {
+  \"bytevector-input-port\", (void (*)(void*))bvifree, (int (*)(void*))bviclose,
+  (int (*)(void*))bvigetch, (int (*)(int, void*))bviungetch };")
+(%localdef "cxtype_t *IPORT_BYTEVECTOR_NTAG = (cxtype_t *)&cxt_iport_bytevector;")
+(%definition "#define mkiport_bytevector(l, fp) hpushptr(fp, IPORT_BYTEVECTOR_NTAG, l)")
+
+(define-inline (open-input-bytevector s)
+  (%prim*? "{ /* open-input-bytevector */
+    int *d = dupbytevector(bytevectordata(obj_from_$arg));
+    unsigned char *p = bvdatabytes(d), *e = p + *d;
+    $return obj(mkiport_bytevector($live, bvialloc(p, e, d))); }" s))
 
 ; file output ports
 
@@ -2539,6 +2576,11 @@ default: /* inter-host call */
     (if file* (%prim*?! "obj(mkoport($live, (void*)(obj_from_$arg)))" file*)
         (error 'open-output-file "cannot open file" fn))))
 
+(define-inline (open-binary-output-file fn)
+  (let ([file* (open-file* fn "wb")])
+    (if file* (%prim*?! "obj(mkoport($live, (void*)(obj_from_$arg)))" file*)
+        (error 'open-binary-output-file "cannot open file" fn))))
+
 (define-inline (flush-output-port p)
   (%prim?! "void(fflush(oportdata(obj_from_$arg)))" p))
 
@@ -2558,8 +2600,7 @@ default: /* inter-host call */
       (set! *current-output-port* p0)
       v)))
 
-
-; simple i/o
+; simple text i/o
 
 (define-syntax read-char
   (syntax-rules ()
@@ -2635,6 +2676,30 @@ default: /* inter-host call */
     [(_ n) (display-input-port n (current-output-port))]
     [(_ n p) (write-string "#<oport>" p)]
     [_ %residual-display-output-port])) 
+
+; simple binary i/o
+
+(define-syntax read-u8
+  (syntax-rules ()
+    [(_) (read-u8 (current-input-port))]
+    [(_ p) (%prim?! ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
+                "    int c; assert(vt); c = vt->getch(iportdata(o));\n"
+                "    $return obj(c == EOF ? mkeof() : obj_from_fixnum(c & 0xff)); }") p)]
+    [_ %residual-read-u8]))
+
+(define-syntax peek-u8
+  (syntax-rules ()
+    [(_) (peek-u8 (current-input-port))]
+    [(_ p) (%prim? ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
+                "    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);\n"
+                "    $return obj(c == EOF ? mkeof() : obj_from_fixnum(c & 0xff)); }") p)]
+    [_ %residual-peek-char]))
+
+(define-syntax u8-ready?
+  (syntax-rules ()
+    [(_) (u8-ready? (current-input-port))]
+    [(_ p) #t] ; no better solution for FILE/STRING ports
+    [_ %residual-u8-ready?]))
 
 
 ; equivalence and case
@@ -3567,6 +3632,11 @@ default: /* inter-host call */
 (define %residual-write-char (unary-binary-adaptor write-char))
 (define %residual-write-string (unary-binary-adaptor write-string))
 (define %residual-newline (nullary-unary-adaptor newline))
+
+(define %residual-read-u8 (nullary-unary-adaptor read-u8))
+(define %residual-peek-u8 (nullary-unary-adaptor peek-u8))
+(define %residual-u8-ready? (nullary-unary-adaptor u8-ready?))
+
 
 (define %residual-write (unary-binary-adaptor write))
 (define %residual-display (unary-binary-adaptor display))
