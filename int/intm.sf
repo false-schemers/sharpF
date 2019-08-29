@@ -1090,7 +1090,9 @@
   ARGCHECK_OPORT_OPT,
   ARGCHECK_OBJ_OPORT_OPT,
   ARGCHECK_CHAR_OPORT_OPT,
+  ARGCHECK_STRING_OPORT_OPT,
   ARGCHECK_U8_OPORT_OPT,
+  ARGCHECK_U8VECTOR_OPORT_OPT,
   ADD_Z_ETC,
   SUB_Z_Z_ETC,
   E_Z_Z_Z_ETC,
@@ -1639,6 +1641,15 @@
           if (!ischar(o1) || !isoport(o2)) res = ACRES_BADTYPE; 
         } else res = ACRES_BADARGC; 
         break;
+      case ARGCHECK_STRING_OPORT_OPT:
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isstring(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !isoport(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
       case ARGCHECK_U8_OPORT_OPT:
         if (ac == 1) {
           obj o; if (l) o = car(l); else o = va_arg(args, obj); 
@@ -1646,6 +1657,15 @@
         } else if (ac == 2) { 
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
           if (!is_byte_obj(o1) || !isoport(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_U8VECTOR_OPORT_OPT:
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isbytevector(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isbytevector(o1) || !isoport(o2)) res = ACRES_BADTYPE; 
         } else res = ACRES_BADARGC; 
         break;
       /* special checks for popular inlined operations; return corresponding inlining code id if successful */
@@ -2318,7 +2338,9 @@
 (def-arg-checker (* oport ?)             (mark-argcheck ARGCHECK_OPORT_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) #f)))
 (def-arg-checker (* obj oport ?)         (mark-argcheck ARGCHECK_OBJ_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 (def-arg-checker (* char oport ?)        (mark-argcheck ARGCHECK_CHAR_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* string oport ?)      (mark-argcheck ARGCHECK_STRING_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 (def-arg-checker (* u8 oport ?)          (mark-argcheck ARGCHECK_U8_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* u8vector oport ?)    (mark-argcheck ARGCHECK_U8VECTOR_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 
 
 ;------------------------------------------------------------------------------
@@ -2631,7 +2653,9 @@
 
 ; 6.13.3. Output
 (def-global (flush-output-port oport ?))
+(def-global (write-string string oport ?))
 (def-global (write-u8 u8 oport ?))
+(def-global (write-bytevector u8vector oport ?))
 
 ; 6.14. System interface 
 (def-global (file-exists? string))    ; filename
@@ -2664,7 +2688,6 @@
 (def-global (reverse! list)) ; used in init code
 (def-global (exit n ?))
 (def-global (system string))
-(def-global write-string (get-global 'display)) ;alias?
 (def-global (print-procedure proc))
 (def-global (current-environment)  (lambda () *current-environment*))
 (def-global (set-current-environment! environment)  (lambda (e) (set! *current-environment* e)))

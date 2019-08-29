@@ -2453,6 +2453,15 @@ default: /* inter-host call */
 (%definition "#define isiport(o) (iportvt(o) != NULL)")
 (%definition "#define iportdata(o) ((void*)(*objptr_from_obj(o)))")
 
+(%definition "static int iportgetc(obj o) {
+  cxtype_iport_t *vt = iportvt(o); void *pp = iportdata(o);
+  assert(vt); return vt->getch(pp);
+}")
+(%definition "static int iportpeekc(obj o) {
+  cxtype_iport_t *vt = iportvt(o); void *pp = iportdata(o); int c;
+  assert(vt); c = vt->getch(pp); if (c != EOF) vt->ungetch(c, pp); return c;
+}")
+
 (define-inline (input-port? x)
   (%prim "bool(isiport(obj_from_$arg))" x))
 
@@ -2590,6 +2599,7 @@ default: /* inter-host call */
 (%definition "#define ckoportvt(o) ((cxtype_oport_t*)cxm_cknull(oportvt(o), \"oportvt\"))")  
 (%definition "#define isoport(o) (oportvt(o) != NULL)")
 (%definition "#define oportdata(o) ((void*)(*objptr_from_obj(o)))")
+
 (%definition "static void oportputc(int c, obj o) {
   cxtype_oport_t *vt = oportvt(o); void *pp = oportdata(o);
   assert(vt); vt->putch(c, pp);
@@ -2597,6 +2607,10 @@ default: /* inter-host call */
 (%definition "static void oportputs(char *s, obj o) {
   cxtype_oport_t *vt = oportvt(o); void *pp = oportdata(o);
   assert(vt); while (*s) vt->putch(*s++, pp);
+}")
+(%definition "static void oportwrite(char *s, int n, obj o) {
+  cxtype_oport_t *vt = oportvt(o); void *pp = oportdata(o);
+  assert(vt); while (n-- > 0) vt->putch(*s++, pp);
 }")
 (%definition "static void oportflush(obj o) {
   cxtype_oport_t *vt = oportvt(o); void *pp = oportdata(o);
@@ -2670,17 +2684,13 @@ default: /* inter-host call */
 (define-syntax read-char
   (syntax-rules ()
     [(_) (read-char (current-input-port))]
-    [(_ p) (%prim?! ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
-                "    int c; assert(vt); c = vt->getch(iportdata(o));\n"
-                "    $return obj(c == EOF ? mkeof() : obj_from_char(c)); }") p)]
+    [(_ p) (%prim?! "{ int c = iportgetc(obj_from_$arg);  $return obj(c == EOF ? mkeof() : obj_from_char(c)); }" p)]
     [_ %residual-read-char]))
 
 (define-syntax peek-char
   (syntax-rules ()
     [(_) (peek-char (current-input-port))]
-    [(_ p) (%prim? ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
-                "    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);\n"
-                "    $return obj(c == EOF ? mkeof() : obj_from_char(c)); }") p)]
+    [(_ p) (%prim?! "{ int c = iportpeekc(obj_from_$arg);  $return obj(c == EOF ? mkeof() : obj_from_char(c)); }" p)]
     [_ %residual-peek-char]))
 
 (define-syntax char-ready?
@@ -2743,7 +2753,7 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_ x) (display-input-port x (current-output-port))]
     [(_ x p) (%prim?! "{ /* display-input-port */
-    char buf[60]; sprintf(buf, \"#<%s>\", ((cxtype_iport_t*)cxm_cknull(iportvt(obj_from_$arg), \"iportvt\"))->tname);
+    char buf[60]; sprintf(buf, \"#<%s>\", ckiportvt(obj_from_$arg)->tname);
     $return void(oportputs(buf, obj_from_$arg)); }" x p)]
     [_ %residual-display-input-port]))
 
@@ -2751,7 +2761,7 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_ x) (display-output-port x (current-output-port))]
     [(_ x p) (%prim?! "{ /* display-output-port */
-    char buf[60]; sprintf(buf, \"#<%s>\", ((cxtype_oport_t*)cxm_cknull(oportvt(obj_from_$arg), \"oportvt\"))->tname);
+    char buf[60]; sprintf(buf, \"#<%s>\", ckoportvt(obj_from_$arg)->tname);
     $return void(oportputs(buf, obj_from_$arg)); }" x p)]
     [_ %residual-display-output-port]))
 
@@ -2760,17 +2770,13 @@ default: /* inter-host call */
 (define-syntax read-u8
   (syntax-rules ()
     [(_) (read-u8 (current-input-port))]
-    [(_ p) (%prim?! ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
-                "    int c; assert(vt); c = vt->getch(iportdata(o));\n"
-                "    $return obj(c == EOF ? mkeof() : obj_from_fixnum(c & 0xff)); }") p)]
+    [(_ p) (%prim?! "{ int c = iportgetc(obj_from_$arg);  $return obj(c == EOF ? mkeof() : obj_from_fixnum(c & 0xff)); }" p)]
     [_ %residual-read-u8]))
 
 (define-syntax peek-u8
   (syntax-rules ()
     [(_) (peek-u8 (current-input-port))]
-    [(_ p) (%prim? ("{ obj o = obj_from_$arg; cxtype_iport_t *vt = iportvt(o);\n"
-                "    int c; void *p; assert(vt); p = iportdata(o); c = vt->getch(p); if (c != EOF) vt->ungetch(c, p);\n"
-                "    $return obj(c == EOF ? mkeof() : obj_from_fixnum(c & 0xff)); }") p)]
+    [(_ p) (%prim?! "{ int c = iportpeekc(obj_from_$arg);  $return obj(c == EOF ? mkeof() : obj_from_fixnum(c & 0xff)); }" p)]
     [_ %residual-peek-char]))
 
 (define-syntax u8-ready?
@@ -2784,6 +2790,14 @@ default: /* inter-host call */
     [(_ c) (write-u8 c (current-output-port))]
     [(_ c p) (%prim?! "void(oportputc(fixnum_from_$arg, obj_from_$arg))" c p)]
     [_ %residual-write-u8]))
+
+(define-syntax write-bytevector
+  (syntax-rules ()
+    [(_ bv) (write-bytevector bv (current-output-port))]
+    [(_ bv p) (%prim? "{ /* write-bytevector */
+    int *d = bytevectordata(obj_from_$arg);
+    $return void(oportwrite((char *)bvdatabytes(d), *d,  obj_from_$arg)); }" bv p)]
+    [_ %residual-write-bytevector]))
 
 
 ; equivalence and case
@@ -3722,6 +3736,7 @@ default: /* inter-host call */
 (define %residual-peek-u8 (nullary-unary-adaptor peek-u8))
 (define %residual-u8-ready? (nullary-unary-adaptor u8-ready?))
 (define %residual-write-u8 (unary-binary-adaptor write-char))
+(define %residual-write-bytevector (unary-binary-adaptor write-string))
 
 (define %residual-write (unary-binary-adaptor write))
 (define %residual-display (unary-binary-adaptor display))
@@ -3733,18 +3748,9 @@ default: /* inter-host call */
 ; development plan:
 ; + add bytevectors with minimal function set
 ; + add records: new-record-type record? make-record record-type-descriptor record-ref record-set! define-record-type 
-; - add binary file ports, corresponding operations from r7rs
+; + add binary file ports, corresponding operations from r7rs
+; + add bytevector input ports
 ; - upgrade all existing operations to r7rs (member, assoc, ...)?
-; - add bytevector input ports
 ; - add string output ports
 ; - add bytevector output ports
 ; - upgrade current port procedures to parameters, add parameterize
-
-#;(define (main argv)
-  (define foobar 42)
-  (write #u8()) (newline)
-  (write #u8(1)) (newline)
-  (write #u8(1 2 #x10 #e#o10)) (newline)
-  ;NB: this works for now (fixme: we should first add support for #{s8,u8,s16,u16,s32,u32,s64,u64,f32,f64,c64,c128}(...) to sfc reader!)
-  (write #u8(1 2 3 4 5 6 7 (fixnum-width) foobar)) (newline) 
-  #f)
