@@ -14,7 +14,20 @@ The `#f` value (represented as immediate 0) is hard-wired since SFC needs to com
 traditional conditional forms; everything else should be explicitly defined before
 use. If one's code does not use lists or strings, they do not need to be implemented!
 
-Here is an example of what a simple #F "Scheme" program might look like and what
+The starting point is the obligatory "Hello, World!" example: [hello.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/hello.sf)
+
+It can be compiled and executed as follows:
+
+```
+$ sfc hello.sf             # sfc produces hello.c (273 lines, ~8K in size)
+$ gcc hello.c              # gcc produces a.out (~50K in size)
+$ ./a.out
+Hello, World!
+```
+You can see the compiled C program here: [hello.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/compiled/hello.c). As it defines no data types or functions, the whole file
+is basically just a garbage collector and the startup and shutdown code.
+
+Here is an example of what a bigger #F "Scheme" program might look like and what
 happens when it is compiled and executed:
 
 ```
@@ -28,7 +41,7 @@ The files can be seen here:
 [tak.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/tak.sf)
 [tak.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/compiled/tak.c)
 
-Since tak.sf defines a global function called "main", SFC added the #F runtime system
+As in the first example, since tak.sf defines a global function called "main", SFC added the #F runtime system
 to the output C file. There is no need to link with anything else except for the
 standard C runtime.
 
@@ -117,8 +130,8 @@ programs:
   *  run-time errors such as fixnum overflows trigger asserts in C code unless `NDEBUG` is defined during compilation
   *  deciphering syntax errors in the source code can be tricky
 
-In addition to R^5RS-level functionality, LibS supports many popular extensions
-defined in pre-R^5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
+In addition to R5RS-level functionality, LibS supports many popular extensions
+defined in pre-R5RS Scheme standards, SRFIs, and R7RS libraries:
 
   *  many fixnum (`fx`) and flonum (`fl`) - specific operations
   *  `letrec*`, `rec`, `receive`, `let-values`, `let*-values`, `case-lambda` forms
@@ -301,6 +314,13 @@ They can be compiled in the following manner:
 ./sfc tak.sf   # produces tak.c 
 gcc -o tak -Wall -O3 -DNDEBUG tak.c
 ```
+
+As a demonstration of how far you can go, here is a full-scale R5RS interpreter in a single #F file:
+
+[siof.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/siof.sf)
+
+(please see [SIOF](https://github.com/false-schemers/siof) repository for details)
+
 
 ## Historical note
 
