@@ -2591,10 +2591,13 @@ default: /* inter-host call */
 
 (%definition "extern cxtype_t *OPORT_CLOSED_NTAG;")
 (%definition "extern cxtype_t *OPORT_FILE_NTAG;")
+(%definition "extern cxtype_t *OPORT_STRING_NTAG;")
+(%definition "extern cxtype_t *OPORT_BYTEVECTOR_NTAG;")
 (%definition "static cxtype_oport_t *oportvt(obj o) { 
   cxtype_t *pt; if (!isobjptr(o)) return NULL;
   pt = (cxtype_t*)objptr_from_obj(o)[-1];
-  if (pt != OPORT_CLOSED_NTAG && pt != OPORT_FILE_NTAG) return NULL; 
+  if (pt != OPORT_CLOSED_NTAG && pt != OPORT_FILE_NTAG && 
+      pt != OPORT_STRING_NTAG && pt != OPORT_BYTEVECTOR_NTAG) return NULL; 
   else return (cxtype_oport_t*)pt; }")
 (%definition "#define ckoportvt(o) ((cxtype_oport_t*)cxm_cknull(oportvt(o), \"oportvt\"))")  
 (%definition "#define isoport(o) (oportvt(o) != NULL)")
@@ -2678,6 +2681,72 @@ default: /* inter-host call */
       (close-output-port p1)
       (set! *current-output-port* p0)
       v)))
+
+; string output ports 
+
+(%definition "/* string output ports */")
+(%definition "typedef struct cbuf_tag { char *buf; char *fill; char *end; } cbuf_t;")
+(%definition "extern cbuf_t* newcb(void);") 
+(%localdef "cbuf_t* newcb(void) {
+  cbuf_t* pcb = cxm_cknull(malloc(sizeof(cbuf_t)), \"malloc(cbuf)\");
+  pcb->fill = pcb->buf = cxm_cknull(malloc(64), \"malloc(cbdata)\");
+  pcb->end = pcb->buf + 64; return pcb;
+}")
+(%localdef "static void freecb(cbuf_t* pcb) { if (pcb) { free(pcb->buf); free(pcb); } }")
+(%localdef "static void cbgrow(cbuf_t* pcb, size_t n) {
+  size_t oldsz = pcb->end - pcb->buf, newsz = oldsz*2;
+  size_t cnt = pcb->fill - pcb->buf;
+  if (oldsz + n > newsz) newsz += n;
+  pcb->buf = cxm_cknull(realloc(pcb->buf, newsz), \"realloc(cbdata)\");
+  pcb->fill = pcb->buf + cnt, pcb->end = pcb->buf + newsz;
+}")
+(%localdef "static int cbputc(int c, cbuf_t* pcb) {
+  if ((pcb)->fill == (pcb)->end) cbgrow(pcb, 1); *((pcb)->fill)++ = c; return c;
+}")
+(%localdef "static int cbflush(cbuf_t* pcb) { return 0; }")
+(%localdef "static int cbclose(cbuf_t* pcb) { free(pcb->buf); pcb->buf = NULL; return 0; }")
+(%localdef "static size_t cblen(cbuf_t* pcb) { return pcb->fill - pcb->buf; }")
+(%definition "extern char* cbdata(cbuf_t* pcb);") 
+(%localdef "char* cbdata(cbuf_t* pcb) {
+  if (pcb->fill == pcb->end) cbgrow(pcb, 1); *(pcb->fill) = 0; return pcb->buf; 
+}")
+(%localdef "static cxtype_oport_t cxt_oport_string = {
+  \"string-output-port\", (void (*)(void*))freecb, (int (*)(void*))cbclose,
+  (int (*)(int, void*))cbputc, (int (*)(void*))cbflush };")
+(%localdef "cxtype_t *OPORT_STRING_NTAG = (cxtype_t *)&cxt_oport_string;")
+(%definition "#define mkoport_string(l, fp) hpushptr(fp, OPORT_STRING_NTAG, l)")
+
+(define-inline (open-output-string)
+  (%prim*? "{ /* open-output-string */
+    $return obj(mkoport_string($live, newcb())); }"))
+
+(define-inline (get-output-string p) ; works on string and bv ports
+  (%prim*? "{ /* get-output-string */
+    obj o = obj_from_$arg; cxtype_oport_t *vt = ckoportvt(o); 
+    if (vt != (cxtype_oport_t *)OPORT_STRING_NTAG &&
+        vt != (cxtype_oport_t *)OPORT_BYTEVECTOR_NTAG) $return obj(mkeof());
+    else $return obj(hpushstr($live, newstring(cbdata(oportdata(o))))); }" p)) 
+
+; bytevector output ports 
+
+(%definition "/* bytevector output ports */")
+(%localdef "static cxtype_oport_t cxt_oport_bytevector = {
+  \"bytevector-output-port\", (void (*)(void*))freecb, (int (*)(void*))cbclose,
+  (int (*)(int, void*))cbputc, (int (*)(void*))cbflush };")
+(%localdef "cxtype_t *OPORT_BYTEVECTOR_NTAG = (cxtype_t *)&cxt_oport_bytevector;")
+(%definition "#define mkoport_bytevector(l, fp) hpushptr(fp, OPORT_BYTEVECTOR_NTAG, l)")
+
+(define-inline (open-output-bytevector)
+  (%prim*? "{ /* open-output-bytevector */
+    $return obj(mkoport_bytevector($live, newcb())); }"))
+
+(define-inline (get-output-bytevector p) ; works on bv and string ports
+  (%prim*? "{ /* get-output-bytevector */
+    obj o = obj_from_$arg; cxtype_oport_t *vt = ckoportvt(o); 
+    if (vt != (cxtype_oport_t *)OPORT_BYTEVECTOR_NTAG &&
+        vt != (cxtype_oport_t *)OPORT_STRING_NTAG) $return obj(mkeof());
+    else { cbuf_t *pcb = oportdata(o); int len = pcb->fill - pcb->buf; 
+    $return obj(hpushu8v($live, newbytevector((unsigned char *)pcb->buf, len))); } }" p)) 
 
 ; simple text i/o
 
@@ -2848,7 +2917,7 @@ default: /* inter-host call */
   if ((h = objptr_from_obj(x)[-1]) != objptr_from_obj(y)[-1]) return 0;
   if (h == (obj)FLONUM_NTAG) return flonum_from_obj(x) == flonum_from_obj(y); 
   if (h == (obj)STRING_NTAG) return strcmp(stringchars(x), stringchars(y)) == 0;
-  if (h == (obj)BYTEVECTOR_NTAG) return strcmp(stringchars(x), stringchars(y)) == 0; 
+  if (h == (obj)BYTEVECTOR_NTAG) return bytevectoreq(bytevectordata(x), bytevectordata(y)); 
   if (isaptr(h) || !(n = size_from_obj(h)) || hblkref(x, 0) != hblkref(y, 0)) return 0;
   for (i = 1; i < n-1; ++i) if (!isequal(hblkref(x, i), hblkref(y, i))) return 0;
   if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 1; 

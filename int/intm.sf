@@ -2638,12 +2638,17 @@
 (def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
 
 ; 6.13.1. Ports
+(def-global (current-error-port))
 (def-global (open-binary-input-file string))
 (def-global (open-input-string string))
 (def-global (open-input-bytevector u8vector))
 (def-global (open-binary-output-file string))
 (def-global (input-port-open? iport))
 (def-global (output-port-open? oport))
+(def-global (open-output-string))
+(def-global (get-output-string oport))
+(def-global (open-output-bytevector))
+(def-global (get-output-bytevector oport))
 
 ; 6.13.2. Input
 (def-global (eof-object))
@@ -2665,7 +2670,7 @@
 (def-global (current-jiffy))
 (def-global (jiffies-per-second))
 (def-global (features)
-  (lambda () '(sharpf sharpf-interpreter sharpf-ints)))
+  (lambda () '(sharpf sharpf-interpreter sharpf-intm)))
 
 
 ;------------------------------------------------------------------------------
