@@ -154,22 +154,58 @@
        (lambda () expr)
        (lambda formals . body))]))
 
-(define-syntax let-values
-  (syntax-rules ()
-    [(_ () . body)
-     (let () . body)]
-    [(_ ([formals expr] . more) . body)
-     (let ([thunk (lambda () expr)])
-       (let-values more
-         (receive formals (thunk) . body)))]))
-
 (define-syntax let*-values
   (syntax-rules ()
-    [(_ () . body)
-     (let () . body)]
-    [(_ ([formals expr] . more) . body)
-     (receive formals expr
-       (let*-values more . body))]))
+    [(_ () . body) (let () . body)]
+    [(_ ([(a) x] . b*) . body) (let ([a x]) (let*-values b* . body))]
+    [(_ ([aa x] . b*) . body) (call-with-values (lambda () x) (lambda aa (let*-values b* . body)))]))
+
+(define-syntax let-values
+  (letrec-syntax
+    ([loop 
+      (syntax-rules ()
+        [(_ (new-b ...) new-aa x map-b* () () . body)
+         (let*-values (new-b ... [new-aa x]) (let map-b* . body))]
+        [(_ (new-b ...) new-aa old-x map-b* () ([aa x] . b*) . body)
+         (loop (new-b ... [new-aa old-x]) () x map-b* aa b* . body)]
+        [(_ new-b* (new-a ...) x (map-b ...) (a . aa) b* . body)
+         (loop new-b* (new-a ... tmp-a) x (map-b ... [a tmp-a]) aa b* . body)]
+        [(_ new-b* (new-a ...) x (map-b ...) a b* . body) 
+         (loop new-b* (new-a ... . tmp-a) x (map-b ... [a tmp-a]) () b* . body)])])
+    (syntax-rules ()
+      [(_ () . body) (let () . body)]
+      [(_ ([aa x] . b*) . body)
+       (loop () () x () aa b* . body)])))
+
+#;(define-syntax set!-values
+  (letrec-syntax
+    ([loop 
+      (syntax-rules ()
+        [(_ new-aa ([a tmp-a] ...) () x)
+         (call-with-values (lambda () x) (lambda new-aa (set! a tmp-a) ...))]
+        [(_ (new-a ...) (map-a ...) (a . aa) x) 
+         (loop (new-a ... tmp-a) (map-a ... [a tmp-a]) aa x)]
+        [(_ (new-a ...) (map-a ...) a x) 
+         (loop (new-a ... . tmp-a) (map-a ... [a tmp-a]) () x)])])
+    (syntax-rules ()
+      [(_ () x) (define x)]
+      [(_ aa x) (loop () () aa x)])))
+
+(define-syntax define-values
+  (letrec-syntax
+    ([loop 
+      (syntax-rules ()
+        [(_ new-aa ([a tmp-a] ...) () x)
+         (begin
+           (define a (void)) ...
+           (define (call-with-values (lambda () x) (lambda new-aa (set! a tmp-a) ...))))]
+        [(_ (new-a ...) (map-a ...) (a . aa) x) 
+         (loop (new-a ... tmp-a) (map-a ... [a tmp-a]) aa x)]
+        [(_ (new-a ...) (map-a ...) a x) 
+         (loop (new-a ... . tmp-a) (map-a ... [a tmp-a]) () x)])])
+    (syntax-rules ()
+      [(_ () x) (define x)]
+      [(_ aa x) (loop () () aa x)])))
 
 
 ; control
@@ -2368,6 +2404,40 @@ default: /* inter-host call */
      (syntax-rules ()
        [(_ [formals . body] ...)
         (unroll-cases ([formals . body] ...))])))
+
+
+; parameters, r7rs-style
+
+(define make-parameter
+  (case-lambda
+    [(value) 
+     (case-lambda 
+       [() value]
+       [(x) (set! value x)]
+       [(s x) (if s (set! value x) x)])]
+    [(init converter)
+     (let ([value (converter init)])
+       (case-lambda 
+         [() value]
+         [(x) (set! value (converter x))]
+         [(s x) (if s (set! value x) (converter x))]))]))
+
+(define-syntax parameterize
+  (letrec-syntax
+    ([loop 
+      (syntax-rules ()
+        [(_ ([param value p old new] ...) () body)
+         (let ([p param] ...)
+           (let ([old (p)] ... [new (p #f value)] ...)
+             (dynamic-wind
+               (lambda () (p #t new) ...)
+               (lambda () . body)
+               (lambda () (p #t old) ...))))]
+        [(_ args ([param value] . rest) body)
+         (loop ([param value p old new] . args) rest body)])])
+    (syntax-rules ()
+      [(_ ([param value] ...) . body)
+       (loop () ([param value] ...) body)])))
 
 
 ; delay & force

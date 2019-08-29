@@ -1082,6 +1082,7 @@
   ARGCHECK_STRING_THUNK,
   ARGCHECK_STRING_PROC1IP,
   ARGCHECK_STRING_PROC1OP,
+  ARGCHECK_OBJ_PROC1_OPT,
   ARGCHECK_ENVIRONMENT,
   ARGCHECK_OBJ_ENVIRONMENT_OPT,
   ARGCHECK_IPORT,
@@ -1249,6 +1250,72 @@
     case ARGCHECK_OPORT:
     case ARGCHECK_OPORT_OPT:
     case ARGCHECK_OBJ_OPORT_OPT:
+    case NOT_OBJ:
+      return 1;
+    default: 
+      return 0;
+  }
+}")
+
+(%localdef "static int isproc1(obj p) {
+  int ann = peekann(p);
+  if (ann == FIXNUM_MIN) return 0; /* not a proc */
+  if (ann >= 0) { /* ac check only */
+    int ac = 1; return (ann / 1000 <= ac && ac <= ann % 1000);
+  } else switch (ann) {
+    case ARGCHECK_N_OPT:
+    case ARGCHECK_N:
+    case ARGCHECK_N_ETC:
+    case ARGCHECK_Q:
+    case ARGCHECK_Z:
+    case ARGCHECK_Z_ETC:
+    case ARGCHECK_X:
+    case ARGCHECK_X_ETC:
+    case ARGCHECK_X_X_ETC:
+    case ARGCHECK_Z_OR_X_X:
+    case ARGCHECK_Z_RADIX_OPT:
+    case ARGCHECK_K_CHAR_OPT:
+    case ARGCHECK_K_OBJ_OPT:
+    case ARGCHECK_PAIR:
+    case ARGCHECK_LIST:
+    case ARGCHECK_LIST_ETC:
+    case ARGCHECK_LIST_ETC_OBJ_OPT:
+    case ARGCHECK_ALIST:
+    case ARGCHECK_U8LIST:
+    case ARGCHECK_SYMBOL:
+    case ARGCHECK_CHAR:
+    case ARGCHECK_CHAR_ETC:
+    case ARGCHECK_STRING:
+    case ARGCHECK_STRING_ETC:
+    case ARGCHECK_STRING_OBJ_ETC:
+    case ARGCHECK_STRING_RADIX_OPT:
+    case ARGCHECK_VECTOR:
+    case ARGCHECK_U8_ETC:
+    case ARGCHECK_K_U8_OPT:
+    case ARGCHECK_U8VECTOR:
+    case ARGCHECK_RECORD:
+    case ARGCHECK_PROC:
+    case ARGCHECK_PROC1CC:
+    case ARGCHECK_OBJ_PROC1_OPT:
+    case ARGCHECK_ENVIRONMENT:
+    case ARGCHECK_OBJ_ENVIRONMENT_OPT:
+    case ARGCHECK_IPORT:
+    case ARGCHECK_IPORT_OPT:
+    case ARGCHECK_OPORT:
+    case ARGCHECK_OPORT_OPT:
+    case ARGCHECK_OBJ_OPORT_OPT:
+    case ARGCHECK_CHAR_OPORT_OPT:
+    case ARGCHECK_STRING_OPORT_OPT:
+    case ARGCHECK_U8_OPORT_OPT:
+    case ARGCHECK_U8VECTOR_OPORT_OPT:
+    case ADD_Z_ETC:
+    case SUB_Z_Z_ETC:
+    case CAR_PAIR:
+    case CDR_PAIR:
+    case CAAR_PAIR:
+    case CADR_PAIR:
+    case CDAR_PAIR:
+    case CDDR_PAIR:
     case NOT_OBJ:
       return 1;
     default: 
@@ -1597,6 +1664,14 @@
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
           if (!isstring(o1) || !isproc1op(o2)) res = ACRES_BADTYPE;
         } break;
+      case ARGCHECK_OBJ_PROC1_OPT:
+        if (ac == 1) {
+          /* ok, obj requires no check */
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isproc1(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
       case ARGCHECK_ENVIRONMENT:
         if (ac != 1) res = ACRES_BADARGC; else { 
           obj o; if (l) o = car(l); else o = va_arg(args, obj); 
@@ -2330,6 +2405,7 @@
 (def-arg-checker (* string thunk)        (mark-argcheck ARGCHECK_STRING_THUNK *))
 (def-arg-checker (* thunk proc)          (mark-argcheck ARGCHECK_THUNK_PROC *))
 (def-arg-checker (* thunk thunk thunk)   (mark-argcheck ARGCHECK_THUNK_THUNK_THUNK *))
+(def-arg-checker (* obj proc1 ?)         (mark-argcheck ARGCHECK_OBJ_PROC1_OPT *))
 (def-arg-checker (* environment)         (mark-argcheck ARGCHECK_ENVIRONMENT *))
 (def-arg-checker (* obj environment ?)   (mark-argcheck ARGCHECK_OBJ_ENVIRONMENT_OPT *))
 (def-arg-checker (* iport)               (mark-argcheck ARGCHECK_IPORT *))
@@ -2614,10 +2690,13 @@
 
 ; selected R7RS extras
 
+; 4.2.6. Dynamic bindings
+(def-global (make-parameter obj proc1 ?) ; macro is in init
+  (lambda args (make-annotated-procedure (apply make-parameter args) (range-argc->annotation 0 2))))
+
 ; 4.2.9. Case-lambda
 (def-global (make-case-lambda obj ...) ; macro is in init
-  (lambda clargs
-     (make-annotated-procedure (apply make-case-lambda clargs) (rest-argc->annotation 1))))
+  (lambda args (make-annotated-procedure (apply make-case-lambda args) (rest-argc->annotation 1))))
 
 ; 6.9  Bytevectors
 (def-global (bytevector? obj))
@@ -2995,6 +3074,62 @@ static char *ints_init_code =
 "    (syntax-rules ()"
 "      [(_ rtn (consn id ...) predn (fn . am) ...)"
 "       (unroll rtn (consn id ...) predn ((fn . am) ...) () () ())])))"
+""
+"(define-syntax let*-values"
+"  (syntax-rules ()"
+"    [(_ () . body) (let () . body)]"
+"    [(_ ([(a) x] . b*) . body) (let ([a x]) (let*-values b* . body))]"
+"    [(_ ([aa x] . b*) . body) (call-with-values (lambda () x) (lambda aa (let*-values b* . body)))]))"
+""
+"(define-syntax let-values"
+"  (letrec-syntax"
+"    ([loop "
+"      (syntax-rules ()"
+"        [(_ (new-b ...) new-aa x map-b* () () . body)"
+"         (let*-values (new-b ... [new-aa x]) (let map-b* . body))]"
+"        [(_ (new-b ...) new-aa old-x map-b* () ([aa x] . b*) . body)"
+"         (loop (new-b ... [new-aa old-x]) () x map-b* aa b* . body)]"
+"        [(_ new-b* (new-a ...) x (map-b ...) (a . aa) b* . body)"
+"         (loop new-b* (new-a ... tmp-a) x (map-b ... [a tmp-a]) aa b* . body)]"
+"        [(_ new-b* (new-a ...) x (map-b ...) a b* . body) "
+"         (loop new-b* (new-a ... . tmp-a) x (map-b ... [a tmp-a]) () b* . body)])])"
+"    (syntax-rules ()"
+"      [(_ () . body) (let () . body)]"
+"      [(_ ([aa x] . b*) . body)"
+"       (loop () () x () aa b* . body)])))"
+""
+"(define-syntax define-values"
+"  (letrec-syntax"
+"    ([loop "
+"      (syntax-rules ()"
+"        [(_ new-aa ([a tmp-a] ...) () x)"
+"         (begin"
+"           (define a (void)) ..."
+"           (define (call-with-values (lambda () x) (lambda new-aa (set! a tmp-a) ...))))]"
+"        [(_ (new-a ...) (map-a ...) (a . aa) x) "
+"         (loop (new-a ... tmp-a) (map-a ... [a tmp-a]) aa x)]"
+"        [(_ (new-a ...) (map-a ...) a x) "
+"         (loop (new-a ... . tmp-a) (map-a ... [a tmp-a]) () x)])])"
+"    (syntax-rules ()"
+"      [(_ () x) (define x)]"
+"      [(_ aa x) (loop () () aa x)])))"
+""
+"(define-syntax parameterize"
+"  (letrec-syntax"
+"    ([loop "
+"      (syntax-rules ()"
+"        [(_ ([param value p old new] ...) () body)"
+"         (let ([p param] ...)"
+"           (let ([old (p)] ... [new (p #f value)] ...)"
+"             (dynamic-wind"
+"               (lambda () (p #t new) ...)"
+"               (lambda () . body)"
+"               (lambda () (p #t old) ...))))]"
+"        [(_ args ([param value] . rest) body)"
+"         (loop ([param value p old new] . args) rest body)])])"
+"    (syntax-rules ()"
+"      [(_ ([param value] ...) . body)"
+"       (loop () ([param value] ...) body)])))"
 ;
 EOS
 )
