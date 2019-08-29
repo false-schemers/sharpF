@@ -36,4 +36,4 @@ IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
 
   *  support for bytevectors, with basic set of operations
   *  support for `define-record-type` records
-  
+  *  simple binary input from files and bytevectors
