@@ -67,7 +67,7 @@ R5RS feature set; most of the forms and procedures behave as expected. Compared 
   *  there is no REPL and no transcript functions
 
 In addition to R5RS-level functionality, LibS supports some popular extensions
-defined in pre-R5RS Scheme standards, SRFIs, and R^6RS/R^7RS libraries:
+defined in pre-R5RS Scheme standards, SRFIs, and R7RS libraries:
 
   *  many fixnum (`fx`) and flonum (`fl`) - specific operations
   *  `letrec*`, `rec`, `receive`, `let-values`, `let*-values`, `when`, `unless`, `case-lambda` forms
