@@ -2573,12 +2573,12 @@ default: /* inter-host call */
 (define-inline (open-input-file fn)
   (let ([file* (open-file* fn "r")])
     (if file* (%prim*?! "obj(mkiport_file($live, (void*)(obj_from_$arg)))" file*)
-        (error 'open-input-file "cannot open file" fn))))
+        (file-error "cannot open input file" fn))))
 
 (define-inline (open-binary-input-file fn)
   (let ([file* (open-file* fn "rb")])
     (if file* (%prim*?! "obj(mkiport_file($live, (void*)(obj_from_$arg)))" file*)
-        (error 'open-binary-input-file "cannot open file" fn))))
+        (file-error "cannot open binary input file" fn))))
 
 (define-inline (call-with-input-file fn proc)      ; proc must return 1 value!
   (let* ([p (open-input-file fn)] [v (proc p)])
@@ -2732,12 +2732,12 @@ default: /* inter-host call */
 (define-inline (open-output-file fn)
   (let ([file* (open-file* fn "w")])
     (if file* (%prim*?! "obj(mkoport_file($live, (void*)(obj_from_$arg)))" file*)
-        (error 'open-output-file "cannot open file" fn))))
+        (file-error "cannot open output file" fn))))
 
 (define-inline (open-binary-output-file fn)
   (let ([file* (open-file* fn "wb")])
     (if file* (%prim*?! "obj(mkoport_file($live, (void*)(obj_from_$arg)))" file*)
-        (error 'open-binary-output-file "cannot open file" fn))))
+        (file-error "cannot open binary output file" fn))))
 
 (define-inline (call-with-output-file fn proc)      ; proc must return 1 value!
   (let* ([p (open-output-file fn)] [v (proc p)])
@@ -3262,7 +3262,7 @@ default: /* inter-host call */
    (pr-where args ep)
    (newline ep))
 
-(define (error . args)
+(define (simple-error . args)
   (let ([ep (current-error-port)])
     (newline ep)
     (print-error-message "Error" args ep)
@@ -3286,7 +3286,7 @@ default: /* inter-host call */
          [dot (cons reader-token-marker "\" . \"")])
 
     (define-syntax r-error
-      (syntax-rules () [(_ p r a ...) (error 'read r a ...)]))
+      (syntax-rules () [(_ p msg a ...) (read-error msg a ... 'port: p)])) ; see read-error below
 
     (define (reader-token? form)
       (and (pair? form) (eq? (car form) reader-token-marker)))
@@ -3606,6 +3606,111 @@ default: /* inter-host call */
                (set! *current-dynamic-state* there)
                (before)))))
 
+
+; exceptions and errors
+
+(define-record-type <error-object>
+  (error-object kind message irritants)
+  error-object?
+  (kind error-object-kind)
+  (message error-object-message)
+  (irritants error-object-irritants))
+
+(define (error msg . args)
+  (raise (error-object #f msg args)))
+
+(define current-exception-handler 
+  (make-parameter
+    (letrec 
+      ([default-handler
+        (case-lambda 
+          [() default-handler] ;this one its own parent 
+          [(obj) 
+           (if (error-object? obj)
+               (apply simple-error (error-object-kind obj) (error-object-message obj) (error-object-irritants obj)) 
+               (simple-error #f "unhandled exception" obj))])])
+      default-handler)))
+
+(define (with-exception-handler handler thunk)
+  (let ([eh (current-exception-handler)])
+    (parameterize ([current-exception-handler (case-lambda [() eh] [(obj) (handler obj)])])
+      (thunk)))) 
+
+(define (raise obj)
+  (let ([eh (current-exception-handler)])
+    (parameterize ([current-exception-handler (eh)])
+      (eh obj)
+      (raise (error-object 'raise "exception handler returned" (list eh obj))))))
+
+(define (raise-continuable obj)
+  (let ([eh (current-exception-handler)])
+    (parameterize ([current-exception-handler (eh)])
+      (eh obj))))
+
+(define-inline (abort) (%prim! "void(exit(1))"))
+(define (reset) (%prim! "void(exit(1))"))
+(define (set-reset-handler! fn) (set! reset fn))
+
+(define-syntax guard
+  (letrec-syntax
+    ([guard-aux
+      (syntax-rules (else =>)
+        [(guard-aux reraise (else result1 result2 ...))
+        (begin result1 result2 ...)]
+        [(guard-aux reraise (test => result))
+        (let ([temp test]) (if temp (result temp) reraise))]
+        [(guard-aux reraise (test => result) clause1 clause2 ...)
+        (let ([temp test])
+          (if temp
+              (result temp)
+              (guard-aux reraise clause1 clause2 ...)))]
+        [(guard-aux reraise (test)) (or test reraise)]
+        [(guard-aux reraise (test) clause1 clause2 ...)
+        (let ([temp test])
+          (if temp temp (guard-aux reraise clause1 clause2 ...)))]
+        [(guard-aux reraise (test result1 result2 ...))
+        (if test (begin result1 result2 ...) reraise)]
+        [(guard-aux reraise (test result1 result2 ...) clause1 clause2 ...)
+        (if test
+            (begin result1 result2 ...)
+            (guard-aux reraise clause1 clause2 ...))])])
+    (syntax-rules ()
+      [(guard (var clause ...) e1 e2 ...)
+      ((call/cc
+        (lambda (guard-k)
+          (with-exception-handler
+            (lambda (condition)
+              ((call/cc
+                  (lambda (handler-k)
+                    (guard-k
+                      (lambda ()
+                        (let ([var condition])
+                          (guard-aux
+                            (handler-k
+                              (lambda ()
+                                (raise-continuable condition)))
+                            clause
+                            ...))))))))
+            (lambda ()
+              (call-with-values
+                (lambda () e1 e2 ...)
+                (lambda args
+                  (guard-k (lambda () (apply values args))))))))))])))
+
+
+(define (read-error msg . args)
+  (raise (error-object 'read msg args)))
+
+(define (read-error? obj)
+  (and (error-object? obj) (eq? (error-object-kind obj) 'read))) 
+
+(define (file-error msg . args)
+  (raise (error-object 'file msg args)))
+
+(define (file-error? obj)
+  (and (error-object? obj) (eq? (error-object-kind obj) 'file))) 
+
+
 ; time
 
 (%include <time.h>)
@@ -3624,10 +3729,6 @@ default: /* inter-host call */
     [(_) (exit 0)]
     [(_ n) (%prim! "void(exit(fixnum_from_$arg))" n)]
     [_ %residual-exit]))
-
-(define-inline (abort) (%prim! "void(exit(1))"))
-(define (reset) (%prim! "void(exit(1))"))
-(define (set-reset-handler! fn) (set! reset fn))
 
 (define-inline (argv-ref argv i)
   (%prim* "{ /* argv-ref */

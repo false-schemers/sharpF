@@ -98,18 +98,18 @@
 
 ; errors
 
-; expansion-time 
+; expansion-time (fixme: need unwrap vectors!)
 (define-syntax x-error
-  (syntax-rules () [(_ r a ...) (error 'macroexpander r a ...)]))
+  (syntax-rules () [(_ r a ...) (simple-error 'macroexpander r a ...)]))
 
 ; compile-time 
 (define-syntax c-error
-  (syntax-rules () [(_ r a ...) (error 'compiler r a ...)]))
+  (syntax-rules () [(_ r a ...) (simple-error 'compiler r a ...)]))
 
 ; run-time 
 (define (r-error msg . args)
   (let loop ([args args] [a* '()])
-    (cond [(null? args) (apply error #f msg (reverse! a*))]
+    (cond [(null? args) (apply simple-error #f msg (reverse! a*))]
           [(procedure? (car args))
            (let ([name (reverse-global-lookup (car args))])
              (if name 
@@ -1083,6 +1083,7 @@
   ARGCHECK_STRING_PROC1IP,
   ARGCHECK_STRING_PROC1OP,
   ARGCHECK_OBJ_PROC1_OPT,
+  ARGCHECK_PROC1_THUNK,
   ARGCHECK_ENVIRONMENT,
   ARGCHECK_OBJ_ENVIRONMENT_OPT,
   ARGCHECK_IPORT,
@@ -1672,6 +1673,11 @@
           if (!isproc1(o2)) res = ACRES_BADTYPE; 
         } else res = ACRES_BADARGC; 
         break;
+      case ARGCHECK_PROC1_THUNK:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isproc1(o1) || !isthunk(o2)) res = ACRES_BADTYPE;
+        } break;
       case ARGCHECK_ENVIRONMENT:
         if (ac != 1) res = ACRES_BADARGC; else { 
           obj o; if (l) o = car(l); else o = va_arg(args, obj); 
@@ -2406,6 +2412,7 @@
 (def-arg-checker (* thunk proc)          (mark-argcheck ARGCHECK_THUNK_PROC *))
 (def-arg-checker (* thunk thunk thunk)   (mark-argcheck ARGCHECK_THUNK_THUNK_THUNK *))
 (def-arg-checker (* obj proc1 ?)         (mark-argcheck ARGCHECK_OBJ_PROC1_OPT *))
+(def-arg-checker (* proc1 thunk)         (mark-argcheck ARGCHECK_PROC1_THUNK *))
 (def-arg-checker (* environment)         (mark-argcheck ARGCHECK_ENVIRONMENT *))
 (def-arg-checker (* obj environment ?)   (mark-argcheck ARGCHECK_OBJ_ENVIRONMENT_OPT *))
 (def-arg-checker (* iport)               (mark-argcheck ARGCHECK_IPORT *))
@@ -2711,7 +2718,15 @@
 (def-global (list->bytevector u8list))
 
 ; 6.11. Exceptions
+(def-global (with-exception-handler proc1 thunk))
+(def-global (raise obj))
+(def-global (raise-continuable obj))
 (def-global (error string obj ...))
+(def-global (error-object? obj))
+(def-global (error-object-message record))   ;fixme: error-object
+(def-global (error-object-irritants record)) ;fixme: error-object
+(def-global (read-error? obj))
+(def-global (file-error? obj))
 
 ; 6.12. Environments and evaluation
 (def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
@@ -3064,7 +3079,8 @@ static char *ints_init_code =
 "            (define consn (lambda (id ...) (let ([r (make-record rtn #&(length (f ...)))]) (init r (id ...) ([f i] ...) ()))))"
 "            (define predn (lambda (obj) (record? obj rtn)))"
 "            (define a (lambda (obj) (record-ref obj ia))) ..."
-"            (define m (lambda (obj val) (record-set! obj im val))) ...)]"
+"            (define m (lambda (obj val) (record-set! obj im val))) ..."
+"            (define 'rtn))]"
 "        [(_ rtn cf* predn ([fn accn] fam ...) (fi ...) (ai ...) (mi ...))"
 "         (unroll rtn cf* predn (fam ...) "
 "           (fi ... [fn #&(length (fi ...))]) (ai ... [accn #&(length (fi ...))]) (mi ...))]"
@@ -3130,6 +3146,52 @@ static char *ints_init_code =
 "    (syntax-rules ()"
 "      [(_ ([param value] ...) . body)"
 "       (loop () ([param value] ...) body)])))"
+""
+"(define-syntax guard"
+"  (letrec-syntax"
+"    ([guard-aux"
+"      (syntax-rules (else =>)"
+"        [(guard-aux reraise (else result1 result2 ...))"
+"        (begin result1 result2 ...)]"
+"        [(guard-aux reraise (test => result))"
+"        (let ([temp test]) (if temp (result temp) reraise))]"
+"        [(guard-aux reraise (test => result) clause1 clause2 ...)"
+"        (let ([temp test])"
+"          (if temp"
+"              (result temp)"
+"              (guard-aux reraise clause1 clause2 ...)))]"
+"        [(guard-aux reraise (test)) (or test reraise)]"
+"        [(guard-aux reraise (test) clause1 clause2 ...)"
+"        (let ([temp test])"
+"          (if temp temp (guard-aux reraise clause1 clause2 ...)))]"
+"        [(guard-aux reraise (test result1 result2 ...))"
+"        (if test (begin result1 result2 ...) reraise)]"
+"        [(guard-aux reraise (test result1 result2 ...) clause1 clause2 ...)"
+"        (if test"
+"            (begin result1 result2 ...)"
+"            (guard-aux reraise clause1 clause2 ...))])])"
+"    (syntax-rules ()"
+"      [(guard (var clause ...) e1 e2 ...)"
+"      ((call/cc"
+"        (lambda (guard-k)"
+"          (with-exception-handler"
+"            (lambda (condition)"
+"              ((call/cc"
+"                  (lambda (handler-k)"
+"                    (guard-k"
+"                      (lambda ()"
+"                        (let ([var condition])"
+"                          (guard-aux"
+"                            (handler-k"
+"                              (lambda ()"
+"                                (raise-continuable condition)))"
+"                            clause"
+"                            ...))))))))"
+"            (lambda ()"
+"              (call-with-values"
+"                (lambda () e1 e2 ...)"
+"                (lambda args"
+"                  (guard-k (lambda () (apply values args))))))))))])))"
 ;
 EOS
 )
@@ -3234,12 +3296,13 @@ EOS
   (unless *quiet* (greet-once) (printf "~%"))
   (let loop ()
     (display "> ")
-    (if (letcc return
-          (set-reset-handler! 
-            (lambda () 
-              (printf "; returning to top level~%")
-              (return #t)))
-          (ints-rep port))
+    (if (call/cc
+          (lambda (return)
+            (set-reset-handler! 
+              (lambda () 
+                (printf "; returning to top level~%")
+                (return #t)))
+            (ints-rep port)))
         (loop))))
 
 (define (main argv)
