@@ -2414,13 +2414,13 @@ default: /* inter-host call */
      (case-lambda 
        [() value]
        [(x) (set! value x)]
-       [(s x) (if s (set! value x) x)])]
+       [(x s) (if s (set! value x) x)])]
     [(init converter)
      (let ([value (converter init)])
        (case-lambda 
          [() value]
          [(x) (set! value (converter x))]
-         [(s x) (if s (set! value x) (converter x))]))]))
+         [(x s) (if s (set! value x) (converter x))]))]))
 
 (define-syntax parameterize
   (letrec-syntax
@@ -2428,11 +2428,11 @@ default: /* inter-host call */
       (syntax-rules ()
         [(_ ([param value p old new] ...) () body)
          (let ([p param] ...)
-           (let ([old (p)] ... [new (p #f value)] ...)
+           (let ([old (p)] ... [new (p value #f)] ...)
              (dynamic-wind
-               (lambda () (p #t new) ...)
+               (lambda () (p new #t) ...)
                (lambda () . body)
-               (lambda () (p #t old) ...))))]
+               (lambda () (p old #t) ...))))]
         [(_ args ([param value] . rest) body)
          (loop ([param value p old new] . args) rest body)])])
     (syntax-rules ()
@@ -2568,7 +2568,13 @@ default: /* inter-host call */
 (%definition "#define mkiport_file(l, fp) hpushptr(fp, IPORT_FILE_NTAG, l)")
 
 (define *current-input-port* (%prim* "obj(mkiport_file($live, stdin))"))
-(define-inline (current-input-port) *current-input-port*)
+
+(define-syntax current-input-port ; parameter
+  (syntax-rules ()
+    [(_) *current-input-port*]
+    [(_ p) (set! *current-input-port* p)]
+    [(_ p s) (if s (set! *current-input-port* p) p)]
+    [_ %residual-current-input-port]))
 
 (define-inline (open-input-file fn)
   (let ([file* (open-file* fn "r")])
@@ -2724,10 +2730,22 @@ default: /* inter-host call */
 (%definition "#define mkoport_file(l, fp) hpushptr(fp, OPORT_FILE_NTAG, l)")
 
 (define *current-output-port* (%prim* "obj(mkoport_file($live, stdout))"))
-(define-inline (current-output-port) *current-output-port*)
+
+(define-syntax current-output-port ; parameter
+  (syntax-rules ()
+    [(_) *current-output-port*]
+    [(_ p) (set! *current-output-port* p)]
+    [(_ p s) (if s (set! *current-output-port* p) p)]
+    [_ %residual-current-output-port]))
 
 (define *current-error-port* (%prim* "obj(mkoport_file($live, stderr))"))
-(define-inline (current-error-port) *current-error-port*)
+
+(define-syntax current-error-port ; parameter
+  (syntax-rules ()
+    [(_) *current-error-port*]
+    [(_ p) (set! *current-error-port* p)]
+    [(_ p s) (if s (set! *current-error-port* p) p)]
+    [_ %residual-current-error-port]))
 
 (define-inline (open-output-file fn)
   (let ([file* (open-file* fn "w")])
@@ -3863,6 +3881,12 @@ default: /* inter-host call */
      (lambda args
        (if (null? args) (f) (f (car args))))]))
 
+(define-syntax nullary-unary-binary-adaptor
+  (syntax-rules ()
+    [(_ f)
+     (lambda args
+       (if (null? args) (f) (if (null? (cdr args)) (f (car args)) (f (car args) (cadr args)))))])) 
+
 (define-syntax unary-binary-adaptor
   (syntax-rules ()
     [(_ f)
@@ -3957,6 +3981,10 @@ default: /* inter-host call */
     hp -= c; *--hp = obj_from_objptr(appcases+4);
     $return obj(hendblk(c+1)); }" (length l) l))
 
+(define %residual-current-input-port (nullary-unary-binary-adaptor current-input-port))
+(define %residual-current-output-port (nullary-unary-binary-adaptor current-output-port))
+(define %residual-current-error-port (nullary-unary-binary-adaptor current-error-port))
+
 (define %residual-read-char (nullary-unary-adaptor read-char))
 (define %residual-peek-char (nullary-unary-adaptor peek-char))
 (define %residual-char-ready? (nullary-unary-adaptor char-ready?))
@@ -3990,7 +4018,9 @@ default: /* inter-host call */
 ; + add records: new-record-type record? make-record record-type-descriptor record-ref record-set! define-record-type 
 ; + add binary file ports, corresponding operations from r7rs
 ; + add bytevector input ports
+; + add string output ports
+; + add bytevector output ports
+; + add parameterize
+; + upgrade current port procedures to parameters
+; - fix with-input-from-port & friends, add call-with-port
 ; - upgrade all existing operations to r7rs (member, assoc, ...)?
-; - add string output ports
-; - add bytevector output ports
-; - upgrade current port procedures to parameters, add parameterize

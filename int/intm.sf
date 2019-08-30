@@ -1095,6 +1095,8 @@
   ARGCHECK_STRING_OPORT_OPT,
   ARGCHECK_U8_OPORT_OPT,
   ARGCHECK_U8VECTOR_OPORT_OPT,
+  ARGCHECK_IPORT_OPT_BOOLEAN_OPT,
+  ARGCHECK_OPORT_OPT_BOOLEAN_OPT,
   ADD_Z_ETC,
   SUB_Z_Z_ETC,
   E_Z_Z_Z_ETC,
@@ -1218,6 +1220,7 @@
   } else switch (ann) {
     case ARGCHECK_PROC:
     case ARGCHECK_PROC1CC:
+    case ARGCHECK_OBJ_ENVIRONMENT_OPT:
     case ARGCHECK_OBJ_OPORT_OPT:
     case NOT_OBJ:
       return 1;
@@ -1235,6 +1238,7 @@
     case ARGCHECK_IPORT:
     case ARGCHECK_IPORT_OPT:
     case ARGCHECK_OBJ_OPORT_OPT:
+    case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
     case NOT_OBJ:
       return 1;
     default: 
@@ -1251,6 +1255,7 @@
     case ARGCHECK_OPORT:
     case ARGCHECK_OPORT_OPT:
     case ARGCHECK_OBJ_OPORT_OPT:
+    case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
     case NOT_OBJ:
       return 1;
     default: 
@@ -1309,6 +1314,8 @@
     case ARGCHECK_STRING_OPORT_OPT:
     case ARGCHECK_U8_OPORT_OPT:
     case ARGCHECK_U8VECTOR_OPORT_OPT:
+    case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
+    case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
     case ADD_Z_ETC:
     case SUB_Z_Z_ETC:
     case CAR_PAIR:
@@ -1747,6 +1754,26 @@
         } else if (ac == 2) { 
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
           if (!isbytevector(o1) || !isoport(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
+        if (ac == 0) {
+        } else if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isiport(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isiport(o1) || !is_bool_obj(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
+        if (ac == 0) {
+        } else if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isoport(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isoport(o1) || !is_bool_obj(o2)) res = ACRES_BADTYPE; 
         } else res = ACRES_BADARGC; 
         break;
       /* special checks for popular inlined operations; return corresponding inlining code id if successful */
@@ -2424,6 +2451,8 @@
 (def-arg-checker (* string oport ?)      (mark-argcheck ARGCHECK_STRING_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 (def-arg-checker (* u8 oport ?)          (mark-argcheck ARGCHECK_U8_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 (def-arg-checker (* u8vector oport ?)    (mark-argcheck ARGCHECK_U8VECTOR_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* iport ? boolean ?)   (mark-argcheck ARGCHECK_IPORT_OPT_BOOLEAN_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* oport ? boolean ?)   (mark-argcheck ARGCHECK_OPORT_OPT_BOOLEAN_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 
 
 ;------------------------------------------------------------------------------
@@ -2656,8 +2685,8 @@
 (def-global (call-with-output-file string proc1op))
 (def-global (input-port? obj))
 (def-global (output-port? obj))
-(def-global (current-input-port))
-(def-global (current-output-port))
+(def-global (current-input-port iport ? boolean ?))  ; parameter, as in r7rs
+(def-global (current-output-port oport ? boolean ?)) ; parameter, as in r7rs
 (def-global (with-input-from-file string thunk))
 (def-global (with-output-to-file string thunk))
 (def-global (open-input-file string))
@@ -2732,7 +2761,7 @@
 (def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
 
 ; 6.13.1. Ports
-(def-global (current-error-port))
+(def-global (current-error-port oport ? boolean ?))  ; parameter
 (def-global (open-binary-input-file string))
 (def-global (open-input-string string))
 (def-global (open-input-bytevector u8vector))
@@ -3136,11 +3165,11 @@ static char *ints_init_code =
 "      (syntax-rules ()"
 "        [(_ ([param value p old new] ...) () body)"
 "         (let ([p param] ...)"
-"           (let ([old (p)] ... [new (p #f value)] ...)"
+"           (let ([old (p)] ... [new (p value #f)] ...)"
 "             (dynamic-wind"
-"               (lambda () (p #t new) ...)"
+"               (lambda () (p new #t) ...)"
 "               (lambda () . body)"
-"               (lambda () (p #t old) ...))))]"
+"               (lambda () (p old #t) ...))))]"
 "        [(_ args ([param value] . rest) body)"
 "         (loop ([param value p old new] . args) rest body)])])"
 "    (syntax-rules ()"
