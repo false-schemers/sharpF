@@ -32,7 +32,7 @@ Here is the list of IntS additions and things that behave differently between In
 
 ## IntM, an Interpreter for LibM (Medium) Library
 
-IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intm.sf)) is an extended version of IntS, based on LibM. It has the following additional R7RS functionality:
+IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intm.sf)) is an extended version of IntS, based on LibM. It has the following additional functionality from R7RS small:
 
   *  support for bytevectors, with basic set of operations
   *  support for `define-record-type` records
@@ -41,3 +41,5 @@ IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
   *  simple text output to/from strings
   *  `let-values`, `let*-values`, `define-values`, `make-parameter`, `parameterize`
   *  exceptions, errors, `guard` form
+  *  current port access procedures are parameters
+  
