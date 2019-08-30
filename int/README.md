@@ -39,3 +39,5 @@ IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
   *  simple binary input from files and bytevectors
   *  simple binary output to files and bytevectors
   *  simple text output to/from strings
+  *  `let-values`, `let*-values`, `define-values`, `make-parameter`, `parameterize`
+  
