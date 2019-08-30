@@ -80,7 +80,7 @@ defined in pre-R5RS Scheme standards, SRFIs, and R7RS libraries:
 
 ## LibM (Medium) Library
 
-LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libm.sf)) is an extended version of LibS. It has the following additional functionality from R7RS:
+LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libm.sf)) is an extended version of LibS. It has the following additional functionality from R7RS small:
 
   *  support for bytevectors, with basic set of operations
   *  support for `define-record-type` records
@@ -89,4 +89,4 @@ LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
   *  simple text output to/from strings
   *  `let-values`, `let*-values`, `define-values`, `make-parameter`, `parameterize`
   *  exceptions, errors, `guard` form
-  
+  *  current port access procedures are parameters
