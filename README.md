@@ -25,7 +25,7 @@ $ ./a.out
 Hello, World!
 ```
 You can see the compiled C program here: [hello.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/compiled/hello.c). As it defines no data types or functions, the whole file
-is basically just a garbage collector and the startup and shutdown code.
+is basically just startup/shutdown/gc code.
 
 Here is an example of what a bigger #F "Scheme" program might look like and what
 happens when it is compiled and executed:
@@ -104,19 +104,19 @@ $ sfc libs.sf myprog.sf     # sfc produces 2 C files
 $ gcc -lm libs.c myprog.c   # gcc produces a.out (libs refers to math functions, so -lm may be needed)
 ```
 
-To dress an existing pre-R^6RS Scheme source file as a #F program that
+To dress an existing pre-R6RS Scheme source file as a #F program that
 uses LibS, one has to add `(load "libs.sf")` line to the beginning of the
 file and `(define (main argv) #f)` to the end. LibS generally targets
-R^5RS feature set, but it has the following known limitations:
+R5RS feature set, but it has the following known limitations:
 
   *  SFC reader used to read #F source code is case-sensitive
   *  `read` and `string->symbol` are also case-sensitive
+  *  no support for `s`, `f`, `d`, `l` exponent markers and `#` digit placeholders 
   *  there is no support for `eval` and environment functions
   *  no dynamic `load` or dynamic macroexpansion/compilation
   *  fixnums are limited to 24 bits, flonums are doubles
   *  no support for bignums/rational/complex numbers
   *  `max` and `min` do not preserve inexactness
-  *  `dynamic-wind` has pre-R^6RS semantics
   *  `set!` to built-in bindings is not allowed
   *  there is no REPL and no transcript functions
 
