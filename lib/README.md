@@ -20,6 +20,7 @@ LibXXS (see [libxxs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/
 
   *  SFC reader used to read #F source code is case-sensitive
   *  library function `string->symbol` is also case-sensitive
+  *  no support for `s`, `f`, `d`, `l` exponent markers and `#` digit placeholders 
   *  there is no support for `eval` and environment functions
   *  no dynamic `load` or dymamic macroexpansion/compilation
   *  no support for `read`
@@ -57,7 +58,7 @@ R5RS feature set; most of the forms and procedures behave as expected. Compared 
 
   *  SFC reader used to read #F source code is case-sensitive
   *  `read` and `string->symbol` are also case-sensitive
-  *  no support for `s`, `f`, `d`, `l' exponent markers and `#` digit placeholders 
+  *  no support for `s`, `f`, `d`, `l` exponent markers and `#` digit placeholders 
   *  there is no support for `eval` and environment functions
   *  no dynamic `load` or dymamic macroexpansion/compilation
   *  fixnums are limited to 24 bits, flonums are doubles
