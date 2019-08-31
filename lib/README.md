@@ -57,12 +57,12 @@ R5RS feature set; most of the forms and procedures behave as expected. Compared 
 
   *  SFC reader used to read #F source code is case-sensitive
   *  `read` and `string->symbol` are also case-sensitive
+  *  no support for `s`, `f`, `d`, `l' exponent markers and `#` digit placeholders 
   *  there is no support for `eval` and environment functions
   *  no dynamic `load` or dymamic macroexpansion/compilation
   *  fixnums are limited to 24 bits, flonums are doubles
   *  no support for bignums/rational/complex numbers
   *  `max` and `min` do not preserve inexactness
-  *  `dynamic-wind` has pre-R6RS semantics
   *  `set!` to built-in bindings is not allowed
   *  there is no REPL and no transcript functions
 
@@ -90,3 +90,4 @@ LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
   *  `let-values`, `let*-values`, `define-values`, `make-parameter`, `parameterize`
   *  exceptions, errors, `guard` form
   *  current port access procedures are parameters
+  *  additional R7RS math and port operations
