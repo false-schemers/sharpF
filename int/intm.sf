@@ -98,9 +98,10 @@
 
 ; errors
 
-; expansion-time (fixme: need unwrap vectors!)
+; expansion-time
 (define-syntax x-error
-  (syntax-rules () [(_ r a ...) (simple-error 'macroexpander r a ...)]))
+  (syntax-rules () [(_ r a ...) 
+    (simple-error 'macroexpander r (unwrap-vecs a) ...)]))
 
 ; compile-time 
 (define-syntax c-error
@@ -1033,6 +1034,7 @@
   ARGCHECK_X_ETC,
   ARGCHECK_X_X_ETC,
   ARGCHECK_X_X_X_ETC,
+  ARGCHECK_Z_Z_OPT,
   ARGCHECK_Z_OR_X_X,
   ARGCHECK_Z_RADIX_OPT,
   ARGCHECK_K_CHAR_OPT,
@@ -1080,8 +1082,11 @@
   ARGCHECK_THUNK_PROC,
   ARGCHECK_THUNK_THUNK_THUNK,
   ARGCHECK_STRING_THUNK,
+  ARGCHECK_IPORT_THUNK,
+  ARGCHECK_OPORT_THUNK,
   ARGCHECK_STRING_PROC1IP,
   ARGCHECK_STRING_PROC1OP,
+  ARGCHECK_PORT_PROC1P,
   ARGCHECK_OBJ_PROC1_OPT,
   ARGCHECK_PROC1_THUNK,
   ARGCHECK_ENVIRONMENT,
@@ -1090,6 +1095,7 @@
   ARGCHECK_IPORT_OPT,
   ARGCHECK_OPORT,
   ARGCHECK_OPORT_OPT,
+  ARGCHECK_PORT,
   ARGCHECK_OBJ_OPORT_OPT,
   ARGCHECK_CHAR_OPORT_OPT,
   ARGCHECK_STRING_OPORT_OPT,
@@ -1205,6 +1211,8 @@
     case ARGCHECK_STRING_ETC:
     case ARGCHECK_IPORT_OPT:
     case ARGCHECK_OPORT_OPT:
+    case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
+    case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
     case ADD_Z_ETC: 
       return 1;
     default: 
@@ -1218,6 +1226,7 @@
   if (ann >= 0) { /* ac check only */
     int ac = 1; return (ann / 1000 <= ac && ac <= ann % 1000);
   } else switch (ann) {
+    case ARGCHECK_OBJ_PROC1_OPT:
     case ARGCHECK_PROC:
     case ARGCHECK_PROC1CC:
     case ARGCHECK_OBJ_ENVIRONMENT_OPT:
@@ -1235,8 +1244,10 @@
   if (ann >= 0) { /* ac check only */
     int ac = 1; return (ann / 1000 <= ac && ac <= ann % 1000);
   } else switch (ann) {
+    case ARGCHECK_OBJ_PROC1_OPT:
     case ARGCHECK_IPORT:
     case ARGCHECK_IPORT_OPT:
+    case ARGCHECK_PORT:
     case ARGCHECK_OBJ_OPORT_OPT:
     case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
     case NOT_OBJ:
@@ -1252,8 +1263,10 @@
   if (ann >= 0) { /* ac check only */
     int ac = 1; return (ann / 1000 <= ac && ac <= ann % 1000);
   } else switch (ann) {
+    case ARGCHECK_OBJ_PROC1_OPT:
     case ARGCHECK_OPORT:
     case ARGCHECK_OPORT_OPT:
+    case ARGCHECK_PORT:
     case ARGCHECK_OBJ_OPORT_OPT:
     case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
     case NOT_OBJ:
@@ -1278,6 +1291,7 @@
     case ARGCHECK_X:
     case ARGCHECK_X_ETC:
     case ARGCHECK_X_X_ETC:
+    case ARGCHECK_Z_Z_OPT:
     case ARGCHECK_Z_OR_X_X:
     case ARGCHECK_Z_RADIX_OPT:
     case ARGCHECK_K_CHAR_OPT:
@@ -1309,6 +1323,7 @@
     case ARGCHECK_IPORT_OPT:
     case ARGCHECK_OPORT:
     case ARGCHECK_OPORT_OPT:
+    case ARGCHECK_PORT:
     case ARGCHECK_OBJ_OPORT_OPT:
     case ARGCHECK_CHAR_OPORT_OPT:
     case ARGCHECK_STRING_OPORT_OPT:
@@ -1358,7 +1373,7 @@
         while (ac-- > 0) { 
           obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
           if (is_fixnum_obj(o)) continue;
-          if (is_flonum_obj(o)) { flonum_t f = flonum_from_obj(o); if (f == floor(f)) continue; }
+          if (is_flonum_obj(o)) { flonum_t f = flonum_from_obj(o); if (f > -HUGE_VAL && f < HUGE_VAL && f == floor(f)) continue; }
           res = ACRES_BADTYPE; break;
         } break;
       case ARGCHECK_Z:          if (ac != 1) { res = ACRES_BADARGC; break; } else goto real_etc;
@@ -1371,6 +1386,7 @@
       case ARGCHECK_X_ETC:      goto real_etc;
       case ARGCHECK_X_X_ETC:    if (ac < 1)  { res = ACRES_BADARGC; break; } else goto real_etc;
       case ARGCHECK_X_X_X_ETC:  if (ac < 2)  { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_Z_Z_OPT:    /* same as below */
       case ARGCHECK_Z_OR_X_X:   if (ac < 1 || ac > 2) { res = ACRES_BADARGC; break; } else goto real_etc;
       real_etc:
         while (ac-- > 0) { 
@@ -1662,6 +1678,16 @@
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
           if (!isstring(o1) || !isthunk(o2)) res = ACRES_BADTYPE;
         } break;
+      case ARGCHECK_IPORT_THUNK:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isiport(o1) || !isthunk(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_OPORT_THUNK:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isoport(o1) || !isthunk(o2)) res = ACRES_BADTYPE;
+        } break;
       case ARGCHECK_STRING_PROC1IP:
         if (ac != 2) res = ACRES_BADARGC; else { 
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
@@ -1671,6 +1697,11 @@
         if (ac != 2) res = ACRES_BADARGC; else { 
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
           if (!isstring(o1) || !isproc1op(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_PORT_PROC1P:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!((isiport(o1) && isproc1ip(o2)) || (isoport(o1) && isproc1op(o2)))) res = ACRES_BADTYPE;
         } break;
       case ARGCHECK_OBJ_PROC1_OPT:
         if (ac == 1) {
@@ -1711,6 +1742,11 @@
         if (ac != 1) res = ACRES_BADARGC; else { 
           obj o; if (l) o = car(l); else o = va_arg(args, obj); 
           if (!isoport(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_PORT:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isiport(o) && !isoport(o)) res = ACRES_BADTYPE; 
         } break;
       case ARGCHECK_OBJ_OPORT_OPT:
         if (ac == 1) {
@@ -2382,6 +2418,7 @@
                                               #f #f (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
 (def-arg-checker (* z)                   (mark-argcheck ARGCHECK_Z *))
 (def-arg-checker (* z z)                 (mark-argcheck ARGCHECK_Z_Z *))
+(def-arg-checker (* z z ?)               (mark-argcheck ARGCHECK_Z_Z_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 (def-arg-checker (* z ...)               (mark-argcheck ARGCHECK_Z_ETC
                                            (argc-dispatch-lambda
                                               (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
@@ -2435,7 +2472,10 @@
 (def-arg-checker (* proc1cc)             (mark-argcheck ARGCHECK_PROC1CC *))
 (def-arg-checker (* string proc1ip)      (mark-argcheck ARGCHECK_STRING_PROC1IP *))
 (def-arg-checker (* string proc1op)      (mark-argcheck ARGCHECK_STRING_PROC1OP *))
+(def-arg-checker (* port proc1p)         (mark-argcheck ARGCHECK_PORT_PROC1P *))
 (def-arg-checker (* string thunk)        (mark-argcheck ARGCHECK_STRING_THUNK *))
+(def-arg-checker (* iport thunk)         (mark-argcheck ARGCHECK_IPORT_THUNK *))
+(def-arg-checker (* oport thunk)         (mark-argcheck ARGCHECK_OPORT_THUNK *))
 (def-arg-checker (* thunk proc)          (mark-argcheck ARGCHECK_THUNK_PROC *))
 (def-arg-checker (* thunk thunk thunk)   (mark-argcheck ARGCHECK_THUNK_THUNK_THUNK *))
 (def-arg-checker (* obj proc1 ?)         (mark-argcheck ARGCHECK_OBJ_PROC1_OPT *))
@@ -2444,6 +2484,7 @@
 (def-arg-checker (* obj environment ?)   (mark-argcheck ARGCHECK_OBJ_ENVIRONMENT_OPT *))
 (def-arg-checker (* iport)               (mark-argcheck ARGCHECK_IPORT *))
 (def-arg-checker (* oport)               (mark-argcheck ARGCHECK_OPORT *))
+(def-arg-checker (* port)                (mark-argcheck ARGCHECK_PORT *))
 (def-arg-checker (* iport ?)             (mark-argcheck ARGCHECK_IPORT_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) #f)))
 (def-arg-checker (* oport ?)             (mark-argcheck ARGCHECK_OPORT_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) #f)))
 (def-arg-checker (* obj oport ?)         (mark-argcheck ARGCHECK_OBJ_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
@@ -2502,7 +2543,7 @@
 (def-global (round x))
 (def-global (rationalize x x))
 (def-global (exp z))
-(def-global (log z)) ; r7rs has (log z z) where second arg is base (defaults to e)
+;(def-global (log z)) ; extended in r7rs: has (log z z) variant where second arg is base (defaults to e)
 (def-global (sin z))
 (def-global (cos z))
 (def-global (tan z))
@@ -2517,8 +2558,8 @@
 (def-global (imag-part z))
 (def-global (magnitude z))
 (def-global (angle z))
-(def-global (exact->inexact z)) ; r7rs name: exact
-(def-global (inexact->exact z)) ; r7rs name: inexact
+(def-global (exact->inexact z)) ; r7rs name: inexact
+(def-global (inexact->exact z)) ; r7rs name: exact
 
 ; 6.2.6  Numerical input and output
 (def-global (number->string z radix ?))
@@ -2734,6 +2775,24 @@
 (def-global (make-case-lambda obj ...) ; macro is in init
   (lambda args (make-annotated-procedure (apply make-case-lambda args) (rest-argc->annotation 1))))
 
+; 6.2.6. Numerical operations
+(def-global (exact z))   ; r5rs name: inexact->exact
+(def-global (inexact z)) ; r5rs name: exact->inexact
+(def-global (exact-integer? z))
+(def-global (nan? z))
+(def-global (finite? z))
+(def-global (infinite? z))
+(def-global (floor-quotient n n))
+(def-global (floor-remainder n n))
+(def-global (floor/ n n) ; has to use interpreter's (values)
+  (lambda (x y) (list *values-tag* (floor-quotient x y) (floor-remainder x y))))
+(def-global (truncate-quotient n n))
+(def-global (truncate-remainder n n))
+(def-global (truncate/ n n) ; has to use interpreter's (values)
+  (lambda (x y) (list *values-tag* (truncate-quotient x y) (truncate-remainder x y))))
+(def-global (log z z ?))
+(def-global (square z))
+
 ; 6.9  Bytevectors
 (def-global (bytevector? obj))
 (def-global (make-bytevector k u8 ?))
@@ -2761,6 +2820,11 @@
 (def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
 
 ; 6.13.1. Ports
+(def-global (port? obj))
+(def-global (textual-port? port))
+(def-global (binary-port? port)) 
+(def-global (close-port port))
+(def-global (call-with-port port proc1p))
 (def-global (current-error-port oport ? boolean ?))  ; parameter
 (def-global (open-binary-input-file string))
 (def-global (open-input-string string))
@@ -2810,6 +2874,10 @@
 (def-global (record-ref record index))
 (def-global (record-set! record index obj))
 (def-global (new-record-type obj list))
+
+; i/o
+(def-global (with-input-from-port iport thunk))
+(def-global (with-output-to-port oport thunk))
 
 ; misc
 (def-global (void))

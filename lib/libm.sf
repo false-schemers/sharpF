@@ -410,6 +410,9 @@ void *getnative(obj o, cxtype_t *tp) {
 #define fxquo(x, y) ((x) / (y))  
 #define fxrem(x, y) ((x) % (y))
 /* floor division */
+static long fxmqu(long x, long y) {
+  long q = x / y; return ((x < 0 && y > 0) || (x > 0 && y < 0)) ? q - 1 : q;
+}
 static long fxmlo(long x, long y) {
   long r = x % y; return ((r < 0 && y > 0) || (r > 0 && y < 0)) ? r + y : r;
 }
@@ -436,6 +439,7 @@ extern long fxmul(long x, long y);
 extern long fxidv(long x, long y);
 extern long fxquo(long x, long y);
 extern long fxrem(long x, long y);
+extern long fxmqu(long x, long y);
 extern long fxmlo(long x, long y);
 extern long fxdiv(long x, long y);
 extern long fxmod(long x, long y);
@@ -478,8 +482,7 @@ long fxidv(long x, long y) {
 }
 /* truncated division (common/C99) */
 long fxquo(long x, long y) { 
-  assert(y); 
-  assert(x != FIXNUM_MIN || y != -1);
+  assert(y); assert(x != FIXNUM_MIN || y != -1);
   return x / y; 
 }
 long fxrem(long x, long y) { 
@@ -487,24 +490,23 @@ long fxrem(long x, long y) {
   return x % y; 
 }
 /* floor division */
+long fxmqu(long x, long y) {
+  long q; assert(y); assert(x != FIXNUM_MIN || y != -1);
+  q = x / y;
+  return ((x < 0 && y > 0) || (x > 0 && y < 0)) ? q - 1 : q;
+}
 long fxmlo(long x, long y) {
-  long r; 
-  assert(y); 
-  r = x % y;
+  long r; assert(y); r = x % y;
   return ((r < 0 && y > 0) || (r > 0 && y < 0)) ? r + y : r;
 }
 /* euclidean division */
 long fxdiv(long x, long y) { 
-  long q, r; 
-  assert(y); 
-  assert(x != FIXNUM_MIN || y != -1);
+  long q, r; assert(y); assert(x != FIXNUM_MIN || y != -1);
   q = x / y, r = x % y; 
   return (r < 0) ? ((y > 0) ? q - 1 : q + 1) : q;
 }
 long fxmod(long x, long y) {
-  long r; 
-  assert(y); 
-  r = x % y; 
+  long r; assert(y); r = x % y; 
   return (r < 0) ? ((y > 0) ? r + y : r - y) : r;
 } 
 long fxgcd(long x, long y) {
@@ -523,8 +525,7 @@ long fxasr(long x, long y) {
   return x >> y;
 } 
 long fxflo(double f) {
-  long l = (long)f;
-  assert((double)l == f);
+  long l = (long)f; assert((double)l == f);
   assert(l >= FIXNUM_MIN && l <= FIXNUM_MAX);
   return l;
 }
@@ -541,16 +542,14 @@ long fxflo(double f) {
 
 (%definition "extern int fxifdv(long x, long y, long *pi, double *pd);")
 (%localdef "int fxifdv(long x, long y, long *pi, double *pd) { 
-  assert(y); 
-  assert(x != FIXNUM_MIN || y != -1);
+  assert(y); assert(x != FIXNUM_MIN || y != -1);
   if (x % y == 0) { *pi = x / y; return 1; }
   else { *pd = (double)x / (double)y; return 0; }  
 }")
 
 (%definition "extern double flquo(double x, double y);")
 (%localdef "double flquo(double x, double y) {
-  double z;
-  assert(y != 0.0 && x == floor(x) && y == floor(y));
+  double z; assert(y != 0.0 && x == floor(x) && y == floor(y));
   modf(x / y,  &z);
   return z;
 }")
@@ -558,6 +557,11 @@ long fxflo(double f) {
 (%localdef "double flrem(double x, double y) {
   assert(y != 0.0 && x == floor(x) && y == floor(y));
   return fmod(x, y);
+}")
+(%definition "extern double flmqu(double x, double y);")
+(%localdef "double flmqu(double x, double y) {
+  assert(y != 0.0 && x == floor(x) && y == floor(y));
+  return floor(x / y);
 }")
 (%definition "extern double flmlo(double x, double y);")
 (%localdef "double flmlo(double x, double y) {
@@ -596,7 +600,11 @@ long fxflo(double f) {
   if (!errno && l >= FIXNUM_MIN && l <= FIXNUM_MAX && e != s && !*e)
     return errno = eno, (conv == 'i') ? (*pd = (double)l, 'i') : (*pl = l, 'e');
   if (radix != 10) return errno = eno, 0;
-  d = (errno = 0, strtod(s, &e));
+  e = \"\", errno = 0;
+  if (*s != '+' && *s != '-') d = strtod(s, &e);
+  else if (strcmp(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
+  else if (strcmp(s+1, \"nan.0\") == 0) d = strtod(\"NAN\", &e); /* since C99 */ 
+  else d = strtod(s, &e);
   if (!errno && e != s && !*e) {
     if ((conv == 'e') && ((l=(long)d) < FIXNUM_MIN || l > FIXNUM_MAX || (double)l != d))
       return errno = eno, 0;
@@ -624,8 +632,6 @@ long fxflo(double f) {
 (%definition "#define bool_from_fixnum(i) ((void)(i), 1)")
 (%definition "#define void_from_fixnum(i) (void)(i)")
 (%definition "#define obj_from_fixnum(i) mkimm((fixnum_t)(i), FIXNUM_ITAG)")
-
-; fixme: add #b constants
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
@@ -770,6 +776,9 @@ long fxflo(double f) {
 (define-inline (fxremainder x y)
   (%prim "fixnum(fxrem(fixnum_from_$arg, fixnum_from_$arg))" x y))
 
+(define-inline (fxmodquo x y)
+  (%prim "fixnum(fxmqu(fixnum_from_$arg, fixnum_from_$arg))" x y))
+
 (define-inline (fxmodulo x y)
   (%prim "fixnum(fxmlo(fixnum_from_$arg, fixnum_from_$arg))" x y))
 
@@ -895,7 +904,7 @@ long fxflo(double f) {
 (define-inline (flinteger? x)
   (%prim "{ /* flinteger? */ 
     flonum_t f = flonum_from_$arg; 
-    $return bool(f == floor(f)); }" x))
+    $return bool(f > -HUGE_VAL && f < HUGE_VAL && f == floor(f)); }" x))
 
 (define-inline (flzero? x)
   (%prim "bool(flonum_from_$arg == 0.0)" x))
@@ -909,12 +918,22 @@ long fxflo(double f) {
 (define-inline (flodd? x)
   (%prim "{ /* flodd? */ 
     flonum_t f = (flonum_from_$arg + 1.0) / 2.0; 
-    $return bool(f == floor(f)); }" x))
+    $return bool(f > -HUGE_VAL && f < HUGE_VAL && f == floor(f)); }" x))
  
 (define-inline (fleven? x)
   (%prim "{ /* fleven? */ 
     flonum_t f = flonum_from_$arg / 2.0;
-    $return bool(f == floor(f)); }" x))
+    $return bool(f > -HUGE_VAL && f < HUGE_VAL && f == floor(f)); }" x))
+
+(define-inline (flnan? x)
+  (%prim "{ /* flnan? */ 
+    flonum_t f = flonum_from_$arg;
+    $return bool(f != f); }" x))
+
+(define-inline (flinfinite? x)
+  (%prim "{ /* flinfinite? */ 
+    flonum_t f = flonum_from_$arg;
+    $return bool(f <= -HUGE_VAL || f >= HUGE_VAL); }" x))
 
 (define-syntax flmax
   (syntax-rules ()
@@ -964,6 +983,9 @@ long fxflo(double f) {
 (define-inline (flremainder x y)
   (%prim* "flonum($live, flrem(flonum_from_$arg, flonum_from_$arg))" x y))
 
+(define-inline (flmodquo x y)
+  (%prim* "flonum($live, flmqu(flonum_from_$arg, flonum_from_$arg))" x y))
+
 (define-inline (flmodulo x y)
   (%prim* "flonum($live, flmlo(flonum_from_$arg, flonum_from_$arg))" x y))
 
@@ -997,7 +1019,8 @@ long fxflo(double f) {
 (define-inline (fllog x)
   (%prim* "flonum($live, log(flonum_from_$arg))" x))
 
-; no 2-arg version of fllog
+(define-inline (fllog10 x)
+  (%prim* "flonum($live, log10(flonum_from_$arg))" x))
 
 (define-inline (flsin x)
   (%prim* "flonum($live, sin(flonum_from_$arg))" x))
@@ -1040,16 +1063,20 @@ long fxflo(double f) {
 (define-inline (integer? x)
   (or (fixnum? x) (and (flonum? x) (flinteger? x)))) 
 
+(define-syntax exact-integer? fixnum?)
+
 (define-inline rational? integer?)
 (define-inline complex? real?)
 (define-inline number? real?)
 
 (define-inline exact? fixnum?)
 (define-inline inexact? flonum?)
-(define-inline (inexact->exact x)
+(define-inline (exact x)
   (if (fixnum? x) x (flonum->fixnum x)))
-(define-inline (exact->inexact x)
+(define-inline (inexact x)
   (if (flonum? x) x (fixnum->flonum x)))
+(define-syntax inexact->exact exact)
+(define-syntax exact->inexact inexact)
 
 (define-syntax real-binop
   (syntax-rules ()
@@ -1107,19 +1134,32 @@ long fxflo(double f) {
 
 (define-inline (odd? x)
   (if (fixnum? x) (fxodd? x) (flodd? x)))
-  
+
+(define-inline (nan? x)
+  (and (flonum? x) (flnan? x))) 
+
+(define-inline (infinite? x)
+  (and (flonum? x) (flinfinite? x))) 
+
+(define-inline (finite? x)
+  (or (fixnum? x) (not (flinfinite? x)))) 
+
 (define-syntax max
   (syntax-rules ()
     [(_ x) x]
-    [(_ x y) (let ([a x] [b y]) (if (> a b) a b))]
-    [(_ x y z ...) (max (max x y) z ...)]
+    [(_ x y) 
+     (let ([a x] [b y]) 
+       (if (and (fixnum? a) (fixnum? b)) (if (fx>? a b) a b) (%residual-max/2 a b)))]
+    [(_ x y z ...) (%residual-max x y z ...)]
     [_ %residual-max]))
 
 (define-syntax min
   (syntax-rules ()
     [(_ x) x]
-    [(_ x y) (let ([a x] [b y]) (if (> a b) b a))]
-    [(_ x y z ...) (min (min x y) z ...)]
+    [(_ x y)
+     (let ([a x] [b y]) 
+       (if (and (fixnum? a) (fixnum? b)) (if (fx<? a b) a b) (%residual-min/2 a b)))]
+    [(_ x y z ...) (%residual-min x y z ...)]
     [_ %residual-min]))
 
 (define-syntax +
@@ -1161,8 +1201,17 @@ long fxflo(double f) {
 (define-inline (remainder x y)
   (real-binop x y fxremainder flremainder))
 
+(define-syntax truncate-quotient quotient)
+(define-syntax truncate-remainder remainder)
+
+(define-inline (modquo x y)
+  (real-binop x y fxmodquo flmodquo))
+
 (define-inline (modulo x y)
   (real-binop x y fxmodulo flmodulo))
+
+(define-syntax floor-quotient modquo)
+(define-syntax floor-remainder modulo)
 
 (define-syntax gcd
   (syntax-rules ()
@@ -1215,8 +1264,11 @@ long fxflo(double f) {
 (define-inline (exp x)
   (flexp (real->flonum x)))
 
-(define-inline (log x)
-  (fllog (real->flonum x)))
+(define-syntax log
+  (syntax-rules ()
+    [(_ x) (fllog (real->flonum x))]
+    [(_ x b) (if (fx=? b 10) (fllog10 (real->flonum x)) (fl/ (log x) (log b)))]
+    [_ %residual-log]))
 
 (define-inline (sin x)
   (flsin (real->flonum x)))
@@ -1241,6 +1293,8 @@ long fxflo(double f) {
 
 (define-inline (expt x y)
   (real-binop x y fxexpt flexpt))
+
+(define-inline (square x) (* x x))
 
 
 ; characters
@@ -2109,10 +2163,12 @@ long fxflo(double f) {
 
 (define (flonum->string x)
   (%prim* "{ /* flonum->string */
-    char buf[30], *s;
-    sprintf(buf, \"%.15g\", flonum_from_$arg);
-    for (s = buf; *s != 0; s++) if (*s == 'e' || *s == '.') break;
-    if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
+    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_$arg);
+    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
+    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
+    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
+    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    else if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
     $return obj(hpushstr($live, newstring(buf))); }" x))
 
 (define-syntax number->string
@@ -2135,8 +2191,11 @@ long fxflo(double f) {
 
 (define (string->flonum s)
   (%prim*? "{ /* string->flonum */
-    char *e, *s = stringchars(obj_from_$arg);
-    double d = (errno = 0, strtod(s, &e));
+    char *e = \"\", *s = stringchars(obj_from_$arg); double d; errno = 0;
+    if (*s != '+' && *s != '-') d = strtod(s, &e);
+    else if (strcmp(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
+    else if (strcmp(s+1, \"nan.0\") == 0) d = strtod(\"NAN\", &e); /* since C99 */ 
+    else d = strtod(s, &e);
     if (errno || e == s || *e) $return bool(0);
     else $return flonum($live, d); }" s))
 
@@ -2586,19 +2645,6 @@ default: /* inter-host call */
     (if file* (%prim*?! "obj(mkiport_file($live, (void*)(obj_from_$arg)))" file*)
         (file-error "cannot open binary input file" fn))))
 
-(define-inline (call-with-input-file fn proc)      ; proc must return 1 value!
-  (let* ([p (open-input-file fn)] [v (proc p)])
-    (close-input-port p)
-    v))  
-
-(define (with-input-from-file fn thunk)
-  (let ([p0 *current-input-port*] [p1 (open-input-file fn)])
-    (set! *current-input-port* p1)
-    (let ([v (thunk)])                             ; thunk must return 1 value!
-      (close-input-port p1)
-      (set! *current-input-port* p0)
-      v)))
-
 ; string input ports 
 
 (%definition "/* string input ports */")
@@ -2757,19 +2803,6 @@ default: /* inter-host call */
     (if file* (%prim*?! "obj(mkoport_file($live, (void*)(obj_from_$arg)))" file*)
         (file-error "cannot open binary output file" fn))))
 
-(define-inline (call-with-output-file fn proc)      ; proc must return 1 value!
-  (let* ([p (open-output-file fn)] [v (proc p)])
-    (close-output-port p)
-    v))  
-
-(define (with-output-to-file fn thunk)
-  (let ([p0 *current-output-port*] [p1 (open-output-file fn)])
-    (set! *current-output-port* p1)
-    (let ([v (thunk)])                              ; thunk must return 1 value!
-      (close-output-port p1)
-      (set! *current-output-port* p0)
-      v)))
-
 ; string output ports 
 
 (%definition "/* string output ports */")
@@ -2836,6 +2869,36 @@ default: /* inter-host call */
     else { cbuf_t *pcb = oportdata(o); int len = pcb->fill - pcb->buf; 
     $return obj(hpushu8v($live, newbytevector((unsigned char *)pcb->buf, len))); } }" p)) 
 
+; generic port predicates and standard opening/closing convenience ops
+
+(define-inline (port? x) (or (input-port? x) (output-port? x)))
+(define-syntax textual-port? port?) ; all ports are bimodal
+(define-syntax binary-port? port?)  ; all ports are bimodal
+
+(define (close-port p)
+  (if (input-port? p) (close-input-port p))
+  (if (output-port? p) (close-output-port p)))
+
+; NB: call-with-port defined in the last section, after call-with-values
+
+(define (call-with-input-file fname proc)
+  (call-with-port (open-input-file fname) proc)) 
+
+(define (call-with-output-file fname proc)
+  (call-with-port (open-output-file fname) proc)) 
+
+(define (with-input-from-port port thunk) ; extra
+  (parameterize ([current-input-port port]) (thunk)))
+
+(define (with-output-to-port port thunk) ; extra
+  (parameterize ([current-output-port port]) (thunk)))
+
+(define (with-input-from-file fname thunk)
+  (call-with-input-file fname (lambda (p) (with-input-from-port p thunk))))
+
+(define (with-output-to-file fname thunk)
+  (call-with-output-file fname (lambda (p) (with-output-to-port p thunk))))
+
 ; simple text i/o
 
 (define-syntax read-char
@@ -2892,9 +2955,12 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_ x) (display-flonum x (current-output-port))]
     [(_ x p) (%prim?! "{ /* display-flonum */
-    char buf[30], *s; sprintf(buf, \"%.17g\", flonum_from_$arg);
-    for (s = buf; *s != 0; s++) if (*s == 'e' || *s == '.') break;
-    if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
+    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_$arg);
+    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
+    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
+    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
+    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    else if (*s == 0) { *s++ = '.'; *s++ = '0'; *s = 0; }
     $return void(oportputs(buf, obj_from_$arg)); }" x p)]
     [_ %residual-display-flonum]))
     
@@ -3567,7 +3633,7 @@ default: /* inter-host call */
     $return bool(res == 0); }" fn))
 
 (define-inline (rename-file fnold fnnew)
-  (%prim?! "{ /* delete-file */ 
+  (%prim?! "{ /* rename-file */ 
     int res = rename(stringchars(obj_from_$arg), stringchars(obj_from_$arg));
     $return bool(res == 0); }" fnold fnnew))
 
@@ -3790,6 +3856,19 @@ default: /* inter-host call */
 (define-inline (angle x) (if (negative? x) 3.141592653589793238462643 0))
 
 
+; procedures requiring call-with-values / values
+
+(define (truncate/ x y)
+  (values (truncate-quotient x y) (truncate-remainder x y)))
+
+(define (floor/ x y)
+  (values (floor-quotient x y) (floor-remainder x y)))
+
+(define (call-with-port port proc)
+  (call-with-values (lambda () (proc port))
+    (lambda vals (close-port port) (apply values vals))))
+
+
 ; residual versions of inline procedures
 
 (define (%residual-values . l)
@@ -3834,8 +3913,26 @@ default: /* inter-host call */
 (define %residual-fxmin (minmax-reducer fxmin))
 (define %residual-flmax (minmax-reducer flmax))
 (define %residual-flmin (minmax-reducer flmin))
-(define %residual-max (minmax-reducer max))
-(define %residual-min (minmax-reducer min))
+
+(define (%residual-max/2 a b)
+  (if (fixnum? a)
+      (if (fixnum? b)
+          (if (fx>? a b) a b)
+          (let ([a (fixnum->flonum a)]) (if (fl>? a b) a b)))
+      (if (fixnum? b)
+          (let ([b (fixnum->flonum b)]) (if (fl>? a b) a b))
+          (if (fl>? a b) a b))))
+(define %residual-max (minmax-reducer %residual-max/2))
+
+(define (%residual-min/2 a b)
+  (if (fixnum? a)
+      (if (fixnum? b)
+          (if (fx<? a b) a b)
+          (let ([a (fixnum->flonum a)]) (if (fl<? a b) a b)))
+      (if (fixnum? b)
+          (let ([b (fixnum->flonum b)]) (if (fl<? a b) a b))
+          (if (fl<? a b) a b))))
+(define %residual-min (minmax-reducer %residual-min/2))
   
 (define-syntax addmul-reducer
   (syntax-rules ()
@@ -3911,6 +4008,8 @@ default: /* inter-host call */
      (lambda (x y . args)
        (if (null? args) (f x y) 
            (if (null? (cdr args)) (f x y (car args)) (f x y (car args) (cadr args)))))]))
+
+(define %residual-log (unary-binary-adaptor log))
 
 (define %residual-flatan (unary-binary-adaptor flatan))
 (define %residual-atan (unary-binary-adaptor atan))
@@ -4012,15 +4111,3 @@ default: /* inter-host call */
 (define %residual-read (nullary-unary-adaptor read))
 
 (define %residual-exit (nullary-unary-adaptor exit))
-
-; development plan:
-; + add bytevectors with minimal function set
-; + add records: new-record-type record? make-record record-type-descriptor record-ref record-set! define-record-type 
-; + add binary file ports, corresponding operations from r7rs
-; + add bytevector input ports
-; + add string output ports
-; + add bytevector output ports
-; + add parameterize
-; + upgrade current port procedures to parameters
-; - fix with-input-from-port & friends, add call-with-port
-; - upgrade all existing operations to r7rs (member, assoc, ...)?
