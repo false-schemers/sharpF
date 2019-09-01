@@ -945,7 +945,7 @@
  '((syntax-lambda . -10) (syntax-rules . -9)
    (set! . -8) (quote . -7) (lambda . -6) (if . -5)
    (define-syntax . -4) (define . -3) (begin . -2)
-   (... . -1))) ;; todo: add (_ . -11) -- specially treated by syntax-rules
+   (... . -1))) ; todo: add (_ . -11) -- specially treated by syntax-rules
 
 (define root-macro-store ;++ replaces null-store, null-loc-n 
  '(((-10 (builtin) syntax-lambda) (-9 (builtin) syntax-rules)
@@ -1141,7 +1141,7 @@
   SET_VECTOR_INDEX_OBJ
 };")
 
-;; special return values (magical immediates)
+; special return values (magical immediates)
 (%definition "#define ARCRES_ITAG 126")
 (%localdef "#define ACRES_APPLY    mkimm(0, ARCRES_ITAG)")
 (%localdef "#define ACRES_BADPROC  mkimm(1, ARCRES_ITAG)")
@@ -2104,8 +2104,9 @@
         } break;
       default: assert(0);
     }
+  out:  
     va_end(args);
-    out: return res;
+    return res;
   }
 }")
 
@@ -2589,7 +2590,7 @@
   (let ([x (assq name *current-value-store*)])
     (if x
         x
-        ;; default value of a global var is its own symbol (simplifies bug reporting)
+        ; default value of a global var is its own symbol (simplifies bug reporting)
         (let ([y (cons name name)])
           (set! *current-value-store* (cons y *current-value-store*))
           y))))
@@ -2616,11 +2617,11 @@
 
 (define-syntax def-arg-checker
   (syntax-rules ()
-    ;; this produces more compact executable, but primitives are slower because residual versions are called always
+    ; this produces more compact executable, but primitives are slower because residual versions are called always
     #;[(_ (id arg ...) checker)
      (define #&(string->id #&(string-append "wrapper-for" #&(string-append "-" #&(id->string arg)) ...)) 
        (lambda (id) checker))]
-    ;; this variant produces more code, but actual operation may get inlined
+    ; this variant produces more code, but actual operation may get inlined
     [(_ (id arg ...) checker)
      (define-syntax #&(string->id #&(string-append "wrapper-for" #&(string-append "-" #&(id->string arg)) ...)) 
        (syntax-lambda (id) checker))]))
@@ -3606,11 +3607,11 @@ EOS
         (list v))))
 
 ; in the future, this one will pretty-print
-(define (ints-pp x)
+(define (int-pp x)
   (write x)
   (newline))
 
-(define (ints-rep port)
+(define (int-rep port)
   (let ([x (read port)])
     (if (eof-object? x)
         #f
@@ -3618,7 +3619,7 @@ EOS
           (if (null? results)
               #t
               (let ([result (car results)])
-                (if (not (eq? result (void))) (ints-pp result))
+                (if (not (eq? result (void))) (int-pp result))
                 (evloop (cdr results))))))))
 
 (define *quiet* #f)
@@ -3627,10 +3628,10 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "IntM Scheme Interpreter 1.1~%")
+    (printf "IntM Scheme Interpreter 1.2~%")
     (set! *greeting* #f)))
 
-(define (ints-repl port)
+(define (int-repl port)
   (unless *quiet* (greet-once) (printf "~%"))
   (let loop ()
     (display "> ")
@@ -3640,18 +3641,18 @@ EOS
               (lambda () 
                 (printf "; returning to top level~%")
                 (return #t)))
-            (ints-rep port)))
+            (int-rep port)))
         (loop))))
 
 (define (main argv)
   (define (about)
-    (printf "intm 1.1~%")
+    (printf "intm 1.2~%")
     (printf "Usage: ints [-qx] file ...~%")
     (printf "-q  suppress greeting~%")
     (printf "-x  exit after loading files on the command line~%"))
   (let loop ([args (cdr (command-line))])
     (cond ; #f result means OK, return status 0, #t is status 1 
-      [(null? args) (if *exit* #f (ints-repl (current-input-port)))]  
+      [(null? args) (if *exit* #f (int-repl (current-input-port)))]  
       [(string=? (car args) "-q") (set! *quiet* #t) (loop (cdr args))]
       [(string=? (car args) "-x") (set! *exit* #t) (loop (cdr args))]
       [(or (string=? (car args) "-h") (string=? (car args) "--help")) (about) #f]
