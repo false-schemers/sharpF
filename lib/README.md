@@ -63,7 +63,6 @@ R5RS feature set; most of the forms and procedures behave as expected. Compared 
   *  no dynamic `load` or dymamic macroexpansion/compilation
   *  fixnums are limited to 24 bits, flonums are doubles
   *  no support for bignums/rational/complex numbers
-  *  `max` and `min` do not preserve inexactness
   *  `set!` to built-in bindings is not allowed
   *  there is no REPL and no transcript functions
 
