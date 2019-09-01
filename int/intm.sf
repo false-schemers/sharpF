@@ -1103,13 +1103,24 @@
   ARGCHECK_U8VECTOR_OPORT_OPT,
   ARGCHECK_IPORT_OPT_BOOLEAN_OPT,
   ARGCHECK_OPORT_OPT_BOOLEAN_OPT,
+  ABS_X,
+  TOEXACT_Z,
   ADD_Z_ETC,
+  MUL_Z_ETC,
   SUB_Z_Z_ETC,
+  DIV_Z_Z_ETC,
+  QUO_N_N,
+  REM_N_N,
+  MQU_N_N,
+  MLO_N_N,
   E_Z_Z_Z_ETC,
   L_X_X_X_ETC,
   G_X_X_X_ETC,
   LE_X_X_X_ETC,
   GE_X_X_X_ETC,
+  GCD_N_ETC,
+  LCM_N_ETC,
+  EXPT_Z_Z,
   CAR_PAIR,
   CDR_PAIR,
   CAAR_PAIR,
@@ -1118,36 +1129,46 @@
   CDDR_PAIR,
   NOT_OBJ,
   EQ_OBJ_OBJ,
-  EQV_OBJ_OBJ
+  EQV_OBJ_OBJ,
+  ISNULL_OBJ,
+  ISPAIR_OBJ,
+  LENGTH_LIST,
+  LENGTH_STRING,
+  REF_STRING_INDEX,
+  SET_STRING_INDEX_CHAR,
+  LENGTH_VECTOR,
+  REF_VECTOR_INDEX,
+  SET_VECTOR_INDEX_OBJ
 };")
 
-(%localdef "enum {
-  ACRES_BADPROC =  -1,
-  ACRES_BADARGC =  -2,
-  ACRES_BADTYPE =  -3,
-  ACRES_BADINDEX = -4,
-  ACRES_BADRANGE = -5,
-  ACRES_APPLY = 0,
-  ACRES_APP_ADD,
-  ACRES_APP_SUB,
-  ACRES_APP_E,
-  ACRES_APP_L,
-  ACRES_APP_G,
-  ACRES_APP_LE,
-  ACRES_APP_GE,
-  ACRES_APP_CAR,
-  ACRES_APP_CDR,
-  ACRES_APP_CAAR,
-  ACRES_APP_CDAR,
-  ACRES_APP_CADR,
-  ACRES_APP_CDDR,
-  ACRES_APP_NOT,
-  ACRES_APP_EQ,
-  ACRES_APP_EQV
-};")
+;; special return values (magical immediates)
+(%definition "#define ARCRES_ITAG 126")
+(%localdef "#define ACRES_APPLY    mkimm(0, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADPROC  mkimm(1, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADARGC  mkimm(2, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADTYPE  mkimm(3, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADINDEX mkimm(4, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADRANGE mkimm(5, ARCRES_ITAG)")
+(%localdef "#define ACRES_ZERODIV  mkimm(6, ARCRES_ITAG)")
+(%localdef "#define ACRES_FIXOVER  mkimm(7, ARCRES_ITAG)")
+(define-syntax acres-special? 
+  (syntax-rules () [(_ x) (%prim "bool(isimm(obj_from_$arg, ARCRES_ITAG))" x)]))
 
 (define-syntax enum (syntax-rules () [(_ s) (%prim #&(string-append "fixnum(" #&(id->string s) ")"))]))
 (define-syntax argcheck->annotation enum) 
+
+(%localdef "static long listlen(obj l) {
+  obj s = l; long n = 0;
+  for (;;) {
+    if (isnull(l)) return n;
+    else if (!ispair(l)) return -1;
+    else if (++n, (l = cdr(l)) == s) return -1;
+    else if (isnull(l)) return n;
+    else if (!ispair(l)) return -1;
+    else if (++n, (l = cdr(l)) == s) return -1;
+    else s = cdr(s); 
+  }
+}")
 
 (%localdef "static int isalist(obj l) {
   obj s = l;
@@ -1188,6 +1209,20 @@
   }
 }")
 
+(%localdef "static int iexpt(long *px, long y) { 
+  if (y < 0) return 0; /* consistent with the op/fxpow */
+  retry: if (y == 0) return (*px = 1, 1); if (y == 1) return 1;
+  if (y % 2 == 1) { 
+    long long zz; long z = *px; if (!iexpt(&z, y-1)) return 0; 
+    zz = *px * (long long)z; if (zz < FIXNUM_MIN || zz > FIXNUM_MAX) return 0;
+    *px = (long)zz; return 1;
+  } else { 
+    long long zz = *px; zz *= zz;
+    if (zz < FIXNUM_MIN || zz > FIXNUM_MAX) return 0;
+    *px = (long)zz;  y /= 2; goto retry; 
+  }
+}")
+
 (%localdef "static int peekann(obj p) {
   int len, ann; obj h;
   if (!p || !isobjptr(p)) return FIXNUM_MIN; /* not a heap object */
@@ -1213,7 +1248,10 @@
     case ARGCHECK_OPORT_OPT:
     case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
     case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
-    case ADD_Z_ETC: 
+    case ADD_Z_ETC:
+    case MUL_Z_ETC:
+    case GCD_N_ETC:
+    case LCM_N_ETC: 
       return 1;
     default: 
       return 0;
@@ -1232,6 +1270,8 @@
     case ARGCHECK_OBJ_ENVIRONMENT_OPT:
     case ARGCHECK_OBJ_OPORT_OPT:
     case NOT_OBJ:
+    case ISNULL_OBJ:
+    case ISPAIR_OBJ:
       return 1;
     default: 
       return 0;
@@ -1251,6 +1291,8 @@
     case ARGCHECK_OBJ_OPORT_OPT:
     case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
     case NOT_OBJ:
+    case ISNULL_OBJ:
+    case ISPAIR_OBJ:
       return 1;
     default: 
       return 0;
@@ -1270,6 +1312,8 @@
     case ARGCHECK_OBJ_OPORT_OPT:
     case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
     case NOT_OBJ:
+    case ISNULL_OBJ:
+    case ISPAIR_OBJ:
       return 1;
     default: 
       return 0;
@@ -1331,8 +1375,14 @@
     case ARGCHECK_U8VECTOR_OPORT_OPT:
     case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
     case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
+    case ABS_X:
+    case TOEXACT_Z:
     case ADD_Z_ETC:
+    case MUL_Z_ETC:
     case SUB_Z_Z_ETC:
+    case DIV_Z_Z_ETC:
+    case GCD_N_ETC: 
+    case LCM_N_ETC: 
     case CAR_PAIR:
     case CDR_PAIR:
     case CAAR_PAIR:
@@ -1340,6 +1390,11 @@
     case CDAR_PAIR:
     case CDDR_PAIR:
     case NOT_OBJ:
+    case ISNULL_OBJ:
+    case ISPAIR_OBJ:
+    case LENGTH_LIST:
+    case LENGTH_STRING:
+    case LENGTH_VECTOR:
       return 1;
     default: 
       return 0;
@@ -1353,14 +1408,14 @@
 
 (%include <stdarg.h>)
 
-(%localdef "int argcheck(obj p, long ac, obj l, ...) {
+(%localdef "obj argcheck(obj p, long ac, obj l, ...) {
   int ann; assert(ac >= 0);
   ann = peekann(p); if (ann == FIXNUM_MIN) return ACRES_BADPROC; /* not a proc */
   if (ann >= 0) { /* ac check only */
     if (ann / 1000 <= ac && ac <= ann % 1000) return ACRES_APPLY; /* ac ok */
     else return ACRES_BADARGC; /* a closure, but won't accept ac */
   } else { /* full argument check */ 
-    int res = ACRES_APPLY; va_list args; 
+    obj res = ACRES_APPLY; va_list args; 
     va_start(args, l);
     switch (ann) {
       /* regular arg checks */
@@ -1372,8 +1427,7 @@
       int_etc: 
         while (ac-- > 0) { 
           obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
-          if (is_fixnum_obj(o)) continue;
-          if (is_flonum_obj(o)) { flonum_t f = flonum_from_obj(o); if (f > -HUGE_VAL && f < HUGE_VAL && f == floor(f)) continue; }
+          if (is_fixnum_obj(o) || (is_flonum_obj(o) && flisint(flonum_from_obj(o)))) continue; 
           res = ACRES_BADTYPE; break;
         } break;
       case ARGCHECK_Z:          if (ac != 1) { res = ACRES_BADARGC; break; } else goto real_etc;
@@ -1420,20 +1474,9 @@
         } else res = ACRES_BADARGC; 
         break;
       case ARGCHECK_PAIR:
-      pair:
         if (ac != 1) res = ACRES_BADARGC; else { 
           obj o; if (l) o = car(l); else o = va_arg(args, obj); 
           if (!ispair(o)) res = ACRES_BADTYPE; 
-        } break;
-      paair:
-        if (ac != 1) res = ACRES_BADARGC; else { 
-          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
-          if (!ispair(o) || !ispair(car(o))) res = ACRES_BADTYPE; 
-        } break;
-      padir:
-        if (ac != 1) res = ACRES_BADARGC; else { 
-          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
-          if (!ispair(o) || !ispair(cdr(o))) res = ACRES_BADTYPE; 
         } break;
       case ARGCHECK_PAIR_OBJ:
         if (ac != 2) res = ACRES_BADARGC; else { 
@@ -1812,89 +1855,284 @@
           if (!isoport(o1) || !is_bool_obj(o2)) res = ACRES_BADTYPE; 
         } else res = ACRES_BADARGC; 
         break;
-      /* special checks for popular inlined operations; return corresponding inlining code id if successful */
-      case ADD_Z_ETC:                                                       { res = ACRES_APP_ADD;  goto real_etc; }
-      case SUB_Z_Z_ETC:   if (ac < 1)  { res = ACRES_BADARGC; break; } else { res = ACRES_APP_SUB;  goto real_etc; }
-      case E_Z_Z_Z_ETC:   if (ac < 2)  { res = ACRES_BADARGC; break; } else { res = ACRES_APP_E;    goto real_etc; }
-      case L_X_X_X_ETC:   if (ac < 2)  { res = ACRES_BADARGC; break; } else { res = ACRES_APP_L;    goto real_etc; }
-      case G_X_X_X_ETC:   if (ac < 2)  { res = ACRES_BADARGC; break; } else { res = ACRES_APP_G;    goto real_etc; }
-      case LE_X_X_X_ETC:  if (ac < 2)  { res = ACRES_BADARGC; break; } else { res = ACRES_APP_LE;   goto real_etc; }
-      case GE_X_X_X_ETC:  if (ac < 2)  { res = ACRES_BADARGC; break; } else { res = ACRES_APP_GE;   goto real_etc; }
-      case CAR_PAIR:                                                        { res = ACRES_APP_CAR;  goto pair; }
-      case CDR_PAIR:                                                        { res = ACRES_APP_CDR;  goto pair; }
-      case CAAR_PAIR:                                                       { res = ACRES_APP_CAAR; goto paair; }
-      case CDAR_PAIR:                                                       { res = ACRES_APP_CDAR; goto paair; }
-      case CADR_PAIR:                                                       { res = ACRES_APP_CADR; goto padir; }
-      case CDDR_PAIR:                                                       { res = ACRES_APP_CDDR; goto padir; }
-      case NOT_OBJ:       if (ac != 1) { res = ACRES_BADARGC; break; } else { res = ACRES_APP_NOT;  break; }
-      case EQ_OBJ_OBJ:    if (ac != 2) { res = ACRES_BADARGC; break; } else { res = ACRES_APP_EQ;   break; }
-      case EQV_OBJ_OBJ:   if (ac != 2) { res = ACRES_BADARGC; break; } else { res = ACRES_APP_EQV;  break; }
+      /* special checks for popular operations; may return result if no allocation is needed */
+      case ABS_X:
+        if (ac != 1) res = ACRES_BADARGC; else {
+          long z; obj o; if (l) o = car(l); else o = va_arg(args, obj);
+          if (is_flonum_obj(o)) goto out;
+          if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+          z = fixnum_from_obj(o); if (z == FIXNUM_MIN) { res = ACRES_FIXOVER; goto out; }
+          res = obj_from_fixnum(labs(z));
+        } break;
+      case TOEXACT_Z:
+        if (ac != 1) res = ACRES_BADARGC; else {
+          double f; long z; obj o; if (l) o = car(l); else o = va_arg(args, obj);
+          if (is_fixnum_obj(o)) { res = o; goto out; }
+          if (!is_flonum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+          f = flonum_from_obj(o); z = (long)f;
+          if ((double)z != f || z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }  
+          res = obj_from_fixnum(z);
+        } break;
+      case ADD_Z_ETC:
+        if (ac < 2) goto real_etc; else { 
+          long z = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o)) goto real_etc; /* fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            z += fixnum_from_obj(o); if (z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum(z);
+        } break;
+      case MUL_Z_ETC:
+        if (ac < 2) goto real_etc; else { 
+          long long z = 1; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o)) goto real_etc; /* fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            z *= fixnum_from_obj(o); if (z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum((long)z);
+        } break;
+      case SUB_Z_Z_ETC:
+        if (ac < 1) res = ACRES_BADARGC; else {
+          long z = 0, i = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o)) goto real_etc; /* fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            if (!i++) { z = fixnum_from_obj(o); if (!ac) z = -z; } else z -= fixnum_from_obj(o); 
+            if (z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum(z);
+        } break;
+      case DIV_Z_Z_ETC:
+        if (ac < 1) res = ACRES_BADARGC; else {
+          long z = 0, i = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o)) goto real_etc; /* our fl/mixed op won't overflow or zerodiv */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            if ((i || !ac) && o == obj_from_fixnum(0)) { res = ACRES_ZERODIV; goto out; }
+            if (!i++) { z = fixnum_from_obj(o); if (!ac) { if (z != 1 && z != -1) goto out; } } 
+            else { long x = fixnum_from_obj(o); if (z % x == 0) z /= x; else goto out; } 
+            if (z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum(z);
+        } break;
+      case QUO_N_N:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) { long x =  fixnum_from_obj(o1), y = fixnum_from_obj(o2);
+            res = (!y) ? ACRES_ZERODIV : (x == FIXNUM_MIN && y == -1) ? ACRES_FIXOVER : obj_from_fixnum(x / y);
+          } else if (!(is_fixnum_obj(o1) || (is_flonum_obj(o1) && flisint(flonum_from_obj(o1)))) || 
+                     !(is_fixnum_obj(o2) || (is_flonum_obj(o2) && flisint(flonum_from_obj(o2))))) res = ACRES_BADTYPE;
+        } break;
+      case REM_N_N:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) { long x =  fixnum_from_obj(o1), y = fixnum_from_obj(o2);
+            res = (!y) ? ACRES_ZERODIV : obj_from_fixnum(x % y);
+          } else if (!(is_fixnum_obj(o1) || (is_flonum_obj(o1) && flisint(flonum_from_obj(o1)))) || 
+                     !(is_fixnum_obj(o2) || (is_flonum_obj(o2) && flisint(flonum_from_obj(o2))))) res = ACRES_BADTYPE;
+        } break;
+      case MQU_N_N:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) { long x =  fixnum_from_obj(o1), y = fixnum_from_obj(o2);
+            if (!y) res = ACRES_ZERODIV; else if (x == FIXNUM_MIN && y == -1) res = ACRES_FIXOVER;
+            else { long q = x / y; res = obj_from_fixnum(((x < 0 && y > 0) || (x > 0 && y < 0)) ? q - 1 : q); }
+          } else if (!(is_fixnum_obj(o1) || (is_flonum_obj(o1) && flisint(flonum_from_obj(o1)))) || 
+                     !(is_fixnum_obj(o2) || (is_flonum_obj(o2) && flisint(flonum_from_obj(o2))))) res = ACRES_BADTYPE;
+        } break;
+      case MLO_N_N:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) { long x =  fixnum_from_obj(o1), y = fixnum_from_obj(o2);
+            if (!y) res = ACRES_ZERODIV; else { long r = x % y; res = obj_from_fixnum(((r < 0 && y > 0) || (r > 0 && y < 0)) ? r + y : r); }
+          } else if (!(is_fixnum_obj(o1) || (is_flonum_obj(o1) && flisint(flonum_from_obj(o1)))) || 
+                     !(is_fixnum_obj(o2) || (is_flonum_obj(o2) && flisint(flonum_from_obj(o2))))) res = ACRES_BADTYPE;
+        } break;
+      case E_Z_Z_Z_ETC:
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(o1 == o2);
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case L_X_X_X_ETC:   
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(fixnum_from_obj(o1) < fixnum_from_obj(o2));
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case G_X_X_X_ETC:   
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(fixnum_from_obj(o1) > fixnum_from_obj(o2));
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case LE_X_X_X_ETC:   
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(fixnum_from_obj(o1) <= fixnum_from_obj(o2));
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case GE_X_X_X_ETC:   
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(fixnum_from_obj(o1) >= fixnum_from_obj(o2));
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case GCD_N_ETC:
+        if (ac == 0) res = obj_from_fixnum(0); else { 
+          long a, i = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o) && flisint(flonum_from_obj(o))) goto int_etc; /* our fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            if (!i++) a = labs(fixnum_from_obj(o)); 
+            else { long b = labs(fixnum_from_obj(o)), c; while (b) c = a%b, a = b, b = c; }
+            if (a > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum(a);
+        } break;
+      case LCM_N_ETC:
+        if (ac == 0) res = obj_from_fixnum(1); else { 
+          long long x; long i = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o) && flisint(flonum_from_obj(o))) goto int_etc; /* our fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            if (!i++) x = labs(fixnum_from_obj(o)); 
+            else { long y = labs(fixnum_from_obj(o)), a = (long)x, b = y, c; while (b) c = a%b, a = b, b = c;
+                   if (!a) x = a; else x = (x / a) * y; }
+            if (x > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; } /* internal overflow, like in real op */
+          } res = obj_from_fixnum((long)x);
+        } break;
+      case EXPT_Z_Z:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2) && fixnum_from_obj(o2) >= 0) { 
+            long x = fixnum_from_obj(o1), y = fixnum_from_obj(o2); 
+            if (!iexpt(&x, y)) res = ACRES_FIXOVER; else res = obj_from_fixnum(x);
+          } else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } break;
+      case CAR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = ispair(o) ? car(o) : ACRES_BADTYPE;
+        } break;
+      case CDR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = ispair(o) ? cdr(o) : ACRES_BADTYPE;
+        } break;
+      case CAAR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = (ispair(o) && ispair(car(o))) ? car(car(o)) : ACRES_BADTYPE;
+        } break;
+      case CDAR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = (ispair(o) && ispair(car(o))) ? cdr(car(o)) : ACRES_BADTYPE;
+        } break;
+      case CADR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = (ispair(o) && ispair(cdr(o))) ? car(cdr(o)) : ACRES_BADTYPE;
+        } break;
+      case CDDR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = (ispair(o) && ispair(cdr(o))) ? cdr(cdr(o)) : ACRES_BADTYPE;
+        } break;
+      case NOT_OBJ:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = obj_from_bool(!bool_from_obj(o));
+        } break;
+      case EQ_OBJ_OBJ:   
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          res = obj_from_bool(o1 == o2);
+        } break;
+      case EQV_OBJ_OBJ:   
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_flonum_obj(o1) && is_flonum_obj(o2)) res = obj_from_bool(flonum_from_obj(o1) == flonum_from_obj(o2));
+          else res = obj_from_bool(o1 == o2);
+        } break;
+      case ISNULL_OBJ:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = obj_from_bool(isnull(o));
+        } break;
+      case ISPAIR_OBJ:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = obj_from_bool(ispair(o));
+        } break;
+      case LENGTH_LIST:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          long n; obj o; if (l) o = car(l); else o = va_arg(args, obj); res = ((n = listlen(o)) < 0) ? ACRES_BADTYPE : obj_from_fixnum(n);
+        } break;
+      case LENGTH_STRING:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = isstring(o) ? obj_from_fixnum(stringlen(o)) : ACRES_BADTYPE; 
+        } break;
+      case REF_STRING_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), n = fixnum_from_obj(o2); res = (n < 0 || n >= len) ? ACRES_BADINDEX : obj_from_char(*(unsigned char*)stringref(o1, n)); }
+        } break;
+      case SET_STRING_INDEX_CHAR:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2) || !ischar(o3)) res = ACRES_BADTYPE;
+          else { 
+            long len = stringlen(o1), n = fixnum_from_obj(o2); 
+            res = (n < 0 || n >= len) ? ACRES_BADINDEX : obj_from_void(*stringref(o1, n) = char_from_obj(o3)); 
+          }
+        } break;
+      case LENGTH_VECTOR:
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = isvector(o) ? obj_from_fixnum(vectorlen(o)) : ACRES_BADTYPE;
+        } break;
+      case REF_VECTOR_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), n = fixnum_from_obj(o2); res = (n < 0 || n >= len) ? ACRES_BADINDEX : vectorref(o1, n); }          
+        } break;
+      case SET_VECTOR_INDEX_OBJ:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), n = fixnum_from_obj(o2); res = (n < 0 || n >= len) ? ACRES_BADINDEX : (vectorref(o1, n) = o3); }
+        } break;
       default: assert(0);
     }
     va_end(args);
-    return res;
+    out: return res;
   }
 }")
 
 (define-syntax %procedure-argcheck
   (syntax-rules ()
-    [(_ p 0) (%prim? "fixnum(argcheck(obj_from_$arg, 0, 0))" p)]
-    [(_ p 1 x) (%prim? "fixnum(argcheck(obj_from_$arg, 1, 0, obj_from_$arg))" p x)]
-    [(_ p 2 x y) (%prim? "fixnum(argcheck(obj_from_$arg, 2, 0, obj_from_$arg, obj_from_$arg))" p x y)]
-    [(_ p 3 x y z) (%prim? "fixnum(argcheck(obj_from_$arg, 3, 0, obj_from_$arg, obj_from_$arg, obj_from_$arg))" p x y z)]
-    [(_ p 4 x y z t) (%prim? "fixnum(argcheck(obj_from_$arg, 4, 0, obj_from_$arg, obj_from_$arg, obj_from_$arg, obj_from_$arg))" p x y z t)]))
+    [(_ p 0) (%prim? "obj(argcheck(obj_from_$arg, 0, 0))" p)]
+    [(_ p 1 x) (%prim? "obj(argcheck(obj_from_$arg, 1, 0, obj_from_$arg))" p x)]
+    [(_ p 2 x y) (%prim? "obj(argcheck(obj_from_$arg, 2, 0, obj_from_$arg, obj_from_$arg))" p x y)]
+    [(_ p 3 x y z) (%prim? "obj(argcheck(obj_from_$arg, 3, 0, obj_from_$arg, obj_from_$arg, obj_from_$arg))" p x y z)]
+    [(_ p 4 x y z t) (%prim? "obj(argcheck(obj_from_$arg, 4, 0, obj_from_$arg, obj_from_$arg, obj_from_$arg, obj_from_$arg))" p x y z t)]))
 
 (define (scheme-call-error n r p l)
-  (cond [(eq? r (enum ACRES_BADPROC))      (r-error "attempt to call non-procedure" p)]
-        [(eq? r (enum ACRES_BADARGC))      (r-error "procedure can't be called with argc =" n p  ': l)] 
-        [(eq? r (enum ACRES_BADTYPE))      (r-error "invalid arguments to" p ': l)]
-        [(eq? r (enum ACRES_BADINDEX))     (r-error "index out of range in call to" p ': l)]
-        [(eq? r (enum ACRES_BADRANGE))     (r-error "bad index range in call to" p ': l)]
-        [else (%prim! "void(assert(0))")]))
+  (cond [(eq? r (%prim "obj(ACRES_BADPROC)"))  (r-error "attempt to call non-procedure" p)]
+        [(eq? r (%prim "obj(ACRES_BADARGC)"))  (r-error "procedure can't be called with argc =" n p  ': l)] 
+        [(eq? r (%prim "obj(ACRES_BADTYPE)"))  (r-error "invalid arguments to" p ': l)]
+        [(eq? r (%prim "obj(ACRES_BADINDEX)")) (r-error "index out of range in call to" p ': l)]
+        [(eq? r (%prim "obj(ACRES_BADRANGE)")) (r-error "bad index range in call to" p ': l)]
+        [(eq? r (%prim "obj(ACRES_ZERODIV)"))  (r-error "division by zero in call to" p ': l)]
+        [(eq? r (%prim "obj(ACRES_FIXOVER)"))  (r-error "exact integer overflow in call to" p ': l)]
+        [else   (%prim! "void(assert(0))")]))
 
 (define-syntax scheme-argcheck-call
   (syntax-rules ()
-    [(_ 0 p () ())
-     (let ([r (%procedure-argcheck p 0)])
-       (cond [(eq? r (enum ACRES_APPLY))        (p)]
-             [(eq? r (enum ACRES_APP_ADD))      (+)]
-             [else (scheme-call-error 0 r p '())]))] 
-    [(_ 1 p () (a))
-     (let ([r (%procedure-argcheck p 1 a)])
-       (cond [(eq? r (enum ACRES_APPLY))        (p a)]
-             [(eq? r (enum ACRES_APP_CAR))      (car a)]
-             [(eq? r (enum ACRES_APP_CDR))      (cdr a)]
-             [(eq? r (enum ACRES_APP_NOT))      (not a)]
-             [(eq? r (enum ACRES_APP_CAAR))     (caar a)]
-             [(eq? r (enum ACRES_APP_CADR))     (cadr a)]
-             [(eq? r (enum ACRES_APP_CDAR))     (cdar a)]
-             [(eq? r (enum ACRES_APP_CDDR))     (cddr a)]
-             [(eq? r (enum ACRES_APP_SUB))      (- a)]
-             [(eq? r (enum ACRES_APP_ADD))      (+ a)]
-             [else (scheme-call-error 1 r p (list a))]))]
-    [(_ 2 p () (a b))
-     (let ([r (%procedure-argcheck p 2 a b)])
-       (cond [(eq? r (enum ACRES_APPLY))        (p a b)]
-             [(eq? r (enum ACRES_APP_SUB))      (- a b)]
-             [(eq? r (enum ACRES_APP_ADD))      (+ a b)]
-             [(eq? r (enum ACRES_APP_L))        (< a b)]
-             [(eq? r (enum ACRES_APP_G))        (> a b)]
-             [(eq? r (enum ACRES_APP_EQ))       (eq? a b)]
-             [(eq? r (enum ACRES_APP_EQV))      (eqv? a b)]
-             [(eq? r (enum ACRES_APP_E))        (= a b)]
-             [(eq? r (enum ACRES_APP_LE))       (<= a b)]
-             [(eq? r (enum ACRES_APP_GE))       (>= a b)]
-             [else (scheme-call-error 2 r p (list a b))]))]
     [(_ n p () (a ...))
      (let ([r (%procedure-argcheck p n a ...)])
-       (cond [(eq? r (enum ACRES_APPLY))        (p a ...)]
-             [(eq? r (enum ACRES_APP_SUB))      (- a ...)]
-             [(eq? r (enum ACRES_APP_ADD))      (+ a ...)]
-             [(eq? r (enum ACRES_APP_L))        (< a ...)]
-             [(eq? r (enum ACRES_APP_G))        (> a ...)]
-             [(eq? r (enum ACRES_APP_E))        (= a ...)]
-             [(eq? r (enum ACRES_APP_LE))       (<= a ...)]
-             [(eq? r (enum ACRES_APP_GE))       (>= a ...)]
+       (cond [(not (acres-special? r)) r]
+             [(eq? r (%prim "obj(ACRES_APPLY)")) (p a ...)]
              [else (scheme-call-error n r p (list a ...))]))]
     [(_ n p (arg0 . arg*) (a ...))
      (let ([a0 arg0]) (scheme-argcheck-call n p arg* (a ... a0)))]
@@ -1904,14 +2142,15 @@
 (define-syntax %procedure-argcheck*
   (syntax-rules ()
     [(_ p n l) 
-     (%prim? "fixnum(argcheck(obj_from_$arg, fixnum_from_$arg, obj_from_$arg))" p n l)]))
+     (%prim? "obj(argcheck(obj_from_$arg, fixnum_from_$arg, obj_from_$arg))" p n l)]))
 
 (define-syntax scheme-argcheck-apply
   (syntax-rules ()
     [(_ n proc arglist)
      (let ([p proc] [l arglist]) 
        (let ([r (%procedure-argcheck* p n l)])
-         (cond [(fx>=? r (enum ACRES_APPLY)) (apply p l)]
+         (cond [(not (acres-special? r)) r]
+               [(eq? r (%prim "obj(ACRES_APPLY)")) (apply p l)]
                [else (scheme-call-error n r p l)])))]))
 
 (define-inline (annotated-procedure-argc-ok? ap argc) ;assumes annotation is there!
@@ -2526,15 +2765,15 @@
 (def-global (max x x ...))
 (def-global (min x x ...))
 (def-global + (mark-argcheck ADD_Z_ETC +))
-(def-global (* z ...))
+(def-global * (mark-argcheck MUL_Z_ETC *))
 (def-global - (mark-argcheck SUB_Z_Z_ETC -))
-(def-global (/ z z ...))
-(def-global (abs x))
-(def-global (quotient n n))
-(def-global (remainder n n))
-(def-global (modulo n n))
-(def-global (gcd n ...))
-(def-global (lcm n ...))
+(def-global / (mark-argcheck DIV_Z_Z_ETC /))
+(def-global abs (mark-argcheck ABS_X abs))
+(def-global quotient (mark-argcheck QUO_N_N quotient))
+(def-global remainder (mark-argcheck REM_N_N remainder))
+(def-global modulo (mark-argcheck MLO_N_N modulo))
+(def-global gcd (mark-argcheck GCD_N_ETC gcd))
+(def-global lcm (mark-argcheck LCM_N_ETC lcm))
 (def-global (numerator q))
 (def-global (denominator q))
 (def-global (floor x))
@@ -2551,7 +2790,7 @@
 (def-global (acos z))
 (def-global atan (mark-argcheck ARGCHECK_Z_OR_X_X atan))  ;(atan z) (atan x x)
 (def-global (sqrt z))
-(def-global (expt z z))
+(def-global expt (mark-argcheck EXPT_Z_Z expt))
 (def-global (make-rectangular x x))
 (def-global (make-polar x x))
 (def-global (real-part z))
@@ -2559,7 +2798,7 @@
 (def-global (magnitude z))
 (def-global (angle z))
 (def-global (exact->inexact z)) ; r7rs name: inexact
-(def-global (inexact->exact z)) ; r7rs name: exact
+(def-global inexact->exact (mark-argcheck TOEXACT_Z inexact->exact)) ; r7rs name: exact
 
 ; 6.2.6  Numerical input and output
 (def-global (number->string z radix ?))
@@ -2570,7 +2809,7 @@
 (def-global (boolean? obj))
 
 ; 6.3.2  Pairs and lists
-(def-global (pair? obj))
+(def-global pair? (mark-argcheck ISPAIR_OBJ pair?))
 (def-global (cons obj obj))
 (def-global car (mark-argcheck CAR_PAIR car))
 (def-global cdr (mark-argcheck CDR_PAIR cdr))
@@ -2604,10 +2843,10 @@
 ;(def-global (cddadr pair))
 ;(def-global (cdddar pair))
 ;(def-global (cddddr pair))
-(def-global (null? obj))
+(def-global null? (mark-argcheck ISNULL_OBJ null?))
 (def-global (list? obj))
 (def-global (list obj ...))
-(def-global (length list))
+(def-global length (mark-argcheck LENGTH_LIST length))
 (def-global append (mark-argcheck ARGCHECK_LIST_ETC_OBJ_OPT
    (argc-dispatch-lambda
      (lambda () '()) (lambda (x) x) (lambda (x y) (append x y)) 
@@ -2653,9 +2892,9 @@
 (def-global (string? obj))
 (def-global (make-string k char ?))
 (def-global (string char ...))
-(def-global (string-length string))
-(def-global (string-ref string index))
-(def-global (string-set! string index char))
+(def-global string-length (mark-argcheck LENGTH_STRING string-length))
+(def-global string-ref (mark-argcheck REF_STRING_INDEX string-ref))
+(def-global string-set! (mark-argcheck SET_STRING_INDEX_CHAR string-set!))
 (def-global (string=? string string))
 (def-global (string<? string string))
 (def-global (string>? string string))
@@ -2677,9 +2916,9 @@
 (def-global (vector? obj))
 (def-global (make-vector k obj ?))
 (def-global (vector obj ...))
-(def-global (vector-length vector))
-(def-global (vector-ref vector index))
-(def-global (vector-set! vector index obj))
+(def-global vector-length (mark-argcheck LENGTH_VECTOR vector-length))
+(def-global vector-ref (mark-argcheck REF_VECTOR_INDEX vector-ref))
+(def-global vector-set! (mark-argcheck SET_VECTOR_INDEX_OBJ vector-set!))
 (def-global (vector->list vector))
 (def-global (list->vector list))
 (def-global (vector-fill! vector obj))
@@ -2776,22 +3015,20 @@
   (lambda args (make-annotated-procedure (apply make-case-lambda args) (rest-argc->annotation 1))))
 
 ; 6.2.6. Numerical operations
-(def-global (exact z))   ; r5rs name: inexact->exact
+(def-global exact (mark-argcheck TOEXACT_Z exact))   ; r5rs name: inexact->exact
 (def-global (inexact z)) ; r5rs name: exact->inexact
 (def-global (exact-integer? z))
 (def-global (nan? z))
 (def-global (finite? z))
 (def-global (infinite? z))
-(def-global (floor-quotient n n))
-(def-global (floor-remainder n n))
-(def-global (floor/ n n) ; has to use interpreter's (values)
-  (lambda (x y) (list *values-tag* (floor-quotient x y) (floor-remainder x y))))
-(def-global (truncate-quotient n n))
-(def-global (truncate-remainder n n))
-(def-global (truncate/ n n) ; has to use interpreter's (values)
-  (lambda (x y) (list *values-tag* (truncate-quotient x y) (truncate-remainder x y))))
+(def-global floor-quotient (mark-argcheck MQU_N_N floor-quotient))
+(def-global floor-remainder (mark-argcheck MLO_N_N floor-remainder))
+;(floor/ n n) is in the init code
+(def-global truncate-quotient (mark-argcheck QUO_N_N truncate-quotient))
+(def-global truncate-remainder (mark-argcheck REM_N_N truncate-remainder))
+;(truncate/ n n) is in the init code
 (def-global (log z z ?))
-(def-global (square z))
+;(square z) is in the init code
 
 ; 6.9  Bytevectors
 (def-global (bytevector? obj))
@@ -3289,6 +3526,10 @@ static char *ints_init_code =
 "                (lambda () e1 e2 ...)"
 "                (lambda args"
 "                  (guard-k (lambda () (apply values args))))))))))])))"
+""
+"(define (floor/ x y) (values (floor-quotient x y) (floor-remainder x y)))"
+"(define (truncate/ x y) (values (truncate-quotient x y) (truncate-remainder x y)))"
+"(define (square x) (* x x))"
 ;
 EOS
 )
