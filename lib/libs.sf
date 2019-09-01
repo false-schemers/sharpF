@@ -442,8 +442,7 @@ long fxidv(long x, long y) {
 }
 /* truncated division (common/C99) */
 long fxquo(long x, long y) { 
-  assert(y); 
-  assert(x != FIXNUM_MIN || y != -1);
+  assert(y); assert(x != FIXNUM_MIN || y != -1);
   return x / y; 
 }
 long fxrem(long x, long y) { 
@@ -452,29 +451,23 @@ long fxrem(long x, long y) {
 }
 /* floor division */
 long fxmlo(long x, long y) {
-  long r; 
-  assert(y); 
-  r = x % y;
+  long r; assert(y); r = x % y;
   return ((r < 0 && y > 0) || (r > 0 && y < 0)) ? r + y : r;
 }
 /* euclidean division */
 long fxdiv(long x, long y) { 
-  long q, r; 
-  assert(y); 
-  assert(x != FIXNUM_MIN || y != -1);
+  long q, r; assert(y); assert(x != FIXNUM_MIN || y != -1);
   q = x / y, r = x % y; 
   return (r < 0) ? ((y > 0) ? q - 1 : q + 1) : q;
 }
 long fxmod(long x, long y) {
-  long r; 
-  assert(y); 
-  r = x % y; 
+  long r; assert(y); r = x % y; 
   return (r < 0) ? ((y > 0) ? r + y : r - y) : r;
 } 
 long fxgcd(long x, long y) {
   long a = labs(x), b = labs(y), c; 
-  assert(a <= FIXNUM_MAX || b <= FIXNUM_MAX);
   while (b) c = a%b, a = b, b = c; 
+  assert(a <= FIXNUM_MAX);
   return a;
 } 
 long fxasl(long x, long y) {
@@ -487,51 +480,50 @@ long fxasr(long x, long y) {
   return x >> y;
 } 
 long fxflo(double f) {
-  long l = (long)f;
-  assert((double)l == f);
+  long l = (long)f; assert((double)l == f);
   assert(l >= FIXNUM_MIN && l <= FIXNUM_MAX);
   return l;
 }
 #endif")
+
+(%definition "static int flisint(double f) { return f > -HUGE_VAL && f < HUGE_VAL && f == floor(f); }")
 
 (%definition "extern long fxpow(long x, long y);")
 (%localdef "long fxpow(long x, long y) { 
   assert(y >= 0);
   retry: if (y == 0) return 1; if (y == 1) return x;
   if (y % 2 == 1) x *= fxpow(x, y-1); 
-  else { x *= x; y /= 2; assert(x <= FIXNUM_MAX); goto retry; }
-  assert(x <= FIXNUM_MAX); return x;
+  else { x *= x; y /= 2; assert(FIXNUM_MIN <= x && x <= FIXNUM_MAX); goto retry; }
+  assert(FIXNUM_MIN <= x && x <= FIXNUM_MAX); return x;
 }")
 
 (%definition "extern int fxifdv(long x, long y, long *pi, double *pd);")
 (%localdef "int fxifdv(long x, long y, long *pi, double *pd) { 
-  assert(y); 
-  assert(x != FIXNUM_MIN || y != -1);
+  assert(y); assert(x != FIXNUM_MIN || y != -1);
   if (x % y == 0) { *pi = x / y; return 1; }
   else { *pd = (double)x / (double)y; return 0; }  
 }")
 
 (%definition "extern double flquo(double x, double y);")
 (%localdef "double flquo(double x, double y) {
-  double z;
-  assert(y != 0.0 && x == floor(x) && y == floor(y));
+  double z; assert(y != 0.0 && flisint(x) && flisint(y));
   modf(x / y,  &z);
   return z;
 }")
 (%definition "extern double flrem(double x, double y);")
 (%localdef "double flrem(double x, double y) {
-  assert(y != 0.0 && x == floor(x) && y == floor(y));
+  assert(y != 0.0 && flisint(x) && flisint(y));
   return fmod(x, y);
 }")
 (%definition "extern double flmlo(double x, double y);")
 (%localdef "double flmlo(double x, double y) {
-  assert(y != 0.0 && x == floor(x) && y == floor(y));
+  assert(y != 0.0 && flisint(x) && flisint(y));
   return x - y * floor(x / y);
 }")
 (%definition "extern double flgcd(double x, double y);")
 (%localdef "double flgcd(double x, double y) {
   double a = fabs(x), b = fabs(y), c; 
-  assert(a == floor(a) && b == floor(b));
+  assert(flisint(a) && flisint(b));
   while (b > 0.0) c = fmod(a, b), a = b, b = c; 
   return a;
 }")
@@ -541,8 +533,8 @@ long fxflo(double f) {
   if (d == u) return fmod(f, 2.0) == 0.0 ? f : c;
   else return (d < u) ? f : c;
 }")
-(%definition "extern int strtofxfl(const char *s, int radix, long *pl, double *pd);")
-(%localdef "int strtofxfl(const char *s, int radix, long *pl, double *pd) {
+(%definition "extern int strtofxfl(char *s, int radix, long *pl, double *pd);")
+(%localdef "int strtofxfl(char *s, int radix, long *pl, double *pd) {
   char *e; int conv = 0, eno = errno; long l; double d;
   for (; s[0] == '#'; s += 2) {
     switch (s[1]) {
@@ -556,17 +548,23 @@ long fxflo(double f) {
     }
   }
   if (isspace(*s)) return 0;
-  l = (errno = 0, strtol(s, &e, radix));
-  if (!errno && l >= FIXNUM_MIN && l <= FIXNUM_MAX && e != s && !*e)
-    return errno = eno, (conv == 'i') ? (*pd = (double)l, 'i') : (*pl = l, 'e');
-  if (radix != 10) return errno = eno, 0;
-  d = (errno = 0, strtod(s, &e));
-  if (!errno && e != s && !*e) {
-    if ((conv == 'e') && ((l=(long)d) < FIXNUM_MIN || l > FIXNUM_MAX || (double)l != d))
-      return errno = eno, 0;
-    else return errno = eno, (conv == 'e') ? (*pl = fxflo(d), 'e') : (*pd = d, 'i');
-  }
-  return errno = eno, 0;
+  for (e = s; *e; ++e) { if (strchr(\".eEiInN\", *e)) break; }
+  if (!*e) { /* s is not a syntax for an inexact number */
+    l = (errno = 0, strtol(s, &e, radix));
+    if (errno || *e || e == s) { if (conv == 'i') goto fl; return (errno = eno, 0); }
+    if (conv == 'i') return (errno = eno, *pd = (double)l, 'i');
+    if (FIXNUM_MIN <= l && l <= FIXNUM_MAX) return (errno = eno, *pl = l, 'e');
+    return (errno = eno, 0); /* can't represent as an exact */
+  } 
+  fl: if (radix != 10) return (errno = eno, 0); 
+  e = \"\", errno = 0; if (*s != '+' && *s != '-') d = strtod(s, &e);
+  else if (strcmp(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
+  else if (strcmp(s+1, \"nan.0\") == 0) d = strtod(\"NAN\", &e); /* since C99 */ 
+  else d = strtod(s, &e);
+  if (errno || *e || e == s) return (errno = eno, 0);
+  if ((conv == 'e') && ((l=(long)d) < FIXNUM_MIN || l > FIXNUM_MAX || (double)l != d))
+    return (errno = eno, 0); /* can't be converted to an exact number */
+  return (errno = eno, (conv == 'e') ? (*pl = fxflo(d), 'e') : (*pd = d, 'i'));
 }")
 
 
@@ -588,8 +586,6 @@ long fxflo(double f) {
 (%definition "#define bool_from_fixnum(i) ((void)(i), 1)")
 (%definition "#define void_from_fixnum(i) (void)(i)")
 (%definition "#define obj_from_fixnum(i) mkimm((fixnum_t)(i), FIXNUM_ITAG)")
-
-; fixme: add #b constants
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
@@ -857,9 +853,7 @@ long fxflo(double f) {
     [_ %residual-fl>=?]))
 
 (define-inline (flinteger? x)
-  (%prim "{ /* flinteger? */ 
-    flonum_t f = flonum_from_$arg; 
-    $return bool(f == floor(f)); }" x))
+  (%prim "bool(flisint(flonum_from_$arg))" x))
 
 (define-inline (flzero? x)
   (%prim "bool(flonum_from_$arg == 0.0)" x))
@@ -871,14 +865,10 @@ long fxflo(double f) {
   (%prim "bool(flonum_from_$arg < 0.0)" x))
 
 (define-inline (flodd? x)
-  (%prim "{ /* flodd? */ 
-    flonum_t f = (flonum_from_$arg + 1.0) / 2.0; 
-    $return bool(f == floor(f)); }" x))
+  (%prim "bool(flisint((flonum_from_$arg + 1.0) / 2.0))" x))
  
 (define-inline (fleven? x)
-  (%prim "{ /* fleven? */ 
-    flonum_t f = flonum_from_$arg / 2.0;
-    $return bool(f == floor(f)); }" x))
+  (%prim "bool(flisint(flonum_from_$arg / 2.0))" x))
 
 (define-syntax flmax
   (syntax-rules ()
@@ -961,7 +951,8 @@ long fxflo(double f) {
 (define-inline (fllog x)
   (%prim* "flonum($live, log(flonum_from_$arg))" x))
 
-; no 2-arg version of fllog
+(define-inline (fllog10 x)
+  (%prim* "flonum($live, log10(flonum_from_$arg))" x))
 
 (define-inline (flsin x)
   (%prim* "flonum($live, sin(flonum_from_$arg))" x))
@@ -1075,15 +1066,19 @@ long fxflo(double f) {
 (define-syntax max
   (syntax-rules ()
     [(_ x) x]
-    [(_ x y) (let ([a x] [b y]) (if (> a b) a b))]
-    [(_ x y z ...) (max (max x y) z ...)]
+    [(_ x y) 
+     (let ([a x] [b y]) 
+       (if (and (fixnum? a) (fixnum? b)) (if (fx>? a b) a b) (%residual-max/2 a b)))]
+    [(_ x y z ...) (%residual-max x y z ...)]
     [_ %residual-max]))
 
 (define-syntax min
   (syntax-rules ()
     [(_ x) x]
-    [(_ x y) (let ([a x] [b y]) (if (> a b) b a))]
-    [(_ x y z ...) (min (min x y) z ...)]
+    [(_ x y)
+     (let ([a x] [b y]) 
+       (if (and (fixnum? a) (fixnum? b)) (if (fx<? a b) a b) (%residual-min/2 a b)))]
+    [(_ x y z ...) (%residual-min x y z ...)]
     [_ %residual-min]))
 
 (define-syntax +
@@ -1091,7 +1086,7 @@ long fxflo(double f) {
     [(_) 0] 
     [(_ x) x]
     [(_ x y) (real-binop x y fx+ fl+)]
-    [(_ x y z ...) (+ x (+ y z ...))]
+    [(_ x y z ...) (+ (+ x y) z ...)]
     [_ %residual+]))
 
 (define-syntax *
@@ -1099,7 +1094,7 @@ long fxflo(double f) {
     [(_) 1]
     [(_ x) x]
     [(_ x y) (real-binop x y fx* fl*)]
-    [(_ x y z ...) (* x (* y z ...))]
+    [(_ x y z ...) (* (* x y) z ...)]
     [_ %residual*]))
 
 (define-syntax -
@@ -1133,7 +1128,7 @@ long fxflo(double f) {
     [(_) 0] 
     [(_ x) x]
     [(_ x y) (real-binop x y fxgcd flgcd)]
-    [(_ x y z ...) (gcd x (gcd y z ...))]
+    [(_ x y z ...) (gcd (gcd x y) z ...)]
     [_ %residual-gcd]))
 
 (define (lcm/2 x y)
@@ -1145,7 +1140,7 @@ long fxflo(double f) {
     [(_) 1] 
     [(_ x) x]
     [(_ x y) (lcm/2 x y)]
-    [(_ x y z ...) (lcm/2 x (lcm y z ...))]
+    [(_ x y z ...) (lcm (lcm/2 x y) z ...)]
     [_ %residual-lcm]))
 
 ; no div
@@ -1204,7 +1199,9 @@ long fxflo(double f) {
     [_ %residual-atan]))
 
 (define-inline (expt x y)
-  (real-binop x y fxexpt flexpt))
+  (if (and (fixnum? x) (fixnum? y) (fx>=? y 0))
+      (fxexpt x y)
+      (flexpt (real->flonum x) (real->flonum y))))
 
 
 ; characters
@@ -1879,10 +1876,12 @@ long fxflo(double f) {
 
 (define (flonum->string x)
   (%prim* "{ /* flonum->string */
-    char buf[30], *s;
-    sprintf(buf, \"%.15g\", flonum_from_$arg);
-    for (s = buf; *s != 0; s++) if (*s == 'e' || *s == '.') break;
-    if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
+    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_$arg);
+    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
+    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
+    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
+    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    else if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
     $return obj(hpushstr($live, newstring(buf))); }" x))
 
 (define-syntax number->string
@@ -1905,8 +1904,11 @@ long fxflo(double f) {
 
 (define (string->flonum s)
   (%prim*? "{ /* string->flonum */
-    char *e, *s = stringchars(obj_from_$arg);
-    double d = (errno = 0, strtod(s, &e));
+    char *e = \"\", *s = stringchars(obj_from_$arg); double d; errno = 0;
+    if (*s != '+' && *s != '-') d = strtod(s, &e);
+    else if (strcmp(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
+    else if (strcmp(s+1, \"nan.0\") == 0) d = strtod(\"NAN\", &e); /* since C99 */ 
+    else d = strtod(s, &e);
     if (errno || e == s || *e) $return bool(0);
     else $return flonum($live, d); }" s))
 
@@ -2405,14 +2407,16 @@ default: /* inter-host call */
 (define-syntax display-flonum
   (syntax-rules ()
     [(_ x) (display-flonum x (current-output-port))]
-    [(_ x p) (%prim! "{ /* display-flonum */
-    char buf[30], *s;
-    sprintf(buf, \"%.17g\", flonum_from_$arg);
-    for (s = buf; *s != 0; s++) if (*s == 'e' || *s == '.') break;
-    if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
+    [(_ x p) (%prim?! "{ /* display-flonum */
+    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_$arg);
+    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
+    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
+    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
+    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    else if (*s == 0) { *s++ = '.'; *s++ = '0'; *s = 0; }
     $return void(fputs(buf, oportdata(obj_from_$arg))); }" x p)]
     [_ %residual-display-flonum]))
-    
+
 (define-syntax display-procedure
   (syntax-rules ()
     [(_ n) (display-procedure n (current-output-port))]
@@ -2962,7 +2966,7 @@ default: /* inter-host call */
                               (char=? (string-ref s 1) #\>))
                             (string->symbol s)]
                            [(string->number s)]
-                           [else (r-error p "unsupported number syntax" s)])
+                           [else (r-error p "unsupported number syntax (implementation restriction)" s)])
                      (string->symbol s)))]
               [(char=? c #\#)
                (read-char p) 
@@ -3003,7 +3007,7 @@ default: /* inter-host call */
     $return bool(res == 0); }" fn))
 
 (define-inline (rename-file fnold fnnew)
-  (%prim?! "{ /* delete-file */ 
+  (%prim?! "{ /* rename-file */ 
     int res = rename(stringchars(obj_from_$arg), stringchars(obj_from_$arg));
     $return bool(res == 0); }" fnold fnnew))
 
@@ -3170,9 +3174,27 @@ default: /* inter-host call */
 (define %residual-fxmin (minmax-reducer fxmin))
 (define %residual-flmax (minmax-reducer flmax))
 (define %residual-flmin (minmax-reducer flmin))
-(define %residual-max (minmax-reducer max))
-(define %residual-min (minmax-reducer min))
-  
+
+(define (%residual-max/2 a b)
+  (if (fixnum? a)
+      (if (fixnum? b)
+          (if (fx>? a b) a b)
+          (let ([a (fixnum->flonum a)]) (if (fl>? a b) a b)))
+      (if (fixnum? b)
+          (let ([b (fixnum->flonum b)]) (if (fl>? a b) a b))
+          (if (fl>? a b) a b))))
+(define %residual-max (minmax-reducer %residual-max/2))
+
+(define (%residual-min/2 a b)
+  (if (fixnum? a)
+      (if (fixnum? b)
+          (if (fx<? a b) a b)
+          (let ([a (fixnum->flonum a)]) (if (fl<? a b) a b)))
+      (if (fixnum? b)
+          (let ([b (fixnum->flonum b)]) (if (fl<? a b) a b))
+          (if (fl<? a b) a b))))
+(define %residual-min (minmax-reducer %residual-min/2))
+
 (define-syntax addmul-reducer
   (syntax-rules ()
     [(_ f s)
