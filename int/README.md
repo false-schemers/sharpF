@@ -42,4 +42,5 @@ IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
   *  `let-values`, `let*-values`, `define-values`, `make-parameter`, `parameterize`
   *  exceptions, errors, `guard` form
   *  current port access procedures are parameters
+  *  additional r7rs math and port operations
   
