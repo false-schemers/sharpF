@@ -154,23 +154,6 @@
        (lambda () expr)
        (lambda formals . body))]))
 
-(define-syntax let-values
-  (syntax-rules ()
-    [(_ () . body)
-     (let () . body)]
-    [(_ ([formals expr] . more) . body)
-     (let ([thunk (lambda () expr)])
-       (let-values more
-         (receive formals (thunk) . body)))]))
-
-(define-syntax let*-values
-  (syntax-rules ()
-    [(_ () . body)
-     (let () . body)]
-    [(_ ([formals expr] . more) . body)
-     (receive formals expr
-       (let*-values more . body))]))
-
 
 ; control
                
