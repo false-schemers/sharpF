@@ -542,6 +542,12 @@ long fxflo(double f) {
   assert(FIXNUM_MIN <= x && x <= FIXNUM_MAX); return x;
 }")
 
+(%definition "extern long fxsqrt(long x);")
+(%localdef "long fxsqrt(long x) { 
+  assert(x >= 0); if (x < 2) return x;
+  else { long s = fxsqrt(x >> 2) << 1, l = s + 1; return l*l > x ? s : l; }
+}")
+
 (%definition "extern int fxifdv(long x, long y, long *pi, double *pd);")
 (%localdef "int fxifdv(long x, long y, long *pi, double *pd) { 
   assert(y); assert(x != FIXNUM_MIN || y != -1);
@@ -801,6 +807,9 @@ long fxflo(double f) {
 (define-inline (fxexpt x y)
   (%prim* "fixnum(fxpow(fixnum_from_$arg, fixnum_from_$arg))" x y))
 
+(define-inline (fxsqrt x)
+  (%prim "fixnum(fxsqrt(fixnum_from_$arg))" x))
+  
 (define-inline (fxnot x)
   (%prim "fixnum(~fixnum_from_$arg)" x))
   
@@ -3864,11 +3873,15 @@ default: /* inter-host call */
 (define (floor/ x y)
   (values (floor-quotient x y) (floor-remainder x y)))
 
+(define (exact-integer-sqrt x)
+  (let ([r (fxsqrt x)])
+    (values r (- x (* r r)))))
+
 (define (call-with-port port proc)
   (call-with-values (lambda () (proc port))
     (lambda vals (close-port port) (apply values vals))))
 
-
+    
 ; residual versions of inline procedures
 
 (define (%residual-values . l)

@@ -1024,6 +1024,7 @@
   ARGCHECK_N_N,
   ARGCHECK_N_ETC,
   ARGCHECK_Q,
+  ARGCHECK_K,
   ARGCHECK_Z,
   ARGCHECK_Z_Z,
   ARGCHECK_Z_ETC,
@@ -1330,6 +1331,7 @@
     case ARGCHECK_N:
     case ARGCHECK_N_ETC:
     case ARGCHECK_Q:
+    case ARGCHECK_K:
     case ARGCHECK_Z:
     case ARGCHECK_Z_ETC:
     case ARGCHECK_X:
@@ -1430,6 +1432,12 @@
           if (is_fixnum_obj(o) || (is_flonum_obj(o) && flisint(flonum_from_obj(o)))) continue; 
           res = ACRES_BADTYPE; break;
         } break;
+      case ARGCHECK_K:          
+        if (ac == 1) { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!is_fixnum_obj(o) || fixnum_from_obj(o) < 0) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
       case ARGCHECK_Z:          if (ac != 1) { res = ACRES_BADARGC; break; } else goto real_etc;
       case ARGCHECK_Z_Z:        if (ac != 2) { res = ACRES_BADARGC; break; } else goto real_etc;
       case ARGCHECK_Z_ETC:      goto real_etc;
@@ -1449,7 +1457,7 @@
         } break;
       case ARGCHECK_Z_RADIX_OPT: 
         if (ac == 1) {
-          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
           if (!is_fixnum_obj(o) && !is_flonum_obj(o)) res = ACRES_BADTYPE; 
         } else if (ac == 2) { 
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
@@ -1459,7 +1467,7 @@
         break;
       case ARGCHECK_K_CHAR_OPT:
         if (ac == 1) {
-          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
           if (!is_fixnum_obj(o) || fixnum_from_obj(o) < 0) res = ACRES_BADTYPE; 
         } else if (ac == 2) { 
           obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
@@ -2648,6 +2656,7 @@
                                            (argc-dispatch-lambda
                                               (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
 (def-arg-checker (* q)                   (mark-argcheck ARGCHECK_Q *))
+(def-arg-checker (* k)                   (mark-argcheck ARGCHECK_K *))
 (def-arg-checker (* x)                   (mark-argcheck ARGCHECK_X *))
 (def-arg-checker (* x x)                 (mark-argcheck ARGCHECK_X_X *))
 (def-arg-checker (* x x ...)             (mark-argcheck ARGCHECK_X_X_ETC 
@@ -3030,6 +3039,8 @@
 ;(truncate/ n n) is in the init code
 (def-global (log z z ?))
 ;(square z) is in the init code
+(def-global (exact-integer-sqrt k)
+  (lambda (x) (let ([r (fxsqrt x)]) (list *values-tag* r (- x (* r r)))))) 
 
 ; 6.9  Bytevectors
 (def-global (bytevector? obj))
