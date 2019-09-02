@@ -70,7 +70,7 @@ In addition to R5RS-level functionality, LibS supports some popular extensions
 defined in pre-R5RS Scheme standards, SRFIs, and R7RS libraries:
 
   *  many fixnum (`fx`) and flonum (`fl`) - specific operations
-  *  `letrec*`, `rec`, `receive`, `let-values`, `let*-values`, `when`, `unless`, `case-lambda` forms
+  *  `letrec*`, `rec`, `receive`, `when`, `unless`, `case-lambda` forms
   *  operations on boxes: `box?`, `box`, `unbox`, `set-box!`
   *  `error`, `assertion-violation` (not based on exceptions)
   *  `file-exists?`, `delete-file`, `rename-file`, `open-input-string`
