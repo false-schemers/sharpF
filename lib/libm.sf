@@ -605,7 +605,7 @@ long fxflo(double f) {
   }
   if (isspace(*s)) return 0;
   for (e = s; *e; ++e) { if (strchr(\".eEiInN\", *e)) break; }
-  if (!*e) { /* s is not a syntax for an inexact number */
+  if (!*e || radix != 10) { /* s is not a syntax for an inexact number */
     l = (errno = 0, strtol(s, &e, radix));
     if (errno || *e || e == s) { if (conv == 'i') goto fl; return (errno = eno, 0); }
     if (conv == 'i') return (errno = eno, *pd = (double)l, 'i');
@@ -859,14 +859,18 @@ long fxflo(double f) {
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
-    (syntax-rules (decimal e exact inexact)
+    (syntax-rules (decimal e exact inexact inf nan)
       [(_ decimal e str) 
        (%prim* ("flonum($live, " str ")"))]
       [(_ decimal e ms indigs frdigs es exdigs) 
        (%prim* ("flonum($live, " #&(id->string ms) 
          indigs "." frdigs "e" #&(id->string es) exdigs ")"))]
-      [(_ inexact (decimal . r)) (%const decimal . r)] 
+      [(_ inexact (decimal . r)) (%const decimal . r)]
       [(_ exact (decimal . r)) (inexact->exact (%const decimal . r))] 
+      [(_ inf ms) (%prim* ("flonum($live, " #&(id->string ms) "HUGE_VAL)"))]
+      [(_ inexact (inf . r)) (%const inf . r)] 
+      [(_ nan ms) (%prim* ("flonum($live, HUGE_VAL-HUGE_VAL)"))]
+      [(_ inexact (nan . r)) (%const nan . r)] 
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-inline (flonum? x)
@@ -2212,6 +2216,7 @@ long fxflo(double f) {
   (%prim*? "{ /* string->fixnum-or-flonum */
     char *s = stringchars(obj_from_$arg);
     int radix = fixnum_from_$arg; long l; double d;
+    if (0) $return obj(0); /* to fool sfc unboxer */
     switch (strtofxfl(s, radix, &l, &d)) {
     case 'e': $return fixnum(l); break;
     case 'i': $return flonum($live, d); break;
@@ -3026,7 +3031,7 @@ default: /* inter-host call */
 (define-syntax write-bytevector
   (syntax-rules ()
     [(_ bv) (write-bytevector bv (current-output-port))]
-    [(_ bv p) (%prim? "{ /* write-bytevector */
+    [(_ bv p) (%prim?! "{ /* write-bytevector */
     int *d = bytevectordata(obj_from_$arg);
     $return void(oportwrite((char *)bvdatabytes(d), *d,  obj_from_$arg)); }" bv p)]
     [_ %residual-write-bytevector]))
@@ -3881,7 +3886,7 @@ default: /* inter-host call */
   (call-with-values (lambda () (proc port))
     (lambda vals (close-port port) (apply values vals))))
 
-    
+
 ; residual versions of inline procedures
 
 (define (%residual-values . l)
