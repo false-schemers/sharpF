@@ -191,22 +191,6 @@
           (withcc k (let-syntax () . body)))
         expr))))
 
-(define-syntax let-values
-  (syntax-rules ()
-    [(_ () . body)
-     (let () . body)]
-    [(_ ([formals expr] . more) . body)
-     (let ([thunk (lambda () expr)])
-       (let-values more
-         (receive formals (thunk) . body)))]))
-
-(define-syntax let*-values
-  (syntax-rules ()
-    [(_ () . body)
-     (let () . body)]
-    [(_ ([formals expr] . more) . body)
-     (receive formals expr
-       (let*-values more . body))]))
 
 
 
@@ -246,19 +230,18 @@
 int isnative(obj o, cxtype_t *tp) {
   return isobjptr(o) && objptr_from_obj(o)[-1] == (obj)tp; 
 }
-#endif")
-
-(%localdef "void *getnative(obj o, cxtype_t *tp) {
+void *getnative(obj o, cxtype_t *tp) {
   assert(isnative(o, tp));
   return (void*)(*objptr_from_obj(o));
-}")
+}
+#endif")
 
-(%definition "extern int isnative(obj o, cxtype_t *tp);")
 (%definition "#ifdef NDEBUG
    static int isnative(obj o, cxtype_t *tp) 
      { return isobjptr(o) && objptr_from_obj(o)[-1] == (obj)tp;  }
    #define getnative(o, t) ((void*)(*objptr_from_obj(o)))
 #else
+  extern int isnative(obj o, cxtype_t *tp);
   extern void *getnative(obj o, cxtype_t *tp);
 #endif")
 
@@ -2015,6 +1998,16 @@ int isnative(obj o, cxtype_t *tp) {
               (assocx (cdr l)))))))
 
 
+; time
+
+(%include <time.h>)
+
+(define-inline (current-jiffy)
+  (%prim*! "fixnum((long)clock())"))
+
+(define-inline (jiffies-per-second)
+  (%prim* "fixnum((long)CLOCKS_PER_SEC)"))
+
 
 ; miscellaneous / system
 
@@ -2061,4 +2054,3 @@ int isnative(obj o, cxtype_t *tp) {
        (fprintf* ep fmt (list arg ...))
        (display ".\n" ep)
        (reset))]))
-       
