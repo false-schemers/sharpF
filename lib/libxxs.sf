@@ -1634,7 +1634,14 @@ void *getnative(obj o, cxtype_t *tp) {
 
 (define-syntax error
   (syntax-rules ()
-    [(_ where fmt arg ...)
+    [(_ #&(string? fmt) arg ...)
+     (let ([ep (current-error-port)])
+       (newline ep)
+       (display "Error: " ep)
+       (fprintf* ep fmt (list arg ...))
+       (display ".\n" ep)
+       (reset))]
+    [(_ where #&(string? fmt) arg ...)
      (let ([ep (current-error-port)])
        (newline ep)
        (if where
