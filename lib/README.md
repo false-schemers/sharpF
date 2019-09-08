@@ -37,8 +37,9 @@ LibXXS (see [libxxs.sf](https://raw.githubusercontent.com/false-schemers/sharpF/
 LibXXS supports the following additional functions:
 
   *  many fixnum (`fx`) - specific operations
-  *  `letrec*`, `let-values`, `let*-values`, `rec`, `when`, `unless` forms
+  *  `letrec*`, `rec`, `when`, `unless` forms
   *  `error` macro (not based on exceptions)
+  *  `current-jiffy`, `jiffies-per-second`
   *  `exit`, `abort`, and `reset`
 
 
