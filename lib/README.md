@@ -81,7 +81,7 @@ defined in pre-R5RS Scheme standards, SRFIs, and R7RS libraries:
 
 ## LibM (Medium) Library
 
-LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libm.sf)) is an extended version of LibS. It has the following additional functionality from R7RS small:
+LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libm.sf)) is an extended version of LibS. It has the following additional functionality from R7RS-Small:
 
   *  support for bytevectors, with basic set of operations
   *  support for `define-record-type` records
@@ -113,13 +113,13 @@ system, a program compiled with LibL will have the following limitations:
   
 Some features of the R7RS-Small standard are not yet implemented:
 
-  *  SFC reader and `read` procedure are case-sensitive
+  *  SFC reader and `read` procedure are always case-sensitive
   *  `#!fold-case` and `#!no-fold-case` directives are not supported
   *  `include` and `include-ci` forms are not supported
   *  `cond-expand` form is not implemented
-  *  `get-environment-variables` and `current-second` are missing
+  *  `get-environment-variable` is implemented, but `get-environment-variables` is not
   *  `current-jiffy` and `jiffies-per-second` return inexact integers
-  *  `exit` does not acept an argument, skips outstanding `dynamic-wind` procedures
+  *  `current-second` just returns the output of C `time()` routine
   *  macroexpander treats `_` as a regular identifier, not match-all pattern
   *  macroexpander does not support `(... escaped)` pattern escapes
   *  macroexpander does not support patterns with internal ellipsis and improper tail variable
