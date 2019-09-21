@@ -47,7 +47,7 @@ IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
 
 ## IntL, an Interpreter for LibL (Large) Library
 
-IntL (see [intl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intl.sf)) allows interactive calling of LibL functions and use of LibS syntax forms. It provides full argument checking, `eval`, `load`, and interactive REPL.
+IntL (see [intl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intl.sf)) allows interactive calling of LibL functions and use of LibL syntax forms. It provides full argument checking, `eval`, `load`, and interactive REPL.
 
 There are some differences in the functionality available in IntL, compared to the #F code compiled with LibL:
 
