@@ -591,6 +591,7 @@ long fxflo(double f) {
 }")
 (%definition "extern int strtofxfl(char *s, int radix, long *pl, double *pd);")
 (%localdef "int strtofxfl(char *s, int radix, long *pl, double *pd) {
+  extern int strcmp_ci(char *s1, char *s2); /* defined below */
   char *e; int conv = 0, eno = errno; long l; double d;
   for (; s[0] == '#'; s += 2) {
     switch (s[1]) {
@@ -614,8 +615,8 @@ long fxflo(double f) {
   } 
   fl: if (radix != 10) return (errno = eno, 0); 
   e = \"\", errno = 0; if (*s != '+' && *s != '-') d = strtod(s, &e);
-  else if (strcmp(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
-  else if (strcmp(s+1, \"nan.0\") == 0) d = strtod(\"NAN\", &e); /* since C99 */ 
+  else if (strcmp_ci(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
+  else if (strcmp_ci(s+1, \"nan.0\") == 0) d = HUGE_VAL - HUGE_VAL; 
   else d = strtod(s, &e);
   if (errno || *e || e == s) return (errno = eno, 0);
   if ((conv == 'e') && ((l=(long)d) < FIXNUM_MIN || l > FIXNUM_MAX || (double)l != d))
@@ -1986,7 +1987,7 @@ long fxflo(double f) {
     [(_ fun lst)
      (let ([f fun]) 
        (let loop ([l lst]) 
-          (if (null? l) '() (cons (f (car l)) (loop (cdr l))))))]
+         (if (pair? l) (cons (f (car l)) (loop (cdr l))) '())))]
     [(_ fun lst . l*) (%residual-map fun lst . l*)]
     [_ %residual-map])) 
 
@@ -1995,7 +1996,7 @@ long fxflo(double f) {
     [(_ fun lst)
      (let ([f fun]) 
        (let loop ([l lst]) 
-         (if (null? l) (void) (begin (f (car l)) (loop (cdr l))))))]
+         (if (pair? l) (begin (f (car l)) (loop (cdr l))))))]
     [(_ fun lst . l*) (%residual-for-each fun lst . l*)]
     [_ %residual-for-each]))
 
@@ -2176,11 +2177,10 @@ long fxflo(double f) {
 
 (define (flonum->string x)
   (%prim* "{ /* flonum->string */
-    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_$arg);
-    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
-    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
-    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
-    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    char buf[30], *s; double d = flonum_from_$arg; sprintf(buf, \"%.15g\", d);
+    for (s = buf; *s != 0; s++) if (strchr(\".eE\", *s)) break;
+    if (d != d) strcpy(buf, \"+nan.0\"); else if (d <= -HUGE_VAL) strcpy(buf, \"-inf.0\");
+    else if (d >= HUGE_VAL) strcpy(buf, \"+inf.0\"); else if (*s == 'E') *s = 'e'; 
     else if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
     $return obj(hpushstr($live, newstring(buf))); }" x))
 
@@ -2206,8 +2206,8 @@ long fxflo(double f) {
   (%prim*? "{ /* string->flonum */
     char *e = \"\", *s = stringchars(obj_from_$arg); double d; errno = 0;
     if (*s != '+' && *s != '-') d = strtod(s, &e);
-    else if (strcmp(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
-    else if (strcmp(s+1, \"nan.0\") == 0) d = strtod(\"NAN\", &e); /* since C99 */ 
+    else if (strcmp_ci(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
+    else if (strcmp_ci(s+1, \"nan.0\") == 0) d = HUGE_VAL - HUGE_VAL; 
     else d = strtod(s, &e);
     if (errno || e == s || *e) $return bool(0);
     else $return flonum($live, d); }" s))
@@ -2840,7 +2840,7 @@ default: /* inter-host call */
 }")
 (%localdef "static int cbflush(cbuf_t* pcb) { return 0; }")
 (%localdef "static int cbclose(cbuf_t* pcb) { free(pcb->buf); pcb->buf = NULL; return 0; }")
-(%localdef "static size_t cblen(cbuf_t* pcb) { return pcb->fill - pcb->buf; }")
+;(%localdef "static size_t cblen(cbuf_t* pcb) { return pcb->fill - pcb->buf; }")
 (%definition "extern char* cbdata(cbuf_t* pcb);") 
 (%localdef "char* cbdata(cbuf_t* pcb) {
   if (pcb->fill == pcb->end) cbgrow(pcb, 1); *(pcb->fill) = 0; return pcb->buf; 
@@ -2969,11 +2969,10 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_ x) (display-flonum x (current-output-port))]
     [(_ x p) (%prim?! "{ /* display-flonum */
-    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_$arg);
-    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
-    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
-    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
-    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    char buf[30], *s; double d = flonum_from_$arg; sprintf(buf, \"%.15g\", d);
+    for (s = buf; *s != 0; s++) if (strchr(\".eE\", *s)) break;
+    if (d != d) strcpy(buf, \"+nan.0\"); else if (d <= -HUGE_VAL) strcpy(buf, \"-inf.0\");
+    else if (d >= HUGE_VAL) strcpy(buf, \"+inf.0\"); else if (*s == 'E') *s = 'e'; 
     else if (*s == 0) { *s++ = '.'; *s++ = '0'; *s = 0; }
     $return void(oportputs(buf, obj_from_$arg)); }" x p)]
     [_ %residual-display-flonum]))
@@ -3819,6 +3818,9 @@ default: /* inter-host call */
 (define-inline (jiffies-per-second)
   (%prim* "flonum($live, CLOCKS_PER_SEC)"))
 
+(define-inline (current-second)
+  (%prim* "flonum($live, time(NULL))"))
+
 
 ; miscellaneous / system
 
@@ -4032,19 +4034,20 @@ default: /* inter-host call */
 (define %residual-flatan (unary-binary-adaptor flatan))
 (define %residual-atan (unary-binary-adaptor atan))
   
-(define (%residual-map f l . l*)
+(define (%residual-map p l . l*)
   (if (null? l*) 
-      (map f l)
+      (let loop ([l l] [r '()])
+        (if (pair? l) (loop (cdr l) (cons (p (car l)) r)) (reverse! r)))
       (let loop ([l* (cons l l*)] [r '()])
-        (if (null? (car l*)) 
-            (reverse! r)
-            (loop (map cdr l*) (cons (apply f (map car l*)) r))))))
+        (if (let lp ([l* l*]) (or (null? l*) (and (pair? (car l*)) (lp (cdr l*)))))
+            (loop (map cdr l*) (cons (apply p (map car l*)) r))
+            (reverse! r)))))
 
 (define (%residual-for-each p l . l*)
   (if (null? l*) 
-      (for-each p l)
+      (let loop ([l l]) (if (pair? l) (begin (p (car l)) (loop (cdr l)))))
       (let loop ([l* (cons l l*)])
-        (if (pair? (car l*))
+        (if (let lp ([l* l*]) (or (null? l*) (and (pair? (car l*)) (lp (cdr l*)))))
             (begin (apply p (map car l*)) (loop (map cdr l*)))))))
 
 (define-syntax append-reducer

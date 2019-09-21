@@ -3103,6 +3103,7 @@
 (def-global (delete-file string))     ; filename
 (def-global (command-line))
 (def-global (get-environment-variable string))
+(def-global (current-second))
 (def-global (current-jiffy))
 (def-global (jiffies-per-second))
 (def-global (features)
@@ -3666,7 +3667,7 @@ EOS
 (define (main argv)
   (define (about)
     (printf "intm 1.2~%")
-    (printf "Usage: ints [-qx] file ...~%")
+    (printf "Usage: intm [-qx] file ...~%")
     (printf "-q  suppress greeting~%")
     (printf "-x  exit after loading files on the command line~%"))
   (let loop ([args (cdr (command-line))])
