@@ -51,7 +51,7 @@ IntL (see [intl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
 
 There are some differences in the functionality available in IntL, compared to the #F code compiled with LibL:
 
-  *  `read` uses LibL reader, limited to reading data types implemented in LibS
+  *  `read` uses LibL reader, limited to reading data types implemented in LibL
   *  `read` supports R7RS notation for circular structures, but `eval` and `load` reject them
   *  fixnum (`fx`) and flonum (`fl`) - specific operations are not available
   *  C primitives and C code cannot be used
