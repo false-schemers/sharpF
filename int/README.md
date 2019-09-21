@@ -43,4 +43,25 @@ IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
   *  exceptions, errors, `guard` form
   *  current port access procedures are parameters
   *  additional r7rs math and port operations
-  
+
+
+## IntL, an Interpreter for LibL (Large) Library
+
+IntL (see [intl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intl.sf)) allows interactive calling of LibL functions and use of LibS syntax forms. It provides full argument checking, `eval`, `load`, and interactive REPL.
+
+There are some differences in the functionality available in IntL, compared to the #F code compiled with LibL:
+
+  *  `read` uses LibL reader, limited to reading data types implemented in LibS
+  *  `read` supports R7RS notation for circular structures, but `eval` and `load` reject them
+  *  fixnum (`fx`) and flonum (`fl`) - specific operations are not available
+  *  C primitives and C code cannot be used
+  *  `main` can be defined, but is not called by the interpreter
+
+Here is the list of IntL additions and things that behave differently between IntL and LibL:
+
+  *  single-argument `eval` is available (macroexpands, compiles, and executes the argument)
+  *  single-argument `expand` is available (macroexpands the argument)
+  *  `load` is a procedure that dynamically loads and interprets Scheme code via `eval`
+  *  command-line file arguments are dynamically loaded 
+  *  there is a traditional REPL (read-eval-print loop)
+  *  vectors are self-evaluating and don't need to be quoted
