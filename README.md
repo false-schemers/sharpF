@@ -141,7 +141,7 @@ defined in pre-R5RS Scheme standards, SRFIs, and R7RS libraries:
   *  `get-environment-variable`, `system`, `current-jiffy`, `jiffies-per-second` 
 
 Please check the `/lib` directory to see the full list of available libraries. Some of them have corresponding interpreters
-to simplify development and debugging. Interpreters are located in the '/int' directory.
+to simplify development and debugging. Interpreters are located in the `/int` directory.
 
 
 ## Interoperability with C code
