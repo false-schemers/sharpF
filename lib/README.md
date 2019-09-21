@@ -116,6 +116,7 @@ Some features of the R7RS-Small standard are not yet implemented:
   *  SFC reader and `read` procedure are case-sensitive
   *  `#!fold-case` and `#!no-fold-case` directives are not supported
   *  `include` and `include-ci` forms are not supported
+  *  `cond-expand` form is not implemented
   *  `get-environment-variables` and `current-second` are missing
   *  `current-jiffy` and `jiffies-per-second` return inexact integers
   *  `exit` does not acept an argument, skips outstanding `dynamic-wind` procedures
