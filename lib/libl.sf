@@ -2976,7 +2976,7 @@ default: /* inter-host call */
 }")
 (%localdef "static int cbflush(cbuf_t* pcb) { return 0; }")
 (%localdef "static int cbclose(cbuf_t* pcb) { free(pcb->buf); pcb->buf = NULL; return 0; }")
-(%localdef "static size_t cblen(cbuf_t* pcb) { return pcb->fill - pcb->buf; }")
+;(%localdef "static size_t cblen(cbuf_t* pcb) { return pcb->fill - pcb->buf; }")
 (%definition "extern char* cbdata(cbuf_t* pcb);") 
 (%localdef "char* cbdata(cbuf_t* pcb) {
   if (pcb->fill == pcb->end) cbgrow(pcb, 1); *(pcb->fill) = 0; return pcb->buf; 
@@ -3330,7 +3330,7 @@ static long stabref(obj o, stab_t *p, int upd) {
   }
 }
 static int stabufind(obj x, obj y, stab_t *p) {
-  size_t sz = p->sz, i, ix, iy; obj *r = p->r;
+  size_t sz = p->sz, i, ix=0, iy=0; /* bogus 0 inits to silence gcc */ obj *r = p->r;
   for (i = (unsigned long)x & (sz-1); p->v[i]; i = (i-1) & (sz-1)) if ((p->v[i] & ~1) == x) { ix = i; break; }
   for (i = ix; r[i] >= 0; ) i = (size_t)r[i]; if (i != ix) ix = r[ix] = i;  
   for (i = (unsigned long)y & (sz-1); p->v[i]; i = (i-1) & (sz-1)) if ((p->v[i] & ~1) == y) { iy = i; break; }
@@ -4846,7 +4846,7 @@ void oportputshared(obj x, obj p, int disp) {
 (define %residual-write-char (unary-binary-adaptor write-char))
 (define %residual-write-string (unary-binary-ternary-quaternary-adaptor write-string))
 (define %residual-newline (nullary-unary-adaptor newline))
-(define %residual-flush-output-port (nullary-unary-adaptor newline))
+(define %residual-flush-output-port (nullary-unary-adaptor flush-output-port))
 
 (define %residual-read-u8 (nullary-unary-adaptor read-u8))
 (define %residual-peek-u8 (nullary-unary-adaptor peek-u8))
