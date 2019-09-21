@@ -622,7 +622,7 @@ long fxflo(double f) {
   fl: if (radix != 10) return (errno = eno, 0); 
   e = \"\", errno = 0; if (*s != '+' && *s != '-') d = strtod(s, &e);
   else if (strcmp_ci(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
-  else if (strcmp_ci(s+1, \"nan.0\") == 0) d = strtod(\"NAN\", &e); /* since C99 */ 
+  else if (strcmp_ci(s+1, \"nan.0\") == 0) d = HUGE_VAL - HUGE_VAL;
   else d = strtod(s, &e);
   if (errno || *e || e == s) return (errno = eno, 0);
   if ((conv == 'e') && ((l=(long)d) < FIXNUM_MIN || l > FIXNUM_MAX || (double)l != d))
@@ -2312,11 +2312,10 @@ long fxflo(double f) {
 
 (define (flonum->string x)
   (%prim* "{ /* flonum->string */
-    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_$arg);
-    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
-    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
-    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
-    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    char buf[30], *s; double d = flonum_from_$arg; sprintf(buf, \"%.15g\", d);
+    for (s = buf; *s != 0; s++) if (strchr(\".eE\", *s)) break;
+    if (d != d) strcpy(buf, \"+nan.0\"); else if (d <= -HUGE_VAL) strcpy(buf, \"-inf.0\");
+    else if (d >= HUGE_VAL) strcpy(buf, \"+inf.0\"); else if (*s == 'E') *s = 'e'; 
     else if (*s == 0) {  *s++ = '.'; *s++ = '0'; *s = 0; }
     $return obj(hpushstr($live, newstring(buf))); }" x))
 
@@ -2343,7 +2342,7 @@ long fxflo(double f) {
     char *e = \"\", *s = stringchars(obj_from_$arg); double d; errno = 0;
     if (*s != '+' && *s != '-') d = strtod(s, &e);
     else if (strcmp_ci(s+1, \"inf.0\") == 0) d = (*s == '-' ? -HUGE_VAL : HUGE_VAL); 
-    else if (strcmp_ci(s+1, \"nan.0\") == 0) d = strtod(\"NAN\", &e); /* since C99 */ 
+    else if (strcmp_ci(s+1, \"nan.0\") == 0) d = HUGE_VAL - HUGE_VAL;
     else d = strtod(s, &e);
     if (errno || e == s || *e) $return bool(0);
     else $return flonum($live, d); }" s))
@@ -3143,11 +3142,10 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_ x) (display-flonum x (current-output-port))]
     [(_ x p) (%prim?! "{ /* display-flonum */
-    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_$arg);
-    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
-    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
-    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
-    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    char buf[30], *s; double d = flonum_from_$arg; sprintf(buf, \"%.15g\", d);
+    for (s = buf; *s != 0; s++) if (strchr(\".eE\", *s)) break;
+    if (d != d) strcpy(buf, \"+nan.0\"); else if (d <= -HUGE_VAL) strcpy(buf, \"-inf.0\");
+    else if (d >= HUGE_VAL) strcpy(buf, \"+inf.0\"); else if (*s == 'E') *s = 'e'; 
     else if (*s == 0) { *s++ = '.'; *s++ = '0'; *s = 0; }
     $return void(oportputs(buf, obj_from_$arg)); }" x p)]
     [_ %residual-display-flonum]))
@@ -3420,7 +3418,7 @@ static int boundequal(obj x, obj y, int lim) {
 
 (%definition "extern int isequal(obj x, obj y);")
 (%localdef "int isequal(obj x, obj y) {
-  stab_t *p; obj *r; int i, res = boundequal(x, y, 500);
+  stab_t *p; obj *r; size_t i; int res = boundequal(x, y, 500);
   if (res >= 0) return res; /* small/non-circular/easy */
   p = staballoc(); stabshared(x, p); stabshared(y, p);
   r = p->r = cxm_cknull(calloc(p->sz, sizeof(obj)), \"isequal\");
@@ -3596,11 +3594,10 @@ static void wrdatum(obj o, wenv_t *e) {
   } else if (is_fixnum_obj(o)) {
     char buf[30]; sprintf(buf, \"%ld\", fixnum_from_obj(o)); wrs(buf, e);
   } else if (is_flonum_obj(o)) {
-    char buf[30], *s; sprintf(buf, \"%.15g\", flonum_from_obj(o));
-    for (s = buf; *s != 0; s++) if (strchr(\".eEaAfF\", *s)) break;
-    if (*s == 'a' || *s == 'A') strcpy(buf, \"+nan.0\");
-    else if (*s == 'f' || *s == 'F') strcpy(buf, buf[0] == '-' ? \"-inf.0\" : \"+inf.0\");
-    else if (*s == 'E') *s = 'e'; /* otherwise add .0 */
+    char buf[30], *s; double d = flonum_from_obj(o); sprintf(buf, \"%.15g\", d);
+    for (s = buf; *s != 0; s++) if (strchr(\".eE\", *s)) break;
+    if (d != d) strcpy(buf, \"+nan.0\"); else if (d <= -HUGE_VAL) strcpy(buf, \"-inf.0\");
+    else if (d >= HUGE_VAL) strcpy(buf, \"+inf.0\"); else if (*s == 'E') *s = 'e'; 
     else if (*s == 0) { *s++ = '.'; *s++ = '0'; *s = 0; }
     wrs(buf, e);
   } else if (iseof(o)) {
@@ -4315,14 +4312,25 @@ void oportputshared(obj x, obj p, int disp) {
 (define-inline (jiffies-per-second)
   (%prim* "flonum($live, CLOCKS_PER_SEC)"))
 
+(define-inline (current-second)
+  (%prim* "flonum($live, time(NULL))"))
+
 
 ; miscellaneous / system
 
-(define-syntax exit
-  (syntax-rules ()
-    [(_) (exit 0)]
-    [(_ n) (%prim! "void(exit(fixnum_from_$arg))" n)]
-    [_ %residual-exit]))
+(define emergency-exit  
+  (case-lambda ; exits no matter what
+    [() (%prim! "void(exit(0))")]
+    [(n) (cond [(eq? n #t) (%prim! "void(exit(0))")] 
+               [(fixnum? n) (%prim! "void(exit(fixnum_from_$arg))" n)]
+               [else (%prim! "void(exit(1))")])]
+    [args (%prim! "void(exit(1))")]))
+
+(define exit 
+  (let ([exit-ds *current-dynamic-state*])
+    (lambda args
+      (dynamic-state-reroot! exit-ds)
+      (apply emergency-exit args))))    
 
 (define-inline (argv-ref argv i)
   (%prim* "{ /* argv-ref */

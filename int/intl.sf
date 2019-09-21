@@ -2788,6 +2788,7 @@
 
 (def-arg-checker (*)                     (mark-argc 0 *))
 (def-arg-checker (* obj)                 (mark-argc 1 *))
+(def-arg-checker (* obj ?)               (mark-range-argc 0 1 *))
 (def-arg-checker (* obj obj)             (mark-argc 2 *))
 (def-arg-checker (* obj obj ?)           (mark-range-argc 1 2 *))
 (def-arg-checker (* obj obj obj)         (mark-argc 3 *))
@@ -3324,10 +3325,13 @@
 ;(def-global (write-bytevector u8vector oport ? start ? end ?)) ; implemented in init
 
 ; 6.14. System interface 
-(def-global (file-exists? string))    ; filename
-(def-global (delete-file string))     ; filename
+(def-global (exit obj ?))
+(def-global (emergency-exit obj ?))
+(def-global (file-exists? string))
+(def-global (delete-file string))
 (def-global (command-line))
 (def-global (get-environment-variable string))
+(def-global (current-second))
 (def-global (current-jiffy))
 (def-global (jiffies-per-second))
 (def-global (features)
@@ -3380,7 +3384,6 @@
 ; misc
 (def-global (void))
 (def-global (reverse! list)) ; used in init code
-(def-global (exit n ?))
 (def-global (system string))
 (def-global (print-procedure proc))
 (def-global (current-environment)  (lambda () *current-environment*))
