@@ -1,0 +1,4116 @@
+
+;  #F Scheme Interpreter (LibL) -- esl
+
+
+;  parts of the code are derived from the following sources:
+
+;  1) SCHEME -- A Scheme interpreter written by Marc Feeley.
+;  2) alexpander.scm v1.65 2007/11/05 02:50:34 (see license below)
+ 
+;  Copyright 2002-2004,2006,2007 Al Petrofsky <alexpander@petrofsky.org>
+;
+;  Redistribution and use in source and binary forms, with or without
+;  modification, are permitted provided that the following conditions
+;  are met:
+;  
+;    Redistributions of source code must retain the above copyright
+;      notice, this list of conditions and the following disclaimer.
+;  
+;    Redistributions in binary form must reproduce the above copyright
+;      notice, this list of conditions and the following disclaimer in
+;      the documentation and/or other materials provided with the
+;      distribution.
+;  
+;    Neither the name of the author nor the names of its contributors
+;      may be used to endorse or promote products derived from this
+;      software without specific prior written permission.
+;  
+;  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+;  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+;  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+;  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+;  HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+;  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+;  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+;  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+;  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+;  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+;  WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;  POSSIBILITY OF SUCH DAMAGE.
+
+
+(load "libl.sf")
+
+;------------------------------------------------------------------------------
+
+; assorted utils
+
+(define-syntax andmap
+  (letrec-syntax 
+    ([and-loop
+      (syntax-rules ()
+        [(_ ([l e] ...) f) 
+         (let loop ([l e] ...)
+           (or (null? l) ...
+               (and (f (car l) ...)
+                    (loop (cdr l) ...))))]
+        [(_ (b ...) f l . ls)
+         (and-loop (b ... [id l]) f . ls)])])
+    (syntax-rules ()
+      [(_ f l ...)
+       (and-loop () f l ...)])))
+
+(define-syntax ormap
+  (letrec-syntax 
+    ([or-loop
+      (syntax-rules ()
+        [(_ ([l e] ...) f) 
+         (let loop ([l e] ...)
+           (and (not (null? l)) ...
+                (or (f (car l) ...)
+                    (loop (cdr l) ...))))]
+        [(_ (b ...) f l . ls)
+         (or-loop (b ... [id l]) f . ls)])])
+    (syntax-rules ()
+      [(_ f l ...)
+       (or-loop () f l ...)])))
+
+(define (append* lst)
+  (cond [(null? lst) '()]
+        [(null? (cdr lst)) (car lst)]
+        [else (append (car lst) (append* (cdr lst)))]))
+
+(define (apply-map-list lst)
+  (let loop ([lst lst] [res '()])
+    (if (ormap null? lst)
+        (reverse res)
+        (loop (map cdr lst) (cons (map car lst) res)))))
+
+(define (pairwise-andmap pred? lst)
+  (or (null? lst)
+    (let ([x (car lst)] [r (cdr lst)])
+      (or (null? r)
+        (and (pred? x (car r))
+          (pairwise-andmap pred? r))))))
+
+
+;------------------------------------------------------------------------------
+
+; errors
+
+; expansion-time
+(define-syntax x-error
+  (syntax-rules () [(_ r a ...) 
+    (simple-error 'macroexpander r (unwrap-vecs a) ...)]))
+
+; compile-time 
+(define-syntax c-error
+  (syntax-rules () [(_ r a ...) (simple-error 'compiler r a ...)]))
+
+; run-time 
+(define (r-error msg . args)
+  (let loop ([args args] [a* '()])
+    (cond [(null? args) (apply simple-error #f msg (reverse! a*))]
+          [(procedure? (car args))
+           (let ([name (reverse-global-lookup (car args))])
+             (if name 
+                (loop (cdr args) (cons (list name) (cons (car args) a*)))
+                (loop (cdr args) (cons (car args) a*))))]
+          [else (loop (cdr args) (cons (car args) a*))])))
+
+
+;------------------------------------------------------------------------------
+
+; macroexpander 
+
+(define (sid? sexp) (or (symbol? sexp) (renamed-sid? sexp)))
+(define (renamed-sid? sexp) (and (vector? sexp) (not (= (vector-length sexp) 1)))) ;** (len is always 3)
+(define (svector? sexp) (and (vector? sexp) (= 1 (vector-length sexp))))
+(define (svector->list sexp) (vector-ref sexp 0))
+(define (list->svector l) (vector l))
+
+(define (make-sid name renamed-id location) (vector name renamed-id location)) ;**
+(define (sid-name sid) (if (symbol? sid) sid (vector-ref sid 0)))
+(define (sid-id sid) (if (symbol? sid) sid (vector-ref sid 1)))
+(define (sid-location sid) (if (symbol? sid) sid (vector-ref sid 2))) ;**
+
+(define (list1? x) (and (pair? x) (null? (cdr x))))
+(define (list2? x) (and (pair? x) (list1? (cdr x))))
+
+(define (map-vecs f x)
+  (define (mv2 x)
+    (if (vector? x)
+        (f x)
+        (and (pair? x)
+             (let ([a (car x)] [b (cdr x)])
+               (let ([a-mapped (mv2 a)])
+                 (if a-mapped
+                     (cons a-mapped (mv b))
+                     (let ([b-mapped (mv2 b)])
+                       (and b-mapped (cons a b-mapped)))))))))
+  (define (mv x) (or (mv2 x) x))
+  (mv x))
+
+(define (wrap-vec v) (list->svector (wrap-vecs (vector->list v))))
+(define (wrap-vecs input) (map-vecs wrap-vec input))
+(define (unwrap-vec v-sexp)
+  (if (= 1 (vector-length v-sexp))
+      (list->vector (unwrap-vecs (svector->list v-sexp)))
+      (vector-ref v-sexp 0)))
+(define (unwrap-vecs sexp) (map-vecs unwrap-vec sexp))
+
+(define (make-code output) (list output))
+(define (make-builtin name) (list '(builtin) name))
+
+(define (variable? val) (symbol? val))
+(define (expanded-code? val) (list1? val))
+(define (code-output code) (car code))
+
+(define (syntax? val) (list2? val))
+(define (builtin? syntax) (eq? 'builtin (caar syntax)))
+(define (builtin-name builtin) (cadr builtin))
+
+(define (expander? syntax) (not (builtin? syntax)))
+(define (make-expander form env) (list form env))
+(define (expander-form expd) (car expd))
+(define (expander-env expd) (cadr expd))
+
+
+(define (acons key val alist) (cons (cons key val) alist))
+
+(define (lookup-sid sid env)
+  (define id (sid-id sid))
+  (let loop ([env env])
+    (cond [(null? env) (sid-location sid)]
+          [(procedure? env) (if (symbol? sid) (env sid) (sid-location sid))] ;++ global mapping support
+          [(eqv? (caar env) id) (cdar env)]
+          [else (loop (cdr env))])))
+
+(define (lookup-location location store)
+  (cond [(assv location store) => cdr]
+        [(symbol? location) (symloc->var location)]
+        [else #f]))
+
+(define (lookup2 sid env store)
+  (or (lookup-location (lookup-sid sid env) store)
+      (x-error (string-append
+                 "premature use of keyword bound by letrec-syntax"
+                 " (or an internal define-syntax): ")
+             sid)))
+
+(define (extend-env env id location) (acons id location env))
+(define (extend-store store loc val) (acons loc val store))
+
+#;(define substitute-in-store extend-store) ;** preserve all store history verbatim
+(define (substitute-in-store store loc val)
+  (let ([store
+         (if (assv loc store)
+             (let loop ([store store])
+               (let ([p (car store)])
+                 (if (eqv? loc (car p))
+                     (cdr store)
+                     (cons p (loop (cdr store))))))
+             store)])
+    (if (and (symbol? loc) (eq? val (symloc->var loc)))
+        store
+        (acons loc val store))))
+
+(define (symloc->var sym)
+  (define str (symbol->string sym))
+  (define (rename) (string->symbol (string-append "_" str "_")))
+  (case sym
+    [(begin define if lambda letrec quote set!) (rename)]
+    [else (if (and (positive? (string-length str)) (char=? #\_ (string-ref str 0)))
+              (rename)
+              sym)]))
+
+(define (intloc->var intloc sid)
+  (let ([str (symbol->string (sid-name sid))])
+    (string->symbol
+      (string-append "_" str "_" (number->string intloc)))))
+
+(define (loc->var loc sid)
+  (if (symbol? loc) (symloc->var loc) (intloc->var loc sid)))
+
+(define (make-begin outputs)
+  (if (list1? outputs) (car outputs) (cons 'begin outputs)))
+
+(define (make-letrec bindings expr)
+  (if (null? bindings) expr (list 'letrec bindings expr)))
+
+(define (expand-lambda formals expr id-n env store loc-n)
+  (define (flatten-dotted x)
+    (if (pair? x) (cons (car x) (flatten-dotted (cdr x))) (list x)))
+  (define (dot-flattened x)
+    (if (null? (cdr x))
+        (car x)
+        (cons (car x) (dot-flattened (cdr x)))))
+  (let* ([dotted? (not (list? formals))]
+         [flattened (if dotted? (flatten-dotted formals) formals)])
+    (define (check x)
+      (or (sid? x)
+          (x-error "non-identifier: " x " in lambda formals: " formals))
+      (if (member x (cdr (member x flattened)))
+          (x-error "duplicate variable: " x " in lambda formals: " formals)))
+    (begin
+      (for-each check flattened)
+      (let loop ([formals flattened] [rvars '()]
+                 [env env] [store store] [loc-n loc-n])
+        (if (not (null? formals))
+            (let* ([var (intloc->var loc-n (car formals))]
+                   [env (extend-env env (sid-id (car formals)) loc-n)]
+                   [store (extend-store store loc-n var)])
+              (loop (cdr formals) (cons var rvars)
+                env store (+ 1 loc-n)))
+            (let* ([vars (reverse rvars)]
+                   [vars (if dotted? (dot-flattened vars) vars)])
+              (list vars (expand-expr expr id-n env store loc-n))))))))
+
+(define (expand-letcc formal expr id-n env store loc-n)
+  (if (sid? formal)
+      (let* ([var (intloc->var loc-n formal)]
+             [env (extend-env env (sid-id formal) loc-n)]
+             [store (extend-store store loc-n var)]
+             [loc-n (+ 1 loc-n)]) ;*** fixed in 153s
+        (list var (expand-expr expr id-n env store loc-n)))
+      (x-error "non-identifier: " formal " used as letcc formal")))
+
+(define (check-syntax-bindings bindings)
+  (or (list? bindings)
+      (x-error "non-list syntax bindings list: " bindings))
+  (for-each
+    (lambda (b)
+      (or (and (list2? b) (sid? (car b)))
+          (x-error "malformed syntax binding: " b)))
+    bindings)
+  (do ([bs bindings (cdr bs)]) [(null? bs)]
+    (let ([dup (assoc (caar bs) (cdr bs))])
+      (if dup
+          (x-error "duplicate bindings for a keyword: " (car bs)
+            " and: " dup)))))
+
+(define (expand-syntax-bindings bindings id-n syntax-env ienv store loc-n k)
+  (let loop ([bs bindings] [vals '()] [store store] [loc-n loc-n])
+    (if (not (null? bs))
+        (expand-val (cadar bs) id-n syntax-env store loc-n
+          (lambda (val store loc-n)
+            (loop (cdr bs) (cons val vals) store loc-n)))
+        (let loop ([store store] [vals (reverse vals)] [bs bindings])
+          (if (not (null? vals))
+              (let* ([loc (lookup-sid (caar bs) ienv)]
+                     [store (extend-store store loc (car vals))])
+                (loop store (cdr vals) (cdr bs)))
+              (k store loc-n))))))
+
+;++ support for syntax-lambda
+(define (apply-expander syntax sexp id-n env store loc-n lsd? ek sk dk bk)
+  (case (sid-name (caar syntax))
+    [(syntax-rules)
+     (apply-synrules syntax sexp id-n env
+       (lambda (sexp id-n) 
+         (expand-any sexp id-n env store loc-n lsd? ek sk dk bk)))]
+    [(syntax-lambda)
+     (or ek sk lsd? (pair? sexp)
+         (x-error "syntax lambda applied in bad context: " sexp))
+     (let ([formals (cadar syntax)] [sexps (cdr sexp)] 
+           [body (cddar syntax)] [denv (cadr syntax)])
+       (or (= (length formals) (length sexps))
+          (x-error "incorrect number of arguments to syntax lambda: " sexp))
+       (let loop ([ids formals] [loc-n loc-n] [ienv denv])
+         (if (not (null? ids))
+             (loop (cdr ids) (+ loc-n 1)
+               (extend-env ienv (sid-id (car ids)) loc-n))
+             (expand-syntax-bindings
+               (map list formals sexps)
+               id-n env ienv store loc-n
+               (lambda (store loc-n)
+                 (expand-body body
+                   id-n ienv store loc-n lsd? ek sk
+                   (and lsd? dk) (and lsd? bk)))))))]     
+    [else
+     (x-error "invalid expander: " syntax)]))
+
+(define (expand-any sexp id-n env store loc-n lsd? ek sk dk bk)
+  (define (get-k k sexp name)
+    (or k (x-error (string-append name " used in bad context: ") sexp)))
+  (define (get-ek sexp) (get-k ek sexp "expression"))
+  (define (get-sk sexp) (get-k sk sexp "syntax"))
+  (define (get-dk sexp) (get-k dk sexp "definition"))
+  (define (get-bk sexp) (get-k dk sexp "begin"))
+  (define (expand-subexpr sexp)
+    (expand-expr sexp id-n env store loc-n))
+  (define (expand-subexpr-root sexp) ;++ : expand converted constants in root env
+    (expand-expr sexp id-n root-environment store loc-n))
+  (define (handle-syntax-use syntax head store loc-n)
+    (let* ([tail (cdr sexp)] [sexp (cons head tail)])
+      (if (expander? syntax)
+          (apply-expander syntax sexp id-n env store loc-n lsd? ek sk dk bk)
+          (let ([builtin (builtin-name syntax)] [len (length tail)])
+            (define (handle-expr-builtin)
+              (define (expr-assert test)
+                (or test 
+                  (x-error "malformed " builtin " expression: " sexp)))
+              (case builtin
+                [(lambda)
+                 (expr-assert (= len 2))
+                 (cons 'lambda 
+                   (expand-lambda
+                     (car tail) (cadr tail) id-n env store loc-n))]
+                [(quote)
+                 (expr-assert (= len 1))
+                 (list 'quote (unwrap-vecs (car tail)))]
+                [(set!)
+                 (expr-assert (and (= len 2) (sid? (car tail))))
+                 (let ([var (lookup2 (car tail) env store)])
+                   (or (variable? var)
+                       (x-error "attempt to set a keyword: " sexp))
+                   (list 'set! var (expand-subexpr (cadr tail))))]
+                [(if)
+                 (expr-assert (<= 2 len 3))
+                 (cons 'if (map expand-subexpr tail))]))
+            (case builtin
+              [(syntax-rules)
+               (if (< len 1)
+                   (x-error "empty syntax-rules form: " sexp))
+               (let ([syn (compile-syntax-rules sexp env)])
+                 ((get-sk sexp) syn sexp store loc-n))]
+              [(syntax-lambda)
+               (if (< len 2)
+                   (x-error "malformed syntax-lambda form: " sexp))
+               (let ([syn (compile-syntax-lambda sexp env)])
+                 ((get-sk sexp) syn sexp store loc-n))]
+              [(begin)
+               (or ek (get-bk sexp)) ;** as in v1.65
+               (cond [bk (bk sexp id-n env store loc-n)]
+                     [(null? tail) (x-error "empty begin expression: " sexp)]
+                     [else (ek (make-begin (map expand-subexpr tail)))])] ;** as in v1.65
+              [(define define-syntax)
+               (or (and (= 2 len) (sid? (car tail)))
+                   (and (= 1 len) (eq? builtin 'define))
+                   (x-error "malformed definition: " sexp))
+               ((get-dk sexp) builtin sexp id-n env store loc-n)]
+              [else (get-ek sexp) (ek (handle-expr-builtin))]))))) ;** as in v1.65
+  (define (handle-combination output)
+    (ek (if (and (pair? output) (eq? 'lambda (car output))
+                 (null? (cadr output)) (null? (cdr sexp)))
+            (caddr output)
+            (cons output (map expand-subexpr (cdr sexp))))))
+  (cond
+    [(sid? sexp)
+     (let ([val (lookup2 sexp env store)])
+       (if (syntax? val)
+           (if (and (not sk) ek (expander? val)) 
+               ;++ : support for identifier-syntax
+               (apply-expander val sexp id-n env store loc-n #f ek #f #f #f)
+               ((get-sk sexp) val sexp store loc-n))
+           ((get-ek sexp)
+            (if (expanded-code? val) (code-output val) val))))]
+    [(and (pair? sexp) (list? sexp)) ;** as in v1.65
+     (expand-any (car sexp) id-n env store loc-n #f
+       (and ek handle-combination) handle-syntax-use #f #f)]
+    [(or (number? sexp) (boolean? sexp) (string? sexp) (bytevector? sexp) (char? sexp) ;++ added bytevector
+         (procedure? sexp)) ; wrapped 'micro-syntax'
+     ((get-ek sexp) sexp)]
+    [(vector? sexp) ;++ vector now is self-evaluating
+     ((get-ek sexp) (unwrap-vec sexp))]
+    [else
+     (x-error (cond [(pair? sexp) "improper list: "]
+                    [(null? sexp) "empty list: "] ;** as in v1.65
+                    ;[(vector? sexp) "vector: "] ** self-evaluating
+                    [else "unexpected type of s-expression: "])
+       sexp " used as an expression, syntax, or definition.")]))
+
+(define (expand-val sexp id-n env store loc-n k)
+  (expand-any sexp 
+    id-n env store loc-n #f
+    (lambda (output) (k (make-code output) store loc-n))
+    (lambda (syn error-sexp store loc-n) (k syn store loc-n))
+    #f #f))
+
+(define (expand-expr sexp id-n env store loc-n)
+  (expand-any sexp id-n env store loc-n #f (lambda (x) x) #f #f #f))
+
+(define (expand-body sexps id-n env store loc-n lsd? ek sk dk bk)
+  (define (expand-def sexp vds sds exprs id-n env store loc-n k dek) ;** ek&dek, as in v1.65
+    (define (dk builtin sexp id-n env store loc-n)
+      (or ek (eq? builtin 'define-syntax)
+          (x-error "non-syntax definition in a syntax body: " sexp))
+      (if (list2? sexp)
+          (k vds sds (cons (cadr sexp) exprs) id-n env store loc-n)
+          (let* ([sid (cadr sexp)]
+                 [id (sid-id sid)]
+                 [env (extend-env env id loc-n)])
+            (define (check def)
+              (if (eqv? id (sid-id (cadr def)))
+                  (x-error "duplicate internal definitions: " def
+                    " and: " sexp)))
+            (begin
+              (for-each check sds)
+              (for-each check vds)
+              (case builtin
+                [(define-syntax)
+                 (k vds (cons sexp sds) exprs
+                    id-n env store (+ loc-n 1))]
+                [(define)
+                 (let* ([var (intloc->var loc-n sid)]
+                        [store (extend-store store loc-n var)]
+                        [loc-n (+ loc-n 1)])
+                   (k (cons sexp vds) sds exprs
+                      id-n env store loc-n))])))))
+    (define (bk sexp id-n env store loc-n)
+      (let loop ([sexps (cdr sexp)] [vds vds] [sds sds] [exprs exprs]
+                 [id-n id-n] [env env] [store store] [loc-n loc-n] [dek dek])
+        (if (null? sexps)
+            (k vds sds exprs id-n env store loc-n)
+            (expand-def (car sexps) vds sds exprs
+              id-n env store loc-n
+              (lambda (vds sds exprs id-n env store loc-n)
+                (loop (cdr sexps) vds sds exprs
+                  id-n env store loc-n #f))
+              (and dek
+                   (lambda (out)
+                     (define (expand-one sexp)
+                       (expand-expr sexp id-n env store loc-n))
+                     (let ([rest (map expand-one (cdr sexps))])
+                       (dek (make-begin (cons out rest))))))))))
+    (expand-any sexp id-n env store loc-n #f dek #f dk bk))
+  (let loop ([first (car sexps)] [rest (cdr sexps)] 
+             [vds '()] [sds '()] [exprs '()] ;** as in v1.65 
+             [id-n id-n] [env env] [store store] [loc-n loc-n])
+    (define (finish-body boundary-exp-output)
+      (expand-syntax-bindings
+        (map cdr sds) id-n env env store loc-n
+        (lambda (store loc-n)
+          (define (iexpand sexp)
+            (expand-expr sexp id-n env store loc-n))
+          (define (expand-vd vd)
+            (list (lookup2 (cadr vd) env store) (iexpand (caddr vd))))
+          (if (and (null? rest) (null? vds) (null? exprs))
+              (expand-any first id-n env store loc-n lsd? ek sk dk bk)
+              (ek (make-letrec
+                    (map expand-vd (reverse vds))
+                    (let ([body-exprs-output
+                           (if (null? rest)
+                               (list (iexpand first))
+                               (cons
+                                 boundary-exp-output 
+                                 (map iexpand rest)))])
+                      (make-begin
+                        (append (map iexpand (reverse exprs))
+                                body-exprs-output)))))))))
+    (if (null? rest)
+        (finish-body #f)
+        (expand-def first vds sds exprs id-n env store loc-n
+          (lambda (vds sds exprs id-n env store loc-n)
+            (loop (car rest) (cdr rest) vds sds exprs
+                  id-n env store loc-n))
+          (and ek finish-body)))))
+
+(define (expand-top-level-forms forms top-env store loc-n k)
+  (define (finalize store loc-n acc) (k (reverse acc) store loc-n))
+  (let expand ([sexps (wrap-vecs forms)] [id-n 0] [env top-env]
+               [store store] [loc-n loc-n] [acc '()] [k finalize])
+    (if (null? sexps)
+        (k store loc-n acc)
+        (let ([rest (cdr sexps)])
+          (define (ek output)
+            (expand rest id-n env store loc-n (cons output acc) k))
+          (define (dk builtin sexp id-n* env* store loc-n)
+            (if (list2? sexp)
+                (ek (expand-expr (cadr sexp) id-n* env* store loc-n))
+                (let* ([tail (cdr sexp)] [sid (car tail)]
+                       [loc (lookup-sid sid env*)] ;** as in v1.65
+                       [init (cadr tail)])
+                  (if (eq? builtin 'define)
+                      (let* ([expr (expand-expr init id-n* env* store loc-n)]
+                             [var (loc->var loc sid)]
+                             [acc (cons (list 'define var expr) acc)]
+                             [store (substitute-in-store store loc var)])
+                        (expand rest id-n env store loc-n acc k))
+                      (expand-val init id-n* env* store loc-n
+                        (lambda (val store loc-n)
+                          (let ([store (substitute-in-store store loc val)])
+                            (expand rest id-n env store loc-n acc k))))))))
+          (define (bk sexp id-n* env* store loc-n)
+            (expand (cdr sexp) id-n* env* store loc-n acc
+              (lambda (store loc-n acc)
+                (expand rest id-n env store loc-n acc k))))
+          (expand-any (car sexps) id-n env store loc-n #t ek #f dk bk)))))
+
+(define (compile-syntax-lambda synlambda env)
+  (let ([formals (cadr synlambda)])
+    (define (check x)
+        (or (sid? x)
+            (x-error "non-identifier: " x 
+              " in syntax-lambda formals: " formals))
+        (if (member x (cdr (member x formals)))
+            (x-error "duplicate variable: " x 
+              " in syntax-lambda formals: " formals)))
+    (for-each check formals) 
+    (make-expander (cons 'syntax-lambda (cdr synlambda)) env))) ;*** fixed in 153s
+  
+; ++ : pattern matcher extension
+
+(define (sbox->sexp-list b)  (cdr (unbox b)))
+
+(define (pattern-sbox->sexp b) (cadr (unbox b)))
+
+(define (pattern-sbox? b)
+  (and (box? b) (list2? (unbox b))
+    (memq (car (unbox b))
+      '(number? string? id?))))
+
+(define (pattern-sbox->test b)
+  (case (car (unbox b))
+    [(number?)
+     (lambda (sexp env) (number? sexp))]
+    [(string?)
+     (lambda (sexp env) (string? sexp))]
+    [(id?)
+     (lambda (sexp env) (sid? sexp))]))
+
+(define (template-sbox->sexp b) (cdr (unbox b)))
+
+(define (template-sbox? b)
+  (and (box? b) (pair? (unbox b))
+    (let ([l (unbox b)])
+      (case (car l)
+        [(number->string) (list1? (cdr l))]
+        [(string->number) (list1? (cdr l))]
+        [(list->string) (list1? (cdr l))]
+        [(string->list) (list1? (cdr l))]
+        [(length) (list1? (cdr l))]
+        [(string-append) (list? (cdr l))]
+        [(+ *) (list? (cdr l))]
+        [(id->string) (list1? (cdr l))]
+        [(string->id) (list1? (cdr l))]
+        [else #f]))))
+
+(define (template-sbox->conv b)
+  (case (car (unbox b))
+    [(number->string)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (number? sexp)
+             (number->string sexp)
+             (x-error "number->string: not a number: " sexp))))]
+    [(string->number)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (string? sexp)
+             (string->number sexp)
+             (x-error "string->number: not a string: " sexp))))]
+    [(list->string)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (and (list? sexp) (andmap char? sexp))
+             (list->string sexp)
+             (x-error "list->string: not a list of chars: " sexp))))]
+    [(string->list)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (string? sexp)
+             (string->list sexp)
+             (x-error "string->list: not a string: " sexp))))]
+    [(length)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (list? sexp)
+             (length sexp)
+             (x-error "length: not a list: " sexp))))]
+    [(string-append)
+     (lambda (sexps env)
+       (let loop ([sexps sexps])
+         (cond [(null? sexps) ""]
+               [(string? (car sexps))
+                (string-append (car sexps) (loop (cdr sexps)))]
+               [else (x-error "string-append: not a string: " (car sexps))])))]
+    [(+)
+     (lambda (sexps env)
+       (let loop ([sexps sexps])
+         (cond [(null? sexps) 0]
+               [(number? (car sexps))
+                (+ (car sexps) (loop (cdr sexps)))]
+               [else (x-error "+: not a number: " (car sexps))])))]
+    [(*)
+     (lambda (sexps env)
+       (let loop ([sexps sexps])
+         (cond [(null? sexps) 1]
+               [(number? (car sexps))
+                (* (car sexps) (loop (cdr sexps)))]
+               [else (x-error "*: not a number: " (car sexps))])))]
+    [(id->string)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (sid? sexp)
+             (symbol->string (sid-name sexp))
+             (x-error "id->string: not an id: " sexp))))]
+    [(string->id)
+     (lambda (sexps env)
+       (let ([sexp (car sexps)])
+         (if (string? sexp)
+             (let ([id (string->symbol sexp)])
+               (let ([location (cond [(assv id env) => cdr] [else id])])
+                 (make-sid id id location)))
+             (x-error "string->id: not a string: " sexp))))]))
+
+
+(define (compile-syntax-rules synrules env)
+  (define ellipsis-id
+    (and (pair? (cddr synrules))
+         (sid? (cadr synrules))
+         (sid-id (cadr synrules))))
+  (define (ellipsis? x)
+    (and (sid? x)
+         (if ellipsis-id
+             (eqv? ellipsis-id (sid-id x))
+             (eq? (lookup-sid x env) ellipsis-location)))) ;** was '...
+  (define (check-lit lit)
+    (or (sid? lit)
+        (x-error "non-id: " lit " in literals list of: " synrules))
+    (if (ellipsis? lit)
+        (x-error "ellipsis " lit " in literals list of: " synrules)))
+  (let* ([rest (if ellipsis-id (cddr synrules) (cdr synrules))]
+         [pat-literal-sids (car rest)]
+         [rules (cdr rest)]
+         [pat-literals
+          (begin (or (list? pat-literal-sids)
+                     (x-error "pattern literals list is not a list: "
+                       pat-literal-sids))
+                 (for-each check-lit pat-literal-sids)
+                 (map sid-id pat-literal-sids))])
+    (define (ellipsis-pair? x) (and (pair? x) (ellipsis? (car x))))
+    (define (check-ellipses pat/tmpl in-template?)
+      (define (bad-ellipsis x reason)
+        (x-error (string-append reason ": ") x
+          (if in-template? " in template: " " in pattern: ")
+          pat/tmpl))
+      (define (multi-ellipsis-error x)
+        (bad-ellipsis x "list or vector pattern with multiple ellipses"))
+      (define (ellipsis/tail-error x)
+        (bad-ellipsis x "improper list pattern with an ellipsis"))
+      (define (ellipsis-follows x thing)
+        (bad-ellipsis x (string-append "ellipsis following " thing)))
+      (let ([x (if in-template? pat/tmpl (cdr pat/tmpl))])
+        (if in-template?
+            (if (ellipsis? x) (ellipsis-follows x "nothing"))
+            (cond [(ellipsis? x) (ellipsis-follows pat/tmpl "a '.'")]
+                  [(ellipsis-pair? x)
+                   (ellipsis-follows pat/tmpl "the pattern keyword")]))
+        (let check ([x x])
+          (cond
+            [(pair? x)
+             (if (ellipsis? (car x)) (ellipsis-follows x "a '('"))
+             (check (car x))
+             (if (ellipsis? (cdr x)) (ellipsis-follows x "a '.'"))
+             (if (ellipsis-pair? (cdr x))
+                 (cond
+                   [(ellipsis? (cddr x))
+                    (ellipsis-follows (cdr x) "a '.'")]
+                   [(ellipsis-pair? (cddr x))
+                    (ellipsis-follows (cdr x) "an ellipsis")]
+                   [in-template? (check (cddr x))]
+                   [else
+                    (or (list? x) (ellipsis/tail-error x))
+                    (for-each
+                      (lambda (y)
+                        (if (ellipsis? y) (multi-ellipsis-error x))
+                        (check y))
+                      (cddr x))])
+                 (check (cdr x)))]
+            [(svector? x)
+             (let ([elts (svector->list x)])
+               (if (ellipsis-pair? elts)
+                   (ellipsis-follows x "a '#('")
+                   (check elts)))]
+            [(if in-template? (template-sbox? x) (pattern-sbox? x))
+             (let ([elts (sbox->sexp-list x)])
+               (if (ellipsis-pair? elts)
+                   (ellipsis-follows x "a '#&(op'")
+                   (check elts)))]
+            [(box? x)
+             (bad-ellipsis x "malformed box")]))))
+    (define (make-pat-env pat)
+      (let collect ([x (cdr pat)] [depth 0] [l '()])
+        (cond
+          [(sid? x)
+           (let ([id (sid-id x)])
+             (cond
+               [(memv id pat-literals) l]
+               [(assv id l)
+                (x-error "duplicate pattern var: " x " in pattern: " pat)]
+               [else (acons id depth l)]))]
+          [(vector? x) (collect (svector->list x) depth l)]
+          [(box? x) (collect (pattern-sbox->sexp x) depth l)]
+          [(pair? x)
+           (if (ellipsis-pair? (cdr x))
+               (collect (car x) (+ 1 depth) (collect (cddr x) depth l))
+               (collect (car x) depth (collect (cdr x) depth l)))]
+          [else l])))
+    (define (check-var-depths tmpl pat-env)
+      (define (depth-error x)
+        (x-error "pattern var used at bad depth: " x
+          " in template: " tmpl))
+      (define (close-error x)
+        (x-error "template ellipsis closes no variables: " x
+          " in template: " tmpl))
+      (let collect ([x tmpl] [depth 0])
+        (cond
+          [(sid? x)
+           (let ([p (assv (sid-id x) pat-env)])
+             (and p
+                  (let*
+                   ([pat-depth (cdr p)]
+                    [same-depth? (= depth pat-depth)])
+                    (if (and (positive? pat-depth) (not same-depth?))
+                        (depth-error x))
+                    same-depth?)))]
+          [(vector? x) (collect (svector->list x) depth)]
+          [(box? x) (collect (template-sbox->sexp x) depth)]
+          [(pair? x)
+           (let* ([ellip? (ellipsis-pair? (cdr x))]
+                  [car-closed?
+                   (collect (car x) (if ellip? (+ 1 depth) depth))]
+                  [cdr-closed? (collect ((if ellip? cddr cdr) x) depth)])
+             (and ellip? (not car-closed?) (close-error x))
+             (or car-closed? cdr-closed?))]
+          [else #f])))
+    (define (check-rule rule)
+      (or (list2? rule) (x-error "malformed syntax rule: " rule))
+      (let ([pat (car rule)] [tmpl (cadr rule)])
+        (or (and (pair? pat) (sid? (car pat)))
+            (sid? pat) ;++ : support for identifier-syntax
+            (x-error "malformed pattern: " pat))
+        ;++ : treat _ pat as (_) for checking purposes
+        (let ([pat (if (sid? pat) (list pat) pat)])
+          (check-ellipses pat #f)
+          (check-ellipses tmpl #t)
+          (let ([pat-env (make-pat-env pat)])
+            (check-var-depths tmpl pat-env)
+            (let collect ([x tmpl] [lits '()])
+              (cond
+                [(ellipsis? x) lits]
+                [(sid? x) (if (assv (sid-id x) pat-env) lits (cons (sid-id x) lits))]
+                [(vector? x) (collect (svector->list x) lits)]
+                [(box? x) (collect (template-sbox->sexp x) lits)]
+                [(pair? x) (collect (car x) (collect (cdr x) lits))]
+                [else lits]))))))
+    (or (list? rules) (x-error "malformed syntax rules: " rules))
+    (for-each check-rule rules) ;** reduction is dropped
+    (make-expander (cons 'syntax-rules (cdr synrules)) env)))
+
+(define (apply-synrules transformer sexp id-n env k)
+  (let* ([synrules (expander-form transformer)]
+         [mac-env (expander-env transformer)]
+         [ellipsis-id (and (sid? (cadr synrules)) (sid-id (cadr synrules)))]
+         [rest (if ellipsis-id (cddr synrules) (cdr synrules))]
+         [pat-literals (map sid-id (car rest))]
+         [rules (cdr rest)])
+    (define (pat-literal? id) (memv id pat-literals))
+    (define (not-pat-literal? id) (not (pat-literal? id)))
+    (define (ellipsis-pair? x) (and (pair? x) (ellipsis? (car x))))
+    (define (ellipsis? x)
+      (and (sid? x)
+           (if ellipsis-id
+               (eqv? ellipsis-id (sid-id x))
+               (eq? (lookup-sid x mac-env) ellipsis-location)))) ;** was '...
+    (define (list-ids x include-scalars pred?)
+      (let collect ([x x] [inc include-scalars] [l '()])
+        (cond [(sid? x)
+               (let ([id (sid-id x)])
+                 (if (and inc (pred? id)) (cons id l) l))]
+              [(vector? x) (collect (svector->list x) inc l)]
+              [(box? x) (collect (sbox->sexp-list x) inc l)]
+              [(pair? x)
+               (if (ellipsis-pair? (cdr x))
+                   (collect (car x) #t (collect (cddr x) inc l))
+                   (collect (car x) inc (collect (cdr x) inc l)))]
+              [else l])))
+    (define (matches? pat)
+      (let match ([pat pat] [sexp (cdr sexp)])
+        (cond [(sid? pat)
+               (or (not (pat-literal? (sid-id pat)))
+                   (and (sid? sexp)
+                        (eqv?
+                          (lookup-sid pat mac-env)
+                          (lookup-sid sexp env))))]
+              [(svector? pat)
+               (and (svector? sexp)
+                    (match (svector->list pat) (svector->list sexp)))]
+              [(pattern-sbox? pat)
+               (and ((pattern-sbox->test pat) sexp env)
+                    (match (pattern-sbox->sexp pat) sexp))]
+              [(not (pair? pat)) (equal? pat sexp)]
+              [(ellipsis-pair? (cdr pat))
+               (let skip ([p (cddr pat)] [s sexp])
+                 (if (pair? p)
+                     (and (pair? s) (skip (cdr p) (cdr s)))
+                     (let match-cars ([sexp sexp] [s s])
+                       (if (pair? s)
+                           (and (match (car pat) (car sexp))
+                                (match-cars (cdr sexp) (cdr s)))
+                           (match (cddr pat) sexp)))))]
+              [else
+               (and (pair? sexp)
+                    (match (car pat) (car sexp))
+                    (match (cdr pat) (cdr sexp)))])))
+    (define (make-bindings pat)
+      (let collect ([pat pat] [sexp (cdr sexp)] [bindings '()])
+        (cond
+          [(and (sid? pat) (not (pat-literal? (sid-id pat))))
+           (acons (sid-id pat) sexp bindings)]
+          [(svector? pat)
+           (collect (svector->list pat) (svector->list sexp) bindings)]
+          [(box? pat)
+           (collect (pattern-sbox->sexp pat) sexp bindings)]
+          [(not (pair? pat)) bindings]
+          [(ellipsis-pair? (cdr pat))
+           (let* ([tail-len (length (cddr pat))]
+                  [tail (list-tail sexp (- (length sexp) tail-len))]
+                  [matches
+                   (reverse (list-tail (reverse sexp) tail-len))]
+                  [vars (list-ids (car pat) #t not-pat-literal?)])
+             (define (collect1 match)
+               (map cdr (collect (car pat) match '())))
+             (append (apply-map-list (cons vars (map collect1 matches))) ; *
+                     (collect (cddr pat) tail bindings)))]
+          [else
+           (collect (car pat) (car sexp)
+             (collect (cdr pat) (cdr sexp) bindings))])))
+    (define (remove-dups l)
+      (let loop ([l l] [result '()])
+        (if (null? l)
+            result
+            (loop (cdr l)
+              (let ([elt (car l)])
+                (if (memv elt result) result (cons elt result)))))))
+    (define (expand-template pat tmpl top-bindings)
+      (define tmpl-literals
+        (remove-dups
+          (list-ids tmpl #t (lambda (id) (not (assv id top-bindings))))))
+      (define ellipsis-vars (list-ids pat #f not-pat-literal?))
+      (define (list-ellipsis-vars subtmpl)
+        (list-ids subtmpl #t (lambda (id) (memv id ellipsis-vars))))
+      (define (expand tmpl bindings)
+        (let expand-part ([tmpl tmpl])
+          (cond
+            [(sid? tmpl)
+             (let ([id (sid-id tmpl)])
+               (cond
+                 [(assv id bindings) => cdr]
+                 [(assv id top-bindings) => cdr]
+                 [else
+                  (let ([index (+ -1 (length (memv id tmpl-literals)))]
+                        [location (lookup-sid tmpl mac-env)])
+                    (make-sid (sid-name tmpl) (+ id-n index) location))]))]
+            [(vector? tmpl)
+             (list->svector (expand-part (svector->list tmpl)))]
+            [(box? tmpl)
+             ((template-sbox->conv tmpl) 
+              (expand-part (template-sbox->sexp tmpl)) env)]
+            [(pair? tmpl)
+             (if (ellipsis-pair? (cdr tmpl))
+                 (let ([vars-to-iterate (list-ellipsis-vars (car tmpl))])
+                   (define (lookup var) (cdr (assv var bindings)))
+                   (define (expand-using-vals-list vals)  ; used dotted arglist
+                     (expand (car tmpl) (map cons vars-to-iterate vals)))
+                   (let ([val-lists (map lookup vars-to-iterate)])
+                     (if (or (null? (cdr val-lists))
+                             (pairwise-andmap (lambda (x y) (= x y)) ; *
+                               (map length val-lists))) ; was (apply = (map length val-lists))
+                         (append
+                           (map expand-using-vals-list (apply-map-list val-lists))
+                           (expand-part (cddr tmpl)))
+                         (x-error 
+                           "unequal sequence lengths for pattern vars: "
+                           vars-to-iterate " in macro call: " sexp))))
+                 (cons (expand-part (car tmpl))
+                       (expand-part (cdr tmpl))))]
+            [else tmpl])))
+      (k (expand tmpl top-bindings) (+ id-n (length tmpl-literals))))
+    (let loop ([rules rules])
+      (if (null? rules)
+          (x-error "no matching rule for macro use: " sexp)
+          (let* ([rule (car rules)] [pat (car rule)] [tmpl (cadr rule)])
+            (cond
+               [(and (pair? pat) (pair? sexp) (matches? (cdr pat)))
+                (expand-template (cdr pat) tmpl (make-bindings (cdr pat)))]
+               ;++ : support for identifier-syntax
+               [(and (sid? pat) (sid? sexp))
+                (expand-template '() tmpl '())]
+               [else
+                (loop (cdr rules))])))))) 
+
+(define root-environment ;++ replaces empty-env
+ '((syntax-lambda . -10) (syntax-rules . -9)
+   (set! . -8) (quote . -7) (lambda . -6) (if . -5)
+   (define-syntax . -4) (define . -3) (begin . -2)
+   (... . -1))) ; todo: add (_ . -11) -- specially treated by syntax-rules
+
+(define root-macro-store ;++ replaces null-store, null-loc-n 
+ '(((-10 (builtin) syntax-lambda) (-9 (builtin) syntax-rules)
+    (-8 (builtin) set!) (-7 (builtin) quote) (-6 (builtin) lambda) (-5 (builtin) if)
+    (-4 (builtin) define-syntax) (-3 (builtin) define) (-2 (builtin) begin)
+    (-1 (builtin) ...)
+    ) . 0))
+
+(define ellipsis-location -1) ;++ used to be '...
+
+(define *current-environment*
+  root-environment) ; replaced by derived environments, root-environment itself is not mutated
+
+(define *current-macro-store* ; pair itself is mutated by expand-top-level-forms!
+  (cons (car root-macro-store) (cdr root-macro-store))) ; root-macro-store is not mutated
+
+(define (expand-top-level-forms! forms environment)
+  (expand-top-level-forms forms environment (car *current-macro-store*) (cdr *current-macro-store*)
+    (lambda (outputs store loc-n)
+      (set-car! *current-macro-store* store) (set-cdr! *current-macro-store* loc-n) outputs)))
+
+
+;------------------------------------------------------------------------------
+
+; procedure hacks and argument checking
+
+(define-inline (%procedure-length p)
+  (%prim "fixnum(procedurelen(obj_from_$arg))" p))
+
+(define-inline (%procedure-ref p i)
+  (%prim? "obj(*procedureref(obj_from_$arg, fixnum_from_$arg))" p i))
+
+(define-inline (%procedure-set! p i x)
+  (%prim! "void(*procedureref(obj_from_$arg, fixnum_from_$arg) = obj_from_$arg)" p i x))
+
+(define-inline (%make-procedure vc code)
+  (%prim* "{ /* %make-procedure */
+    int i = 0, c = fixnum_from_$arg; assert(c >= 0);
+    hreserve(hbsz(c+1), $live); /* $live live regs */
+    while (i++ < c) *--hp = obj_from_bool(0);
+    *--hp = obj_from_$arg; /* gc-safe */
+    $return obj(hendblk(c+1)); }" vc code))
+
+(define (print-procedure x) ;debugging
+  (write-string "#<procedure ")
+    (let ([size (%procedure-length x)])
+      (if (not (= size 0))
+        (let ([last (- size 1)])
+          (let loop ([i 0])
+            (let ([v (%procedure-ref x i)])
+              (cond [(= i 0) (write-string "#<code>")]
+                    [else (write v)]))
+            (if (not (= i last))
+                (begin (write-char #\space) (loop (+ i 1))))))))
+    (write-char #\>) (newline)
+    (void))
+
+(define (make-annotated-procedure p ann)
+  (let* ([l (%procedure-length p)] [vc (fx- l 1)] 
+         [newp (%make-procedure (fx+ vc 1) (%procedure-ref p 0))])
+    (let loop ([i 0])
+      (if (fx=? i vc) 
+          (begin (%procedure-set! newp (fx+ i 1) ann) newp)
+          (begin (%procedure-set! newp (fx+ i 1) (%procedure-ref p (fx+ i 1))) (loop (fx+ i 1)))))))
+
+(define-inline (procedure-annotation ap) ;assumes annotation is there!
+  (%procedure-ref ap (fx- (%procedure-length ap) 1)))
+
+(define-inline (argc->annotation c) (fx+ (fx* c 1000) c))
+(define-inline (range-argc->annotation cmin cmax) (fx+ (fx* cmin 1000) cmax))
+(define-inline (rest-argc->annotation c) (fx+ (fx* (fx- c 1) 1000) 999))
+
+(%localdef "enum {
+  ARGCHECK_BOOLEAN_BOOLEAN_BOOLEAN_ETC = -1000,
+  ARGCHECK_N_OPT,
+  ARGCHECK_N,
+  ARGCHECK_N_N,
+  ARGCHECK_N_ETC,
+  ARGCHECK_Q,
+  ARGCHECK_K,
+  ARGCHECK_Z,
+  ARGCHECK_Z_Z,
+  ARGCHECK_Z_ETC,
+  ARGCHECK_Z_Z_ETC,
+  ARGCHECK_Z_Z_Z_ETC,
+  ARGCHECK_X,
+  ARGCHECK_X_X,
+  ARGCHECK_X_ETC,
+  ARGCHECK_X_X_ETC,
+  ARGCHECK_X_X_X_ETC,
+  ARGCHECK_Z_Z_OPT,
+  ARGCHECK_Z_OR_X_X,
+  ARGCHECK_Z_RADIX_OPT,
+  ARGCHECK_K_CHAR_OPT,
+  ARGCHECK_K_OBJ_OPT,
+  ARGCHECK_PAIR,
+  ARGCHECK_PAIR_OBJ,
+  ARGCHECK_LIST,
+  ARGCHECK_LIST_ETC,
+  ARGCHECK_LIST_ETC_OBJ_OPT,
+  ARGCHECK_OBJ_LIST,
+  ARGCHECK_ALIST,
+  ARGCHECK_OBJ_ALIST,
+  ARGCHECK_U8LIST,
+  ARGCHECK_SYMBOL,
+  ARGCHECK_SYMBOL_SYMBOL_SYMBOL_ETC,
+  ARGCHECK_CHAR,
+  ARGCHECK_CHAR_CHAR,
+  ARGCHECK_CHAR_CHAR_CHAR_ETC,
+  ARGCHECK_CHAR_ETC,
+  ARGCHECK_STRING,
+  ARGCHECK_STRING_STRING,
+  ARGCHECK_STRING_STRING_STRING_ETC,
+  ARGCHECK_STRING_CHAR,
+  ARGCHECK_STRING_ETC,
+  ARGCHECK_STRING_OBJ_ETC,
+  ARGCHECK_STRING_RADIX_OPT,
+  ARGCHECK_STRING_INDEX,
+  ARGCHECK_STRING_INDEX_CHAR,
+  ARGCHECK_STRING_START_END,
+  ARGCHECK_STRING_INDEX_STRING_START_END,
+  ARGCHECK_STRING_CHAR_START_END,
+  ARGCHECK_STRING_START_END_IPORT,
+  ARGCHECK_STRING_START_END_OPORT,
+  ARGCHECK_VECTOR,
+  ARGCHECK_VECTOR_ETC,
+  ARGCHECK_VECTOR_INDEX,
+  ARGCHECK_VECTOR_INDEX_OBJ,
+  ARGCHECK_VECTOR_START_END,
+  ARGCHECK_VECTOR_INDEX_VECTOR_START_END,
+  ARGCHECK_VECTOR_OBJ_START_END,
+  ARGCHECK_VECTOR_OBJ,
+  ARGCHECK_U8_ETC,
+  ARGCHECK_K_U8_OPT,
+  ARGCHECK_U8VECTOR,
+  ARGCHECK_U8VECTOR_U8VECTOR,
+  ARGCHECK_U8VECTOR_ETC,
+  ARGCHECK_U8VECTOR_INDEX,
+  ARGCHECK_U8VECTOR_INDEX_U8,
+  ARGCHECK_U8VECTOR_START_END,
+  ARGCHECK_U8VECTOR_INDEX_U8VECTOR_START_END,
+  ARGCHECK_U8VECTOR_START_END_IPORT,
+  ARGCHECK_U8VECTOR_START_END_OPORT,
+  ARGCHECK_OBJ_K,
+  ARGCHECK_RECORD,
+  ARGCHECK_RECORD_INDEX,
+  ARGCHECK_RECORD_INDEX_OBJ,
+  ARGCHECK_PROC,
+  ARGCHECK_PROC_OBJ_ETC_LIST,
+  ARGCHECK_PROC1CC,
+  ARGCHECK_THUNK_PROC,
+  ARGCHECK_THUNK_THUNK_THUNK,
+  ARGCHECK_STRING_THUNK,
+  ARGCHECK_IPORT_THUNK,
+  ARGCHECK_OPORT_THUNK,
+  ARGCHECK_STRING_PROC1IP,
+  ARGCHECK_STRING_PROC1OP,
+  ARGCHECK_PORT_PROC1P,
+  ARGCHECK_OBJ_PROC1_OPT,
+  ARGCHECK_PROC1_THUNK,
+  ARGCHECK_ENVIRONMENT,
+  ARGCHECK_OBJ_ENVIRONMENT_OPT,
+  ARGCHECK_IPORT,
+  ARGCHECK_IPORT_OPT,
+  ARGCHECK_K_IPORT_OPT,
+  ARGCHECK_OPORT,
+  ARGCHECK_OPORT_OPT,
+  ARGCHECK_PORT,
+  ARGCHECK_OBJ_OPORT_OPT,
+  ARGCHECK_CHAR_OPORT_OPT,
+  ARGCHECK_U8_OPORT_OPT,
+  ARGCHECK_IPORT_OPT_BOOLEAN_OPT,
+  ARGCHECK_OPORT_OPT_BOOLEAN_OPT,
+  ABS_X,
+  TOEXACT_Z,
+  ADD_Z_ETC,
+  MUL_Z_ETC,
+  SUB_Z_Z_ETC,
+  DIV_Z_Z_ETC,
+  QUO_N_N,
+  REM_N_N,
+  MQU_N_N,
+  MLO_N_N,
+  E_Z_Z_Z_ETC,
+  L_X_X_X_ETC,
+  G_X_X_X_ETC,
+  LE_X_X_X_ETC,
+  GE_X_X_X_ETC,
+  GCD_N_ETC,
+  LCM_N_ETC,
+  EXPT_Z_Z,
+  CAR_PAIR,
+  CDR_PAIR,
+  CAAR_PAIR,
+  CADR_PAIR,
+  CDAR_PAIR,
+  CDDR_PAIR,
+  NOT_OBJ,
+  EQ_OBJ_OBJ,
+  EQV_OBJ_OBJ,
+  ISNULL_OBJ,
+  ISPAIR_OBJ,
+  LENGTH_LIST,
+  LENGTH_STRING,
+  REF_STRING_INDEX,
+  SET_STRING_INDEX_CHAR,
+  LENGTH_VECTOR,
+  REF_VECTOR_INDEX,
+  SET_VECTOR_INDEX_OBJ
+};")
+
+; special return values (magical immediates)
+(%definition "#define ARCRES_ITAG 126")
+(%localdef "#define ACRES_APPLY    mkimm(0, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADPROC  mkimm(1, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADARGC  mkimm(2, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADTYPE  mkimm(3, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADINDEX mkimm(4, ARCRES_ITAG)")
+(%localdef "#define ACRES_BADRANGE mkimm(5, ARCRES_ITAG)")
+(%localdef "#define ACRES_ZERODIV  mkimm(6, ARCRES_ITAG)")
+(%localdef "#define ACRES_FIXOVER  mkimm(7, ARCRES_ITAG)")
+(define-syntax acres-special? 
+  (syntax-rules () [(_ x) (%prim "bool(isimm(obj_from_$arg, ARCRES_ITAG))" x)]))
+
+(define-syntax enum (syntax-rules () [(_ s) (%prim #&(string-append "fixnum(" #&(id->string s) ")"))]))
+(define-syntax argcheck->annotation enum) 
+
+(%localdef "static long listlen(obj l) {
+  obj s = l; long n = 0;
+  for (;;) {
+    if (isnull(l)) return n;
+    else if (!ispair(l)) return -1;
+    else if (++n, (l = cdr(l)) == s) return -1;
+    else if (isnull(l)) return n;
+    else if (!ispair(l)) return -1;
+    else if (++n, (l = cdr(l)) == s) return -1;
+    else s = cdr(s); 
+  }
+}")
+
+(%localdef "static int isalist(obj l) {
+  obj s = l;
+  for (;;) {
+    if (isnull(l)) return 1;
+    else if (!ispair(l) || !ispair(car(l))) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else if (isnull(l)) return 1;
+    else if (!ispair(l) || !ispair(car(l))) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else s = cdr(s); 
+  }
+}")
+
+(%localdef "static int isu8list(obj l) {
+  obj s = l;
+  for (;;) {
+    if (isnull(l)) return 1;
+    else if (!ispair(l) || !is_byte_obj(car(l))) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else if (isnull(l)) return 1;
+    else if (!ispair(l) || !is_byte_obj(car(l))) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else s = cdr(s); 
+  }
+}")
+
+(%localdef "static int isenvironment(obj l) {
+  obj s = l;
+  for (;;) {
+    if (isnull(l) || isprocedure(l)) return 1;
+    else if (!ispair(l) || !ispair(car(l))) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else if (isnull(l) || isprocedure(l)) return 1;
+    else if (!ispair(l) || !ispair(car(l))) return 0;
+    else if ((l = cdr(l)) == s) return 0;
+    else s = cdr(s); 
+  }
+}")
+
+(%localdef "static int iexpt(long *px, long y) { 
+  if (y < 0) return 0; /* consistent with the op/fxpow */
+  retry: if (y == 0) return (*px = 1, 1); if (y == 1) return 1;
+  if (y % 2 == 1) { 
+    long long zz; long z = *px; if (!iexpt(&z, y-1)) return 0; 
+    zz = *px * (long long)z; if (zz < FIXNUM_MIN || zz > FIXNUM_MAX) return 0;
+    *px = (long)zz; return 1;
+  } else { 
+    long long zz = *px; zz *= zz;
+    if (zz < FIXNUM_MIN || zz > FIXNUM_MAX) return 0;
+    *px = (long)zz;  y /= 2; goto retry; 
+  }
+}")
+
+(%localdef "static int peekann(obj p) {
+  int len, ann; obj h;
+  if (!p || !isobjptr(p)) return FIXNUM_MIN; /* not a heap object */
+  h = objptr_from_obj(p)[-1]; if (isaptr(h)) return FIXNUM_MIN; /* native */
+  if (size_from_obj(h) < 1 || notaptr(hblkref(p, 0))) return FIXNUM_MIN; /* no code */
+  len = hblklen(p); assert(len >= 2); /* must have code & ann */
+  ann = fixnum_from_obj(hblkref(p, len-1)); return ann;
+}")
+
+(%localdef "static int isthunk(obj p) {
+  int ann = peekann(p);
+  if (ann == FIXNUM_MIN) return 0; /* not a proc */
+  if (ann >= 0) { /* ac check only */
+    int ac = 0; return (ann / 1000 <= ac && ac <= ann % 1000);
+  } else switch (ann) {
+    case ARGCHECK_N_OPT:
+    case ARGCHECK_N_ETC:
+    case ARGCHECK_Z_ETC:
+    case ARGCHECK_X_ETC:
+    case ARGCHECK_CHAR_ETC:
+    case ARGCHECK_STRING_ETC:
+    case ARGCHECK_VECTOR_ETC:
+    case ARGCHECK_U8VECTOR_ETC:
+    case ARGCHECK_IPORT_OPT:
+    case ARGCHECK_OPORT_OPT:
+    case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
+    case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
+    case ADD_Z_ETC:
+    case MUL_Z_ETC:
+    case GCD_N_ETC:
+    case LCM_N_ETC: 
+      return 1;
+    default: 
+      return 0;
+  }
+}")
+
+(%localdef "static int isproc1cc(obj p) {
+  int ann = peekann(p);
+  if (ann == FIXNUM_MIN) return 0; /* not a proc */
+  if (ann >= 0) { /* ac check only */
+    int ac = 1; return (ann / 1000 <= ac && ac <= ann % 1000);
+  } else switch (ann) {
+    case ARGCHECK_OBJ_PROC1_OPT:
+    case ARGCHECK_PROC:
+    case ARGCHECK_PROC1CC:
+    case ARGCHECK_OBJ_ENVIRONMENT_OPT:
+    case ARGCHECK_OBJ_OPORT_OPT:
+    case NOT_OBJ:
+    case ISNULL_OBJ:
+    case ISPAIR_OBJ:
+      return 1;
+    default: 
+      return 0;
+  }
+}")
+
+(%localdef "static int isproc1ip(obj p) {
+  int ann = peekann(p);
+  if (ann == FIXNUM_MIN) return 0; /* not a proc */
+  if (ann >= 0) { /* ac check only */
+    int ac = 1; return (ann / 1000 <= ac && ac <= ann % 1000);
+  } else switch (ann) {
+    case ARGCHECK_OBJ_PROC1_OPT:
+    case ARGCHECK_IPORT:
+    case ARGCHECK_IPORT_OPT:
+    case ARGCHECK_PORT:
+    case ARGCHECK_OBJ_OPORT_OPT:
+    case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
+    case NOT_OBJ:
+    case ISNULL_OBJ:
+    case ISPAIR_OBJ:
+      return 1;
+    default: 
+      return 0;
+  }
+}")
+
+(%localdef "static int isproc1op(obj p) {
+  int ann = peekann(p);
+  if (ann == FIXNUM_MIN) return 0; /* not a proc */
+  if (ann >= 0) { /* ac check only */
+    int ac = 1; return (ann / 1000 <= ac && ac <= ann % 1000);
+  } else switch (ann) {
+    case ARGCHECK_OBJ_PROC1_OPT:
+    case ARGCHECK_OPORT:
+    case ARGCHECK_OPORT_OPT:
+    case ARGCHECK_PORT:
+    case ARGCHECK_OBJ_OPORT_OPT:
+    case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
+    case NOT_OBJ:
+    case ISNULL_OBJ:
+    case ISPAIR_OBJ:
+      return 1;
+    default: 
+      return 0;
+  }
+}")
+
+(%localdef "static int isproc1(obj p) {
+  int ann = peekann(p);
+  if (ann == FIXNUM_MIN) return 0; /* not a proc */
+  if (ann >= 0) { /* ac check only */
+    int ac = 1; return (ann / 1000 <= ac && ac <= ann % 1000);
+  } else switch (ann) {
+    case ARGCHECK_N_OPT:
+    case ARGCHECK_N:
+    case ARGCHECK_N_ETC:
+    case ARGCHECK_Q:
+    case ARGCHECK_K:
+    case ARGCHECK_Z:
+    case ARGCHECK_Z_ETC:
+    case ARGCHECK_X:
+    case ARGCHECK_X_ETC:
+    case ARGCHECK_X_X_ETC:
+    case ARGCHECK_Z_Z_OPT:
+    case ARGCHECK_Z_OR_X_X:
+    case ARGCHECK_Z_RADIX_OPT:
+    case ARGCHECK_K_CHAR_OPT:
+    case ARGCHECK_K_OBJ_OPT:
+    case ARGCHECK_PAIR:
+    case ARGCHECK_LIST:
+    case ARGCHECK_LIST_ETC:
+    case ARGCHECK_LIST_ETC_OBJ_OPT:
+    case ARGCHECK_ALIST:
+    case ARGCHECK_U8LIST:
+    case ARGCHECK_SYMBOL:
+    case ARGCHECK_CHAR:
+    case ARGCHECK_CHAR_ETC:
+    case ARGCHECK_STRING:
+    case ARGCHECK_STRING_ETC:
+    case ARGCHECK_STRING_OBJ_ETC:
+    case ARGCHECK_STRING_RADIX_OPT:
+    case ARGCHECK_VECTOR:
+    case ARGCHECK_VECTOR_ETC:
+    case ARGCHECK_U8_ETC:
+    case ARGCHECK_K_U8_OPT:
+    case ARGCHECK_U8VECTOR:
+    case ARGCHECK_U8VECTOR_ETC:
+    case ARGCHECK_RECORD:
+    case ARGCHECK_PROC:
+    case ARGCHECK_PROC1CC:
+    case ARGCHECK_OBJ_PROC1_OPT:
+    case ARGCHECK_ENVIRONMENT:
+    case ARGCHECK_OBJ_ENVIRONMENT_OPT:
+    case ARGCHECK_IPORT:
+    case ARGCHECK_IPORT_OPT:
+    case ARGCHECK_K_IPORT_OPT:
+    case ARGCHECK_OPORT:
+    case ARGCHECK_OPORT_OPT:
+    case ARGCHECK_PORT:
+    case ARGCHECK_OBJ_OPORT_OPT:
+    case ARGCHECK_CHAR_OPORT_OPT:
+    case ARGCHECK_U8_OPORT_OPT:
+    case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
+    case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
+    case ABS_X:
+    case TOEXACT_Z:
+    case ADD_Z_ETC:
+    case MUL_Z_ETC:
+    case SUB_Z_Z_ETC:
+    case DIV_Z_Z_ETC:
+    case GCD_N_ETC: 
+    case LCM_N_ETC: 
+    case CAR_PAIR:
+    case CDR_PAIR:
+    case CAAR_PAIR:
+    case CADR_PAIR:
+    case CDAR_PAIR:
+    case CDDR_PAIR:
+    case NOT_OBJ:
+    case ISNULL_OBJ:
+    case ISPAIR_OBJ:
+    case LENGTH_LIST:
+    case LENGTH_STRING:
+    case LENGTH_VECTOR:
+      return 1;
+    default: 
+      return 0;
+  }
+}")
+
+(%localdef "static int isradix(obj o) {
+  if (!is_fixnum_obj(o)) return 0;
+  else { long i = fixnum_from_obj(o); return (i == 2 || i == 8 || i == 10 || i == 16); } 
+}")
+
+(%include <stdarg.h>)
+
+(%localdef "obj argcheck(obj p, long ac, obj l, ...) {
+  int ann; assert(ac >= 0);
+  ann = peekann(p); if (ann == FIXNUM_MIN) return ACRES_BADPROC; /* not a proc */
+  if (ann >= 0) { /* ac check only */
+    if (ann / 1000 <= ac && ac <= ann % 1000) return ACRES_APPLY; /* ac ok */
+    else return ACRES_BADARGC; /* a closure, but won't accept ac */
+  } else { /* full argument check */ 
+    obj res = ACRES_APPLY; va_list args; 
+    va_start(args, l);
+    switch (ann) {
+      /* regular arg checks */
+      case ARGCHECK_BOOLEAN_BOOLEAN_BOOLEAN_ETC: 
+        if (ac < 2) res = ACRES_BADARGC; else while (ac-- > 0) {
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!is_bool_obj(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_N_OPT:      if (ac == 0) break; /* else fall thru */
+      case ARGCHECK_N:          if (ac != 1) { res = ACRES_BADARGC; break; } else goto int_etc;
+      case ARGCHECK_N_N:        if (ac != 2) { res = ACRES_BADARGC; break; } else goto int_etc;
+      case ARGCHECK_N_ETC:      goto int_etc;
+      case ARGCHECK_Q:          if (ac != 1) { res = ACRES_BADARGC; break; } else goto int_etc;
+      int_etc: 
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (is_fixnum_obj(o) || (is_flonum_obj(o) && flisint(flonum_from_obj(o)))) continue; 
+          res = ACRES_BADTYPE; break;
+        } break;
+      case ARGCHECK_K:          
+        if (ac == 1) { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!is_fixnum_obj(o) || fixnum_from_obj(o) < 0) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_Z:          if (ac != 1) { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_Z_Z:        if (ac != 2) { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_Z_ETC:      goto real_etc;
+      case ARGCHECK_Z_Z_ETC:    if (ac < 1)  { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_Z_Z_Z_ETC:  if (ac < 2)  { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_X:          if (ac != 1) { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_X_X:        if (ac != 2) { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_X_ETC:      goto real_etc;
+      case ARGCHECK_X_X_ETC:    if (ac < 1)  { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_X_X_X_ETC:  if (ac < 2)  { res = ACRES_BADARGC; break; } else goto real_etc;
+      case ARGCHECK_Z_Z_OPT:    /* same as below */
+      case ARGCHECK_Z_OR_X_X:   if (ac < 1 || ac > 2) { res = ACRES_BADARGC; break; } else goto real_etc;
+      real_etc:
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!is_fixnum_obj(o) && !is_flonum_obj(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_Z_RADIX_OPT: 
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!is_fixnum_obj(o) && !is_flonum_obj(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!is_fixnum_obj(o1) && !is_flonum_obj(o1)) res = ACRES_BADTYPE; 
+          else if (!isradix(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_K_CHAR_OPT:
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!is_fixnum_obj(o) || fixnum_from_obj(o) < 0) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!is_fixnum_obj(o1) || fixnum_from_obj(o1) < 0) res = ACRES_BADTYPE; 
+          else if (!ischar(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_K_OBJ_OPT:
+        if (ac == 1 || ac == 2) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!is_fixnum_obj(o) || fixnum_from_obj(o) < 0) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_PAIR:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!ispair(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_PAIR_OBJ:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!ispair(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_LIST:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!islist(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_LIST_ETC:
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!islist(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_LIST_ETC_OBJ_OPT:
+        while (ac-- > 1) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!islist(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_OBJ_LIST:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!islist(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_ALIST:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isalist(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_U8LIST:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isu8list(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_OBJ_ALIST:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isalist(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_SYMBOL:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!issymbol(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_SYMBOL_SYMBOL_SYMBOL_ETC: 
+        if (ac < 2) res = ACRES_BADARGC; else while (ac-- > 0) {
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!issymbol(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_CHAR:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!ischar(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_CHAR_CHAR:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!ischar(o1) || !ischar(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_CHAR_CHAR_CHAR_ETC: 
+        if (ac < 2) res = ACRES_BADARGC; else while (ac-- > 0) {
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!ischar(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_CHAR_ETC:
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!ischar(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_STRING:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isstring(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_STRING_STRING:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !isstring(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_STRING_STRING_STRING_ETC: 
+        if (ac < 2) res = ACRES_BADARGC; else while (ac-- > 0) {
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!isstring(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_STRING_CHAR:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !ischar(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_STRING_ETC:
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!isstring(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_STRING_OBJ_ETC: 
+        if (ac < 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isstring(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_STRING_RADIX_OPT:
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isstring(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !isradix(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_STRING_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_STRING_INDEX_CHAR:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2) || !ischar(o3)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_STRING_START_END:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), s = fixnum_from_obj(o2), e = fixnum_from_obj(o3); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_STRING_INDEX_STRING_START_END:
+        if (ac != 5) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4, o5; long tlen = -1;
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); l = cdr(l); o5 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); o5 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; else tlen = len-n; }
+          if (!isstring(o3) || !is_fixnum_obj(o4) || !is_fixnum_obj(o5)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o3), s = fixnum_from_obj(o4), e = fixnum_from_obj(o5); 
+                 if (s < 0 || s > e || e > len || e-s > tlen) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_STRING_CHAR_START_END:
+        if (ac != 4) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); }
+          if (!isstring(o1) || !ischar(o2) || !is_fixnum_obj(o3) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), s = fixnum_from_obj(o3), e = fixnum_from_obj(o4); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_STRING_START_END_IPORT:
+        if (ac != 4) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), s = fixnum_from_obj(o2), e = fixnum_from_obj(o3); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+          if (!isiport(o4)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_STRING_START_END_OPORT:
+        if (ac != 4) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), s = fixnum_from_obj(o2), e = fixnum_from_obj(o3); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+          if (!isoport(o4)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_VECTOR:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isvector(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_VECTOR_ETC:
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!isvector(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_VECTOR_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_VECTOR_INDEX_OBJ:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_VECTOR_START_END:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o2) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), s = fixnum_from_obj(o2), e = fixnum_from_obj(o3); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_VECTOR_INDEX_VECTOR_START_END:
+        if (ac != 5) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4, o5; long tlen = -1;
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); l = cdr(l); o5 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); o5 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; else tlen = len-n; }
+          if (!isvector(o3) || !is_fixnum_obj(o4) || !is_fixnum_obj(o5)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o3), s = fixnum_from_obj(o4), e = fixnum_from_obj(o5); 
+                 if (s < 0 || s > e || e > len || e-s > tlen) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_VECTOR_OBJ_START_END:
+        if (ac != 4) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o3) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), s = fixnum_from_obj(o3), e = fixnum_from_obj(o4); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_VECTOR_OBJ:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isvector(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_U8_ETC:
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!is_byte_obj(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_K_U8_OPT:
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!is_fixnum_obj(o) || fixnum_from_obj(o) < 0) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!is_fixnum_obj(o1) || fixnum_from_obj(o1) < 0) res = ACRES_BADTYPE; 
+          else if (!is_byte_obj(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_U8VECTOR:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isbytevector(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_U8VECTOR_U8VECTOR:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isbytevector(o1) || !isbytevector(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_U8VECTOR_ETC:
+        while (ac-- > 0) { 
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj); 
+          if (!isbytevector(o)) { res = ACRES_BADTYPE; break; }
+        } break;
+      case ARGCHECK_U8VECTOR_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isbytevector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = bytevectorlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_U8VECTOR_INDEX_U8:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isbytevector(o1) || !is_fixnum_obj(o2) || !is_byte_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = bytevectorlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_U8VECTOR_START_END:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isbytevector(o1) || !is_fixnum_obj(o2) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = bytevectorlen(o1), s = fixnum_from_obj(o2), e = fixnum_from_obj(o3); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_U8VECTOR_INDEX_U8VECTOR_START_END:
+        if (ac != 5) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4, o5; long tlen = -1;
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); l = cdr(l); o5 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); o5 = va_arg(args, obj); }
+          if (!isbytevector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = bytevectorlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; else tlen = len-n; }
+          if (!isbytevector(o3) || !is_fixnum_obj(o4) || !is_fixnum_obj(o5)) res = ACRES_BADTYPE;
+          else { long len = bytevectorlen(o3), s = fixnum_from_obj(o4), e = fixnum_from_obj(o5); 
+                 if (s < 0 || s > e || e > len || e-s > tlen) res = ACRES_BADRANGE; }
+        } break;
+      case ARGCHECK_U8VECTOR_START_END_IPORT:
+        if (ac != 4) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); }
+          if (!isbytevector(o1) || !is_fixnum_obj(o2) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = bytevectorlen(o1), s = fixnum_from_obj(o2), e = fixnum_from_obj(o3); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+          if (!isiport(o4)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_U8VECTOR_START_END_OPORT:
+        if (ac != 4) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3, o4; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); l = cdr(l); o4 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); o4 = va_arg(args, obj); }
+          if (!isbytevector(o1) || !is_fixnum_obj(o2) || !is_fixnum_obj(o3)) res = ACRES_BADTYPE;
+          else { long len = bytevectorlen(o1), s = fixnum_from_obj(o2), e = fixnum_from_obj(o3); 
+                 if (s < 0 || s > e || e > len) res = ACRES_BADRANGE; }
+          if (!isoport(o4)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_OBJ_K:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!is_fixnum_obj(o2) || fixnum_from_obj(o2) < 0) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_RECORD:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isrecord(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_RECORD_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isrecord(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = recordlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_RECORD_INDEX_OBJ:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isrecord(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = recordlen(o1), n = fixnum_from_obj(o2); if (n < 0 || n >= len) res = ACRES_BADINDEX; }
+        } break;
+      case ARGCHECK_PROC:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isprocedure(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_PROC_OBJ_ETC_LIST:
+        if (ac < 2) res = ACRES_BADARGC; else {
+          obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+          if (!isprocedure(o)) res = ACRES_BADTYPE;
+          else if (l) { long i = 1; while (++i < ac) l = cdr(l); o = car(l); if (!islist(o)) res = ACRES_BADTYPE; } 
+          else { long i = 1; while (++i < ac) va_arg(args, obj); o = va_arg(args, obj); if (!islist(o)) res = ACRES_BADTYPE; } 
+        } break;
+      case ARGCHECK_PROC1CC:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isproc1cc(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_THUNK_PROC:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isthunk(o1) || !isprocedure(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_THUNK_THUNK_THUNK:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isthunk(o1) || !isthunk(o2) || !isthunk(o3)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_STRING_THUNK:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !isthunk(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_IPORT_THUNK:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isiport(o1) || !isthunk(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_OPORT_THUNK:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isoport(o1) || !isthunk(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_STRING_PROC1IP:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !isproc1ip(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_STRING_PROC1OP:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !isproc1op(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_PORT_PROC1P:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!((isiport(o1) && isproc1ip(o2)) || (isoport(o1) && isproc1op(o2)))) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_OBJ_PROC1_OPT:
+        if (ac == 1) {
+          /* ok, obj requires no check */
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isproc1(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_PROC1_THUNK:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isproc1(o1) || !isthunk(o2)) res = ACRES_BADTYPE;
+        } break;
+      case ARGCHECK_ENVIRONMENT:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isenvironment(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_OBJ_ENVIRONMENT_OPT:
+        if (ac == 1) {
+          /* ok, obj requires no check */
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isenvironment(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_IPORT_OPT:
+        if (ac == 0) break; /* else fall thru */ 
+      case ARGCHECK_IPORT:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isiport(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_K_IPORT_OPT:
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!is_fixnum_obj(o) || fixnum_from_obj(o) < 0) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!is_fixnum_obj(o1) || fixnum_from_obj(o1) < 0) res = ACRES_BADTYPE; 
+          if (!isiport(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_OPORT_OPT:
+        if (ac == 0) break; /* else fall thru */ 
+      case ARGCHECK_OPORT:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isoport(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_PORT:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isiport(o) && !isoport(o)) res = ACRES_BADTYPE; 
+        } break;
+      case ARGCHECK_OBJ_OPORT_OPT:
+        if (ac == 1) {
+          /* ok, obj requires no check */
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isoport(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_CHAR_OPORT_OPT:
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!ischar(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!ischar(o1) || !isoport(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_U8_OPORT_OPT:
+        if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!is_byte_obj(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!is_byte_obj(o1) || !isoport(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_IPORT_OPT_BOOLEAN_OPT:
+        if (ac == 0) {
+        } else if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isiport(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isiport(o1) || !is_bool_obj(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      case ARGCHECK_OPORT_OPT_BOOLEAN_OPT:
+        if (ac == 0) {
+        } else if (ac == 1) {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isoport(o)) res = ACRES_BADTYPE; 
+        } else if (ac == 2) { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isoport(o1) || !is_bool_obj(o2)) res = ACRES_BADTYPE; 
+        } else res = ACRES_BADARGC; 
+        break;
+      /* special checks for popular operations; may return result if no allocation is needed */
+      case ABS_X:
+        if (ac != 1) res = ACRES_BADARGC; else {
+          long z; obj o; if (l) o = car(l); else o = va_arg(args, obj);
+          if (is_flonum_obj(o)) goto out;
+          if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+          z = fixnum_from_obj(o); if (z == FIXNUM_MIN) { res = ACRES_FIXOVER; goto out; }
+          res = obj_from_fixnum(labs(z));
+        } break;
+      case TOEXACT_Z:
+        if (ac != 1) res = ACRES_BADARGC; else {
+          double f; long z; obj o; if (l) o = car(l); else o = va_arg(args, obj);
+          if (is_fixnum_obj(o)) { res = o; goto out; }
+          if (!is_flonum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+          f = flonum_from_obj(o); z = (long)f;
+          if ((double)z != f || z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }  
+          res = obj_from_fixnum(z);
+        } break;
+      case ADD_Z_ETC:
+        if (ac < 2) goto real_etc; else { 
+          long z = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o)) goto real_etc; /* fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            z += fixnum_from_obj(o); if (z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum(z);
+        } break;
+      case MUL_Z_ETC:
+        if (ac < 2) goto real_etc; else { 
+          long long z = 1; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o)) goto real_etc; /* fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            z *= fixnum_from_obj(o); if (z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum((long)z);
+        } break;
+      case SUB_Z_Z_ETC:
+        if (ac < 1) res = ACRES_BADARGC; else {
+          long z = 0, i = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o)) goto real_etc; /* fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            if (!i++) { z = fixnum_from_obj(o); if (!ac) z = -z; } else z -= fixnum_from_obj(o); 
+            if (z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum(z);
+        } break;
+      case DIV_Z_Z_ETC:
+        if (ac < 1) res = ACRES_BADARGC; else {
+          long z = 0, i = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o)) goto real_etc; /* our fl/mixed op won't overflow or zerodiv */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            if ((i || !ac) && o == obj_from_fixnum(0)) { res = ACRES_ZERODIV; goto out; }
+            if (!i++) { z = fixnum_from_obj(o); if (!ac) { if (z != 1 && z != -1) goto out; } } 
+            else { long x = fixnum_from_obj(o); if (z % x == 0) z /= x; else goto out; } 
+            if (z < FIXNUM_MIN || z > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum(z);
+        } break;
+      case QUO_N_N:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) { long x =  fixnum_from_obj(o1), y = fixnum_from_obj(o2);
+            res = (!y) ? ACRES_ZERODIV : (x == FIXNUM_MIN && y == -1) ? ACRES_FIXOVER : obj_from_fixnum(x / y);
+          } else if (!(is_fixnum_obj(o1) || (is_flonum_obj(o1) && flisint(flonum_from_obj(o1)))) || 
+                     !(is_fixnum_obj(o2) || (is_flonum_obj(o2) && flisint(flonum_from_obj(o2))))) res = ACRES_BADTYPE;
+        } break;
+      case REM_N_N:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) { long x =  fixnum_from_obj(o1), y = fixnum_from_obj(o2);
+            res = (!y) ? ACRES_ZERODIV : obj_from_fixnum(x % y);
+          } else if (!(is_fixnum_obj(o1) || (is_flonum_obj(o1) && flisint(flonum_from_obj(o1)))) || 
+                     !(is_fixnum_obj(o2) || (is_flonum_obj(o2) && flisint(flonum_from_obj(o2))))) res = ACRES_BADTYPE;
+        } break;
+      case MQU_N_N:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) { long x =  fixnum_from_obj(o1), y = fixnum_from_obj(o2);
+            if (!y) res = ACRES_ZERODIV; else if (x == FIXNUM_MIN && y == -1) res = ACRES_FIXOVER;
+            else { long q = x / y; res = obj_from_fixnum(((x < 0 && y > 0) || (x > 0 && y < 0)) ? q - 1 : q); }
+          } else if (!(is_fixnum_obj(o1) || (is_flonum_obj(o1) && flisint(flonum_from_obj(o1)))) || 
+                     !(is_fixnum_obj(o2) || (is_flonum_obj(o2) && flisint(flonum_from_obj(o2))))) res = ACRES_BADTYPE;
+        } break;
+      case MLO_N_N:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) { long x =  fixnum_from_obj(o1), y = fixnum_from_obj(o2);
+            if (!y) res = ACRES_ZERODIV; else { long r = x % y; res = obj_from_fixnum(((r < 0 && y > 0) || (r > 0 && y < 0)) ? r + y : r); }
+          } else if (!(is_fixnum_obj(o1) || (is_flonum_obj(o1) && flisint(flonum_from_obj(o1)))) || 
+                     !(is_fixnum_obj(o2) || (is_flonum_obj(o2) && flisint(flonum_from_obj(o2))))) res = ACRES_BADTYPE;
+        } break;
+      case E_Z_Z_Z_ETC:
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(o1 == o2);
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case L_X_X_X_ETC:   
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(fixnum_from_obj(o1) < fixnum_from_obj(o2));
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case G_X_X_X_ETC:   
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(fixnum_from_obj(o1) > fixnum_from_obj(o2));
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case LE_X_X_X_ETC:   
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(fixnum_from_obj(o1) <= fixnum_from_obj(o2));
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case GE_X_X_X_ETC:   
+        if (ac < 2) res = ACRES_BADARGC; else if (ac == 2) {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2)) res = obj_from_bool(fixnum_from_obj(o1) >= fixnum_from_obj(o2));
+          else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } else goto real_etc;
+        break;
+      case GCD_N_ETC:
+        if (ac == 0) res = obj_from_fixnum(0); else { 
+          long a, i = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o) && flisint(flonum_from_obj(o))) goto int_etc; /* our fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            if (!i++) a = labs(fixnum_from_obj(o)); 
+            else { long b = labs(fixnum_from_obj(o)), c; while (b) c = a%b, a = b, b = c; }
+            if (a > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; }
+          } res = obj_from_fixnum(a);
+        } break;
+      case LCM_N_ETC:
+        if (ac == 0) res = obj_from_fixnum(1); else { 
+          long long x; long i = 0; while (ac-- > 0) {
+            obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
+            if (is_flonum_obj(o) && flisint(flonum_from_obj(o))) goto int_etc; /* our fl/mixed op won't overflow */
+            if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
+            if (!i++) x = labs(fixnum_from_obj(o)); 
+            else { long y = labs(fixnum_from_obj(o)), a = (long)x, b = y, c; while (b) c = a%b, a = b, b = c;
+                   if (!a) x = a; else x = (x / a) * y; }
+            if (x > FIXNUM_MAX) { res = ACRES_FIXOVER; goto out; } /* internal overflow, like in real op */
+          } res = obj_from_fixnum((long)x);
+        } break;
+      case EXPT_Z_Z:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_fixnum_obj(o1) && is_fixnum_obj(o2) && fixnum_from_obj(o2) >= 0) { 
+            long x = fixnum_from_obj(o1), y = fixnum_from_obj(o2); 
+            if (!iexpt(&x, y)) res = ACRES_FIXOVER; else res = obj_from_fixnum(x);
+          } else if (!(is_fixnum_obj(o1) || is_flonum_obj(o1)) || !(is_fixnum_obj(o2) || is_flonum_obj(o2))) res = ACRES_BADTYPE;
+        } break;
+      case CAR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = ispair(o) ? car(o) : ACRES_BADTYPE;
+        } break;
+      case CDR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = ispair(o) ? cdr(o) : ACRES_BADTYPE;
+        } break;
+      case CAAR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = (ispair(o) && ispair(car(o))) ? car(car(o)) : ACRES_BADTYPE;
+        } break;
+      case CDAR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = (ispair(o) && ispair(car(o))) ? cdr(car(o)) : ACRES_BADTYPE;
+        } break;
+      case CADR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = (ispair(o) && ispair(cdr(o))) ? car(cdr(o)) : ACRES_BADTYPE;
+        } break;
+      case CDDR_PAIR:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = (ispair(o) && ispair(cdr(o))) ? cdr(cdr(o)) : ACRES_BADTYPE;
+        } break;
+      case NOT_OBJ:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = obj_from_bool(!bool_from_obj(o));
+        } break;
+      case EQ_OBJ_OBJ:   
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          res = obj_from_bool(o1 == o2);
+        } break;
+      case EQV_OBJ_OBJ:   
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (is_flonum_obj(o1) && is_flonum_obj(o2)) res = obj_from_bool(flonum_from_obj(o1) == flonum_from_obj(o2));
+          else res = obj_from_bool(o1 == o2);
+        } break;
+      case ISNULL_OBJ:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = obj_from_bool(isnull(o));
+        } break;
+      case ISPAIR_OBJ:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = obj_from_bool(ispair(o));
+        } break;
+      case LENGTH_LIST:   
+        if (ac != 1) res = ACRES_BADARGC; else {
+          long n; obj o; if (l) o = car(l); else o = va_arg(args, obj); res = ((n = listlen(o)) < 0) ? ACRES_BADTYPE : obj_from_fixnum(n);
+        } break;
+      case LENGTH_STRING:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = isstring(o) ? obj_from_fixnum(stringlen(o)) : ACRES_BADTYPE; 
+        } break;
+      case REF_STRING_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else { 
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = stringlen(o1), n = fixnum_from_obj(o2); res = (n < 0 || n >= len) ? ACRES_BADINDEX : obj_from_char(*(unsigned char*)stringref(o1, n)); }
+        } break;
+      case SET_STRING_INDEX_CHAR:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isstring(o1) || !is_fixnum_obj(o2) || !ischar(o3)) res = ACRES_BADTYPE;
+          else { 
+            long len = stringlen(o1), n = fixnum_from_obj(o2); 
+            res = (n < 0 || n >= len) ? ACRES_BADINDEX : obj_from_void(*stringref(o1, n) = char_from_obj(o3)); 
+          }
+        } break;
+      case LENGTH_VECTOR:
+        if (ac != 1) res = ACRES_BADARGC; else {
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); res = isvector(o) ? obj_from_fixnum(vectorlen(o)) : ACRES_BADTYPE;
+        } break;
+      case REF_VECTOR_INDEX:
+        if (ac != 2) res = ACRES_BADARGC; else {
+          obj o1, o2; if (l) { o1 = car(l); l = cdr(l); o2 = car(l); } else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), n = fixnum_from_obj(o2); res = (n < 0 || n >= len) ? ACRES_BADINDEX : vectorref(o1, n); }          
+        } break;
+      case SET_VECTOR_INDEX_OBJ:
+        if (ac != 3) res = ACRES_BADARGC; else { 
+          obj o1, o2, o3; 
+          if (l) { o1 = car(l); l = cdr(l); o2 = car(l); l = cdr(l); o3 = car(l); } 
+          else { o1 = va_arg(args, obj); o2 = va_arg(args, obj); o3 = va_arg(args, obj); }
+          if (!isvector(o1) || !is_fixnum_obj(o2)) res = ACRES_BADTYPE;
+          else { long len = vectorlen(o1), n = fixnum_from_obj(o2); res = (n < 0 || n >= len) ? ACRES_BADINDEX : (vectorref(o1, n) = o3); }
+        } break;
+      default: assert(0);
+    }
+  out:  
+    va_end(args);
+    return res;
+  }
+}")
+
+(define-syntax %procedure-argcheck
+  (syntax-rules ()
+    [(_ p 0) (%prim? "obj(argcheck(obj_from_$arg, 0, 0))" p)]
+    [(_ p 1 x) (%prim? "obj(argcheck(obj_from_$arg, 1, 0, obj_from_$arg))" p x)]
+    [(_ p 2 x y) (%prim? "obj(argcheck(obj_from_$arg, 2, 0, obj_from_$arg, obj_from_$arg))" p x y)]
+    [(_ p 3 x y z) (%prim? "obj(argcheck(obj_from_$arg, 3, 0, obj_from_$arg, obj_from_$arg, obj_from_$arg))" p x y z)]
+    [(_ p 4 x y z t) (%prim? "obj(argcheck(obj_from_$arg, 4, 0, obj_from_$arg, obj_from_$arg, obj_from_$arg, obj_from_$arg))" p x y z t)]))
+
+(define (scheme-call-error n r p l)
+  (cond [(eq? r (%prim "obj(ACRES_BADPROC)"))  (r-error "attempt to call non-procedure" p)]
+        [(eq? r (%prim "obj(ACRES_BADARGC)"))  (r-error "procedure can't be called with argc =" n p  ': l)] 
+        [(eq? r (%prim "obj(ACRES_BADTYPE)"))  (r-error "invalid arguments to" p ': l)]
+        [(eq? r (%prim "obj(ACRES_BADINDEX)")) (r-error "index out of range in call to" p ': l)]
+        [(eq? r (%prim "obj(ACRES_BADRANGE)")) (r-error "bad index range in call to" p ': l)]
+        [(eq? r (%prim "obj(ACRES_ZERODIV)"))  (r-error "division by zero in call to" p ': l)]
+        [(eq? r (%prim "obj(ACRES_FIXOVER)"))  (r-error "exact integer overflow in call to" p ': l)]
+        [else   (%prim! "void(assert(0))")]))
+
+(define-syntax scheme-argcheck-call
+  (syntax-rules ()
+    [(_ n p () (a ...))
+     (let ([r (%procedure-argcheck p n a ...)])
+       (cond [(not (acres-special? r)) r]
+             [(eq? r (%prim "obj(ACRES_APPLY)")) (p a ...)]
+             [else (scheme-call-error n r p (list a ...))]))]
+    [(_ n p (arg0 . arg*) (a ...))
+     (let ([a0 arg0]) (scheme-argcheck-call n p arg* (a ... a0)))]
+    [(_ n proc arg*)
+     (let ([p proc]) (scheme-argcheck-call n p arg* ()))]))   
+
+(define-syntax %procedure-argcheck*
+  (syntax-rules ()
+    [(_ p n l) 
+     (%prim? "obj(argcheck(obj_from_$arg, fixnum_from_$arg, obj_from_$arg))" p n l)]))
+
+(define-syntax scheme-argcheck-apply
+  (syntax-rules ()
+    [(_ n proc arglist)
+     (let ([p proc] [l arglist]) 
+       (let ([r (%procedure-argcheck* p n l)])
+         (cond [(not (acres-special? r)) r]
+               [(eq? r (%prim "obj(ACRES_APPLY)")) (apply p l)]
+               [else (scheme-call-error n r p l)])))]))
+
+(define-inline (annotated-procedure-argc-ok? ap argc) ;assumes annotation is there!
+  (let ([ann (%procedure-ref ap (fx- (%procedure-length ap) 1))])
+    (let ([cmin (fxquotient ann 1000)] [cmax (fxremainder ann 1000)])
+      (and (fx<=? cmin argc) (fx<=? argc cmax)))))  
+
+
+;------------------------------------------------------------------------------
+
+; wrappers for argc checking
+
+(define-syntax scheme-call
+  (syntax-rules ()
+    [(_ n proc arg ...) (scheme-argcheck-call n proc (arg ...))]))
+
+(define-syntax scheme-apply
+  (syntax-rules ()
+    [(_ n proc arglist) (scheme-argcheck-apply n proc arglist)]))
+
+(define-syntax scheme-lambda
+  (syntax-rules ()
+    [(_ n formals . body) 
+     (make-annotated-procedure (lambda formals . body) (argc->annotation n))]))
+
+(define-syntax scheme-lambda-rest
+  (syntax-rules ()
+    [(_ n formals . body) 
+     (make-annotated-procedure (lambda formals . body) (rest-argc->annotation n))]))
+
+
+;------------------------------------------------------------------------------
+
+; compiler (used on macroexpander output)
+
+(define (variable x)
+  (if (not (symbol? x)) (c-error "identifier expected" x)))
+
+(define (shape+ form n) ;form must be proper list of n or more elements
+  (let loop ([n n] [l form])
+    (cond [(<= n 0)]
+          [(pair? l) (loop (- n 1) (cdr l))]
+          [else (c-error "ill-constructed form" form)])))
+
+(define (shape form n) ;form must be proper list of exactly n elements
+  (let loop ([n n] [l form])
+    (cond [(and (= n 0) (null? l))]
+          [(and (> n 0) (pair? l)) (loop (- n 1) (cdr l))]
+          [else (c-error "ill-constructed form" form)])))
+
+(define (parms->frame parms)
+  (cond [(null? parms) '()]
+        [(pair? parms)
+         (let ([x (car parms)])
+           (variable x) (cons x (parms->frame (cdr parms))))]
+        [else (variable parms) (list parms)]))
+
+(define (bindings->vars bindings)
+  (if (pair? bindings)
+      (let ([binding (car bindings)])
+        (shape binding 2)
+        (let ([x (car binding)])
+          (variable x) (cons x (bindings->vars (cdr bindings)))))
+      '()))
+
+(define (bindings->vals bindings)
+  (if (pair? bindings)
+      (let ([binding (car bindings)])
+        (cons (cadr binding) (bindings->vals (cdr bindings))))
+      '()))
+
+(define (scheme-compile expr cte)
+  (define (cons-cte frame cte)
+    (if (null? frame) cte (cons cte frame))) 
+  (define (lookup name)
+    (let loop1 ([chain cte] [up 0])
+      (if (null? chain)
+          name
+          (let loop2 ([chain chain] [up up] [frame (cdr chain)] [over 1])
+            (cond [(null? frame) (loop1 (car chain) (fx+ up 1))]
+                  [(eq? (car frame) name) (cons up over)]
+                  [else (loop2 chain up (cdr frame) (fx+ over 1))])))))
+  (define (comp expr)
+    (cond [(symbol? expr) (variable expr) 
+           (gen-var-ref (lookup expr))]
+          [(not (pair? expr)) 
+           (gen-cst expr)]
+          [(eq? (car expr) 'quote) (shape expr 2) 
+           (gen-cst (cadr expr))]
+          [(eq? (car expr) 'set!) (shape expr 3) (variable (cadr expr))
+           (gen-var-set (lookup (cadr expr)) (comp (caddr expr)))]
+          [(eq? (car expr) 'lambda) (shape expr 3)
+           (let ([parms (cadr expr)])
+             (let ([frame (parms->frame parms)])
+               (let ([nb-vars (length frame)]
+                     [code (scheme-compile (caddr expr) (cons-cte frame cte))])
+                 (if (list? parms)
+                     (gen-lambda nb-vars code)
+                     (gen-lambda-rest nb-vars code)))))]
+          [(eq? (car expr) 'if) (shape+ expr 3)
+           (let ([code1 (comp (cadr expr))] [code2 (comp (caddr expr))])
+             (if (pair? (cdddr expr))
+                 (gen-if code1 code2 (comp (cadddr expr)))
+                 (gen-when code1 code2)))]
+          [(eq? (car expr) 'letrec) (shape expr 3)
+           (let ([bindings (cadr expr)])
+             (let ([new-cte (cons-cte (bindings->vars bindings) cte)])
+               (let loop ([vals (bindings->vals bindings)] [codes '()])
+                 (if (null? vals)
+                     (gen-letrec (reverse codes) (scheme-compile (caddr expr) new-cte))
+                     (loop (cdr vals) (cons (scheme-compile (car vals) new-cte) codes))))))]
+          [(eq? (car expr) 'begin) (shape+ expr 2)
+           (let loop ([expr0 (cadr expr)] [exprs (cddr expr)])
+             (let ([code (comp expr0)])
+               (if (null? exprs) 
+                   code
+                   (gen-sequence code (loop (car exprs) (cdr exprs))))))]
+          [(eq? (car expr) 'define) (shape expr 3) (variable (cadr expr))
+           (gen-sequence ; returns symbol to simplify interactive debugging
+             (gen-var-set (lookup (cadr expr)) (comp (caddr expr)))
+             (gen-cst (cadr expr)))]
+          [(symbol? (car expr)) (variable (car expr))
+           (let ([var (lookup (car expr))])
+             (if (pair? var) ; local
+                 (gen-combination (comp (car expr)) (map comp (cdr expr)))
+                 (gen-glo-combination var (map comp (cdr expr)))))]
+          [else (gen-combination (comp (car expr)) (map comp (cdr expr)))]))
+  (comp expr))     
+
+
+;------------------------------------------------------------------------------
+
+; code generator
+
+; global value store locations are kept in linked alist, value is stored in the cdr
+(define-inline (value-store-location-ref i) (cdr i))
+(define-inline (value-store-location-set! i val) (set-cdr! i val))
+
+(define (gen-var-ref var)
+  (if (pair? var)
+      (gen-rte-ref (car var) (cdr var))
+      (gen-glo-ref (value-store-lookup var))))
+
+(define (gen-rte-ref up over)
+  (case up
+    [(0) (gen-slot-ref-0 over)]
+    [(1) (gen-slot-ref-1 over)]
+    [else (gen-slot-ref-up-2 (gen-rte-ref (- up 2) over))]))
+
+(define (gen-slot-ref-0 i)
+  (case i
+    [(0) (lambda (rte) (vector-ref rte 0))]
+    [(1) (lambda (rte) (vector-ref rte 1))]
+    [(2) (lambda (rte) (vector-ref rte 2))]
+    [(3) (lambda (rte) (vector-ref rte 3))]
+    [else (lambda (rte) (vector-ref rte i))]))
+
+(define (gen-slot-ref-1 i)
+  (case i
+    [(0) (lambda (rte) (vector-ref (vector-ref rte 0) 0))]
+    [(1) (lambda (rte) (vector-ref (vector-ref rte 0) 1))]
+    [(2) (lambda (rte) (vector-ref (vector-ref rte 0) 2))]
+    [(3) (lambda (rte) (vector-ref (vector-ref rte 0) 3))]
+    [else (lambda (rte) (vector-ref (vector-ref rte 0) i))]))
+
+(define (gen-slot-ref-up-2 code)
+  (lambda (rte) (code (vector-ref (vector-ref rte 0) 0))))
+
+(define (gen-glo-ref i) 
+  (lambda (rte) (value-store-location-ref i)))
+
+(define (gen-cst val)
+  (case val
+    [(()) (lambda (rte) '())]
+    [(#f) (lambda (rte) #f)]
+    [(#t) (lambda (rte) #t)]
+    [(-2) (lambda (rte) -2)]
+    [(-1) (lambda (rte) -1)]
+    [(0) (lambda (rte) 0)]
+    [(1) (lambda (rte) 1)]
+    [(2) (lambda (rte) 2)]
+    [else (lambda (rte) val)]))
+
+(define (gen-var-set var code)
+  (if (pair? var)
+      (gen-rte-set (car var) (cdr var) code)
+      (gen-glo-set (value-store-lookup var) code)))
+
+(define (gen-rte-set up over code)
+  (case up
+    [(0) (gen-slot-set-0 over code)]
+    [(1) (gen-slot-set-1 over code)]
+    [else (gen-slot-set-n (gen-rte-ref (- up 2) 0) over code)]))
+
+(define (gen-slot-set-0 i code)
+  (case i
+    [(0) (lambda (rte) (vector-set! rte 0 (code rte)))]
+    [(1) (lambda (rte) (vector-set! rte 1 (code rte)))]
+    [(2) (lambda (rte) (vector-set! rte 2 (code rte)))]
+    [(3) (lambda (rte) (vector-set! rte 3 (code rte)))]
+    [else (lambda (rte) (vector-set! rte i (code rte)))]))
+
+(define (gen-slot-set-1 i code)
+  (case i
+    [(0) (lambda (rte) (vector-set! (vector-ref rte 0) 0 (code rte)))]
+    [(1) (lambda (rte) (vector-set! (vector-ref rte 0) 1 (code rte)))]
+    [(2) (lambda (rte) (vector-set! (vector-ref rte 0) 2 (code rte)))]
+    [(3) (lambda (rte) (vector-set! (vector-ref rte 0) 3 (code rte)))]
+    [else (lambda (rte) (vector-set! (vector-ref rte 0) i (code rte)))]))
+
+(define (gen-slot-set-n up i code)
+  (case i
+    [(0) (lambda (rte) (vector-set! (up (vector-ref rte 0)) 0 (code rte)))]
+    [(1) (lambda (rte) (vector-set! (up (vector-ref rte 0)) 1 (code rte)))]
+    [(2) (lambda (rte) (vector-set! (up (vector-ref rte 0)) 2 (code rte)))]
+    [(3) (lambda (rte) (vector-set! (up (vector-ref rte 0)) 3 (code rte)))]
+    [else (lambda (rte) (vector-set! (up (vector-ref rte 0)) i (code rte)))]))
+
+(define (gen-glo-set i code)
+  (lambda (rte) (value-store-location-set! i (code rte))))
+
+(define (gen-lambda-rest nb-vars body)
+  (case nb-vars
+    [(1) (gen-lambda-1-rest body)]
+    [(2) (gen-lambda-2-rest body)]
+    [(3) (gen-lambda-3-rest body)]
+    [else (gen-lambda-n-rest nb-vars body)]))
+
+(define (gen-lambda-1-rest body)
+  (lambda (rte) (scheme-lambda-rest 1 a (body (vector rte a)))))
+
+(define (gen-lambda-2-rest body)
+  (lambda (rte) (scheme-lambda-rest 2 (a . b) (body (vector rte a b)))))
+
+(define (gen-lambda-3-rest body)
+  (lambda (rte) (scheme-lambda-rest 3 (a b . c) (body (vector rte a b c)))))
+
+(define (gen-lambda-n-rest nb-vars body)
+  (lambda (rte)
+    (scheme-lambda-rest nb-vars (a b c . d)
+      (let ([x (make-vector (+ nb-vars 1))])
+        (vector-set! x 0 rte)
+        (vector-set! x 1 a)
+        (vector-set! x 2 b)
+        (vector-set! x 3 c)
+        (let loop ([n nb-vars] [x x] [i 4] [l d])
+          (if (< i n)
+              (begin
+                (vector-set! x i (car l))
+                (loop n x (+ i 1) (cdr l)))
+              (vector-set! x i l)))
+        (body x)))))
+
+(define (gen-lambda nb-vars body)
+  (case nb-vars
+    [(0) (gen-lambda-0 body)]
+    [(1) (gen-lambda-1 body)]
+    [(2) (gen-lambda-2 body)]
+    [(3) (gen-lambda-3 body)]
+    [(4) (gen-lambda-4 body)]
+    [else (gen-lambda-n nb-vars body)]))
+
+(define (gen-lambda-0 body) 
+  (lambda (rte) (scheme-lambda 0 () (body rte))))
+
+(define (gen-lambda-1 body)
+  (lambda (rte) (scheme-lambda 1 (a) (body (vector rte a)))))
+
+(define (gen-lambda-2 body)
+  (lambda (rte) (scheme-lambda 2 (a b) (body (vector rte a b)))))
+
+(define (gen-lambda-3 body)
+  (lambda (rte) (scheme-lambda 3 (a b c) (body (vector rte a b c)))))
+
+(define (gen-lambda-4 body)
+  (lambda (rte) (scheme-lambda 4 (a b c d) (body (vector rte a b c d)))))
+
+(define (gen-lambda-n nb-vars body)
+  (lambda (rte)
+    (scheme-lambda nb-vars (a b c d . e)
+      (let ([x (make-vector (+ nb-vars 1))])
+        (vector-set! x 0 rte)
+        (vector-set! x 1 a)
+        (vector-set! x 2 b)
+        (vector-set! x 3 c)
+        (vector-set! x 4 d)
+        (let loop ([n nb-vars] [x x] [i 5] [l e])
+          (if (<= i n)
+              (begin
+                (vector-set! x i (car l))
+                (loop n x (+ i 1) (cdr l)))))
+        (body x)))))
+
+(define (gen-sequence code1 code2)
+  (lambda (rte) (code1 rte) (code2 rte)))
+
+(define (gen-when code1 code2)
+  (lambda (rte) (if (code1 rte) (code2 rte) '())))
+
+(define (gen-if code1 code2 code3)
+  (lambda (rte) (if (code1 rte) (code2 rte) (code3 rte))))
+
+(define (gen-letrec vals body)
+  (let ([nb-vals (length vals)])
+    (case nb-vals
+      [(1) (gen-letrec-1 (car vals) body)]
+      [(2) (gen-letrec-2 (car vals) (cadr vals) body)]
+      [(3) (gen-letrec-3 (car vals) (cadr vals) (caddr vals) body)]
+      [else (gen-letrec-n nb-vals vals body)])))
+
+(define (gen-letrec-1 val1 body)
+  (lambda (rte)
+    (let ([x (vector rte #f)]) (vector-set! x 1 (val1 x)) (body x))))
+
+(define (gen-letrec-2 val1 val2 body)
+  (lambda (rte)
+    (let ([x (vector rte #f #f)])
+      (vector-set! x 1 (val1 x))
+      (vector-set! x 2 (val2 x))
+      (body x))))
+
+(define (gen-letrec-3 val1 val2 val3 body)
+  (lambda (rte)
+    (let ([x (vector rte #f #f #f)])
+      (vector-set! x 1 (val1 x))
+      (vector-set! x 2 (val2 x))
+      (vector-set! x 3 (val3 x))
+      (body x))))
+
+(define (gen-letrec-n nb-vals vals body)
+  (lambda (rte)
+    (let ([x (make-vector (+ nb-vals 1))])
+      (vector-set! x 0 rte)
+      (let loop ([x x] [i 1] [l vals])
+        (if (pair? l)
+            (begin
+              (vector-set! x i ((car l) x))
+              (loop x (+ i 1) (cdr l)))))
+      (body x))))
+
+(define (gen-glo-combination var args)
+  (let ([i (value-store-lookup var)] [argc (length args)])
+    (case argc
+      [(0) (gen-glo-combination-0 i)]
+      [(1) (gen-glo-combination-1 i (car args))]
+      [(2) (gen-glo-combination-2 i (car args) (cadr args))]
+      [(3) (gen-glo-combination-3 i (car args) (cadr args) (caddr args))]
+      [(4) (gen-glo-combination-4 i (car args) (cadr args) (caddr args) (cadddr args))]
+      [else (gen-glo-combination-n argc i args)])))
+
+(define (gen-glo-combination-0 i) 
+  (lambda (rte) (scheme-call 0 (value-store-location-ref i))))
+
+(define (gen-glo-combination-1 i arg1)
+  (lambda (rte) (scheme-call 1 (value-store-location-ref i) (arg1 rte))))
+
+(define (gen-glo-combination-2 i arg1 arg2)
+  (lambda (rte) (scheme-call 2 (value-store-location-ref i) (arg1 rte) (arg2 rte))))
+
+(define (gen-glo-combination-3 i arg1 arg2 arg3)
+  (lambda (rte) (scheme-call 3 (value-store-location-ref i) (arg1 rte) (arg2 rte) (arg3 rte))))
+
+(define (gen-glo-combination-4 i arg1 arg2 arg3 arg4)
+  (lambda (rte) (scheme-call 4 (value-store-location-ref i) (arg1 rte) (arg2 rte) (arg3 rte) (arg4 rte))))
+
+(define (gen-glo-combination-n argc i args)
+  (lambda (rte)
+    (define (evaluate l rte)
+      (if (pair? l)
+          (cons ((car l) rte) (evaluate (cdr l) rte))
+          '()))
+    (scheme-apply argc (value-store-location-ref i) (evaluate args rte))))
+
+(define (gen-combination oper args)
+  (let ([argc (length args)])
+    (case argc
+      [(0) (gen-combination-0 oper)]
+      [(1) (gen-combination-1 oper (car args))]
+      [(2) (gen-combination-2 oper (car args) (cadr args))]
+      [(3) (gen-combination-3 oper (car args) (cadr args) (caddr args))]
+      [(4) (gen-combination-4 oper (car args) (cadr args) (caddr args) (cadddr args))]
+      [else (gen-combination-n argc oper args)])))
+
+(define (gen-combination-0 oper) 
+  (lambda (rte) (scheme-call 0 (oper rte))))
+
+(define (gen-combination-1 oper arg1)
+  (lambda (rte) (scheme-call 1 (oper rte) (arg1 rte))))
+
+(define (gen-combination-2 oper arg1 arg2)
+  (lambda (rte) (scheme-call 2 (oper rte) (arg1 rte) (arg2 rte))))
+
+(define (gen-combination-3 oper arg1 arg2 arg3)
+  (lambda (rte) (scheme-call 3 (oper rte) (arg1 rte) (arg2 rte) (arg3 rte))))
+
+(define (gen-combination-4 oper arg1 arg2 arg3 arg4)
+  (lambda (rte) (scheme-call 4 (oper rte) (arg1 rte) (arg2 rte) (arg3 rte) (arg4 rte))))
+
+(define (gen-combination-n argc oper args)
+  (lambda (rte)
+    (define (evaluate l rte)
+      (if (pair? l)
+          (cons ((car l) rte) (evaluate (cdr l) rte))
+          '()))
+    (scheme-apply argc (oper rte) (evaluate args rte))))
+
+
+;------------------------------------------------------------------------------
+
+; evaluator
+
+(define (scheme-compile-run expr)
+  (let ([code (scheme-compile expr '())]) ;no locals on top level
+    (code #f))) ;no local frames at run time
+
+(define (scheme-expand-compile-run form environment)
+  (let loop ([outs (expand-top-level-forms! (list form) environment)])
+     (cond [(null? outs) (void)]
+           [(null? (cdr outs)) (scheme-compile-run (car outs))] ; tail call
+           [else (scheme-compile-run (car outs)) (loop (cdr outs))])))
+
+(define (scheme-expand-to-list expr . ?environment)
+  (when (circular? expr) (c-error "circular input form:" expr))
+  (expand-top-level-forms! (list expr) (if (null? ?environment) *current-environment* (car ?environment))))
+
+(define (scheme-eval expr . ?environment)
+  (when (circular? expr) (c-error "circular input form:" expr))
+  (scheme-expand-compile-run expr (if (null? ?environment) *current-environment* (car ?environment))))
+
+
+;------------------------------------------------------------------------------
+
+;  interpreter global value store and initialization
+
+(define *current-value-store* '())
+
+(define (value-store-lookup name) ;=> store location
+  (let ([x (assq name *current-value-store*)])
+    (if x
+        x
+        ; default value of a global var is its own symbol (simplifies bug reporting)
+        (let ([y (cons name name)])
+          (set! *current-value-store* (cons y *current-value-store*))
+          y))))
+
+(define (reverse-global-lookup val)
+  (let loop ([al *current-value-store*])
+    (cond [(null? al) #f]
+          [(eq? (cdar al) val) (caar al)]
+          [else (loop (cdr al))])))
+
+(define (get-global name)
+  (value-store-location-ref (value-store-lookup name)))
+
+(define (set-global! name value)
+  (value-store-location-set! (value-store-lookup name) value))
+
+(define-syntax def-global
+  (syntax-rules ()
+    [(_ (name . args)) 
+     (def-global (name . args) name)]
+    [(_ (name arg ...) val) 
+     (set-global! 'name (#&(string->id #&(string-append "wrapper-for" #&(string-append "-" #&(id->string arg)) ...)) val))]
+    [(_ name val) (set-global! 'name val)]))
+
+(define-syntax def-arg-checker
+  (syntax-rules ()
+    ; this produces more compact executable, but primitives are slower because residual versions are called always
+    #;[(_ (id arg ...) checker)
+     (define #&(string->id #&(string-append "wrapper-for" #&(string-append "-" #&(id->string arg)) ...)) 
+       (lambda (id) checker))]
+    ; this variant produces more code, but actual operation may get inlined
+    [(_ (id arg ...) checker)
+     (define-syntax #&(string->id #&(string-append "wrapper-for" #&(string-append "-" #&(id->string arg)) ...)) 
+       (syntax-lambda (id) checker))]))
+
+(define-syntax mark-argc (syntax-rules () [(_ n p) (make-annotated-procedure p (argc->annotation n))]))
+(define-syntax mark-rest-argc (syntax-rules () [(_ n p) (make-annotated-procedure p (rest-argc->annotation n))]))
+(define-syntax mark-range-argc (syntax-rules () [(_ n k p) (make-annotated-procedure p (range-argc->annotation n k))]))
+(define-syntax mark-argcheck (syntax-rules () [(_ s p) (make-annotated-procedure p (argcheck->annotation s))]))
+
+(define (splice-last-list l) ; for flattening of pre-checked apply's arglist 
+  (let loop ([l l])
+    (cond [(list1? l) (car l)]
+          [(pair? l) (cons (car l) (loop (cdr l)))]))) 
+
+(def-arg-checker (*)                     (mark-argc 0 *))
+(def-arg-checker (* obj)                 (mark-argc 1 *))
+(def-arg-checker (* obj obj)             (mark-argc 2 *))
+(def-arg-checker (* obj obj ?)           (mark-range-argc 1 2 *))
+(def-arg-checker (* obj obj obj)         (mark-argc 3 *))
+(def-arg-checker (* obj ...)             (mark-rest-argc 1 *))
+(def-arg-checker (* boolean boolean boolean ...) (mark-argcheck ARGCHECK_BOOLEAN_BOOLEAN_BOOLEAN_ETC (argc-dispatch-lambda #f #f (lambda (x y) (* x y)) *)))
+(def-arg-checker (* n)                   (mark-argcheck ARGCHECK_N *))
+(def-arg-checker (* n n)                 (mark-argcheck ARGCHECK_N_N *))
+(def-arg-checker (* n ?)                 (mark-argcheck ARGCHECK_N_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) #f)))
+(def-arg-checker (* n ...)               (mark-argcheck ARGCHECK_N_ETC
+                                           (argc-dispatch-lambda
+                                              (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
+(def-arg-checker (* q)                   (mark-argcheck ARGCHECK_Q *))
+(def-arg-checker (* k)                   (mark-argcheck ARGCHECK_K *))
+(def-arg-checker (* x)                   (mark-argcheck ARGCHECK_X *))
+(def-arg-checker (* x x)                 (mark-argcheck ARGCHECK_X_X *))
+(def-arg-checker (* x x ...)             (mark-argcheck ARGCHECK_X_X_ETC 
+                                           (argc-dispatch-lambda
+                                              #f (lambda (x) (* x)) (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
+(def-arg-checker (* x x x ...)           (mark-argcheck ARGCHECK_X_X_X_ETC 
+                                           (argc-dispatch-lambda
+                                              #f #f (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
+(def-arg-checker (* z)                   (mark-argcheck ARGCHECK_Z *))
+(def-arg-checker (* z z)                 (mark-argcheck ARGCHECK_Z_Z *))
+(def-arg-checker (* z z ?)               (mark-argcheck ARGCHECK_Z_Z_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* z ...)               (mark-argcheck ARGCHECK_Z_ETC
+                                           (argc-dispatch-lambda
+                                              (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
+(def-arg-checker (* z z ...)             (mark-argcheck ARGCHECK_Z_Z_ETC
+                                           (argc-dispatch-lambda
+                                              #f (lambda (x) (* x)) (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
+(def-arg-checker (* z z z ...)           (mark-argcheck ARGCHECK_Z_Z_Z_ETC 
+                                           (argc-dispatch-lambda
+                                              #f #f (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
+(def-arg-checker (* z radix ?)           (mark-argcheck ARGCHECK_Z_RADIX_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* string radix ?)      (mark-argcheck ARGCHECK_STRING_RADIX_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* pair)                (mark-argcheck ARGCHECK_PAIR *))
+(def-arg-checker (* pair obj)            (mark-argcheck ARGCHECK_PAIR_OBJ *))
+(def-arg-checker (* list)                (mark-argcheck ARGCHECK_LIST *))
+(def-arg-checker (* list ...)            (mark-argcheck ARGCHECK_LIST_ETC *))
+(def-arg-checker (* alist)               (mark-argcheck ARGCHECK_ALIST *))
+(def-arg-checker (* u8list)              (mark-argcheck ARGCHECK_U8LIST *))
+(def-arg-checker (* obj list)            (mark-argcheck ARGCHECK_OBJ_LIST *))
+(def-arg-checker (* obj alist)           (mark-argcheck ARGCHECK_OBJ_ALIST *))
+(def-arg-checker (* symbol)              (mark-argcheck ARGCHECK_SYMBOL *))
+(def-arg-checker (* symbol symbol symbol ...) (mark-argcheck ARGCHECK_SYMBOL_SYMBOL_SYMBOL_ETC (argc-dispatch-lambda #f #f (lambda (x y) (* x y)) *))) 
+(def-arg-checker (* char)                (mark-argcheck ARGCHECK_CHAR *))
+(def-arg-checker (* char char)           (mark-argcheck ARGCHECK_CHAR_CHAR *))
+(def-arg-checker (* char char char ...)  (mark-argcheck ARGCHECK_CHAR_CHAR_CHAR_ETC (argc-dispatch-lambda #f #f (lambda (x y) (* x y)) *)))
+(def-arg-checker (* char ...)            (mark-argcheck ARGCHECK_CHAR_ETC *))
+(def-arg-checker (* k char ?)            (mark-argcheck ARGCHECK_K_CHAR_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* string)              (mark-argcheck ARGCHECK_STRING *))
+(def-arg-checker (* string string)       (mark-argcheck ARGCHECK_STRING_STRING *))
+(def-arg-checker (* string string string ...) (mark-argcheck ARGCHECK_STRING_STRING_STRING_ETC (argc-dispatch-lambda #f #f (lambda (x y) (* x y)) *)))
+(def-arg-checker (* string ...)          (mark-argcheck ARGCHECK_STRING_ETC
+                                           (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) *)))
+(def-arg-checker (* string obj ...)      (mark-argcheck ARGCHECK_STRING_OBJ_ETC *))
+(def-arg-checker (* string index)        (mark-argcheck ARGCHECK_STRING_INDEX *))
+(def-arg-checker (* string index char)   (mark-argcheck ARGCHECK_STRING_INDEX_CHAR *))
+(def-arg-checker (* string start end)    (mark-argcheck ARGCHECK_STRING_START_END *))
+(def-arg-checker (* string index string start end) (mark-argcheck ARGCHECK_STRING_INDEX_STRING_START_END *))
+(def-arg-checker (* string char start end) (mark-argcheck ARGCHECK_STRING_CHAR_START_END *))
+(def-arg-checker (* string char)         (mark-argcheck ARGCHECK_STRING_CHAR *))
+(def-arg-checker (* vector)              (mark-argcheck ARGCHECK_VECTOR *))
+(def-arg-checker (* vector ...)          (mark-argcheck ARGCHECK_VECTOR_ETC
+                                           (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) *)))
+(def-arg-checker (* k obj ?)             (mark-argcheck ARGCHECK_K_OBJ_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* vector index)        (mark-argcheck ARGCHECK_VECTOR_INDEX *))
+(def-arg-checker (* vector index obj)    (mark-argcheck ARGCHECK_VECTOR_INDEX_OBJ *))
+(def-arg-checker (* vector start end)    (mark-argcheck ARGCHECK_VECTOR_START_END *))
+(def-arg-checker (* vector index vector start end) (mark-argcheck ARGCHECK_VECTOR_INDEX_VECTOR_START_END *))
+(def-arg-checker (* vector obj start end) (mark-argcheck ARGCHECK_VECTOR_OBJ_START_END *))
+(def-arg-checker (* vector obj)          (mark-argcheck ARGCHECK_VECTOR_OBJ *))
+(def-arg-checker (* u8 ...)              (mark-argcheck ARGCHECK_U8_ETC *))
+(def-arg-checker (* k u8 ?)              (mark-argcheck ARGCHECK_K_U8_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* u8vector)            (mark-argcheck ARGCHECK_U8VECTOR *))
+(def-arg-checker (* u8vector u8vector)   (mark-argcheck ARGCHECK_U8VECTOR_U8VECTOR *))
+(def-arg-checker (* u8vector ...)        (mark-argcheck ARGCHECK_U8VECTOR_ETC
+                                           (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) *)))
+(def-arg-checker (* u8vector index)      (mark-argcheck ARGCHECK_U8VECTOR_INDEX *))
+(def-arg-checker (* u8vector index u8)   (mark-argcheck ARGCHECK_U8VECTOR_INDEX_U8 *))
+(def-arg-checker (* u8vector start end)  (mark-argcheck ARGCHECK_U8VECTOR_START_END *))
+(def-arg-checker (* u8vector index u8vector start end) (mark-argcheck ARGCHECK_U8VECTOR_INDEX_U8VECTOR_START_END *))
+(def-arg-checker (* obj k)               (mark-argcheck ARGCHECK_OBJ_K *))
+(def-arg-checker (* record)              (mark-argcheck ARGCHECK_RECORD *))
+(def-arg-checker (* record index)        (mark-argcheck ARGCHECK_RECORD_INDEX *))
+(def-arg-checker (* record index obj)    (mark-argcheck ARGCHECK_RECORD_INDEX_OBJ *))
+(def-arg-checker (* proc)                (mark-argcheck ARGCHECK_PROC *))
+(def-arg-checker (* proc1cc)             (mark-argcheck ARGCHECK_PROC1CC *))
+(def-arg-checker (* string proc1ip)      (mark-argcheck ARGCHECK_STRING_PROC1IP *))
+(def-arg-checker (* string proc1op)      (mark-argcheck ARGCHECK_STRING_PROC1OP *))
+(def-arg-checker (* port proc1p)         (mark-argcheck ARGCHECK_PORT_PROC1P *))
+(def-arg-checker (* string thunk)        (mark-argcheck ARGCHECK_STRING_THUNK *))
+(def-arg-checker (* iport thunk)         (mark-argcheck ARGCHECK_IPORT_THUNK *))
+(def-arg-checker (* oport thunk)         (mark-argcheck ARGCHECK_OPORT_THUNK *))
+(def-arg-checker (* thunk proc)          (mark-argcheck ARGCHECK_THUNK_PROC *))
+(def-arg-checker (* thunk thunk thunk)   (mark-argcheck ARGCHECK_THUNK_THUNK_THUNK *))
+(def-arg-checker (* obj proc1 ?)         (mark-argcheck ARGCHECK_OBJ_PROC1_OPT *))
+(def-arg-checker (* proc1 thunk)         (mark-argcheck ARGCHECK_PROC1_THUNK *))
+(def-arg-checker (* environment)         (mark-argcheck ARGCHECK_ENVIRONMENT *))
+(def-arg-checker (* obj environment ?)   (mark-argcheck ARGCHECK_OBJ_ENVIRONMENT_OPT *))
+(def-arg-checker (* iport)               (mark-argcheck ARGCHECK_IPORT *))
+(def-arg-checker (* oport)               (mark-argcheck ARGCHECK_OPORT *))
+(def-arg-checker (* port)                (mark-argcheck ARGCHECK_PORT *))
+(def-arg-checker (* iport ?)             (mark-argcheck ARGCHECK_IPORT_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) #f)))
+(def-arg-checker (* k iport ?)           (mark-argcheck ARGCHECK_K_IPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* string start end iport) (mark-argcheck ARGCHECK_STRING_START_END_IPORT *))
+(def-arg-checker (* string start end oport) (mark-argcheck ARGCHECK_STRING_START_END_OPORT *))
+(def-arg-checker (* u8vector start end iport) (mark-argcheck ARGCHECK_U8VECTOR_START_END_IPORT *))
+(def-arg-checker (* u8vector start end oport) (mark-argcheck ARGCHECK_U8VECTOR_START_END_OPORT *))
+(def-arg-checker (* oport ?)             (mark-argcheck ARGCHECK_OPORT_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) #f)))
+(def-arg-checker (* obj oport ?)         (mark-argcheck ARGCHECK_OBJ_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* char oport ?)        (mark-argcheck ARGCHECK_CHAR_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* u8 oport ?)          (mark-argcheck ARGCHECK_U8_OPORT_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* iport ? boolean ?)   (mark-argcheck ARGCHECK_IPORT_OPT_BOOLEAN_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* oport ? boolean ?)   (mark-argcheck ARGCHECK_OPORT_OPT_BOOLEAN_OPT (argc-dispatch-lambda (lambda () (*)) (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+
+
+;------------------------------------------------------------------------------
+
+; R5RS
+
+; 6.1  Equivalence predicates
+(def-global eqv? (mark-argcheck EQV_OBJ_OBJ eqv?))
+(def-global eq? (mark-argcheck EQ_OBJ_OBJ eq?))
+(def-global (equal? obj obj))
+
+; 6.2.5  Numerical operations
+(def-global (number? obj))
+(def-global (complex? obj)) 
+(def-global (real? obj))
+(def-global (rational? obj))
+(def-global (integer? obj))
+(def-global (exact? obj))
+(def-global (inexact? obj))
+(def-global = (mark-argcheck E_Z_Z_Z_ETC =))
+(def-global < (mark-argcheck L_X_X_X_ETC <))
+(def-global > (mark-argcheck G_X_X_X_ETC >))
+(def-global <= (mark-argcheck LE_X_X_X_ETC <=))
+(def-global >= (mark-argcheck GE_X_X_X_ETC >=))
+(def-global (zero? z))
+(def-global (positive? x))
+(def-global (negative? x))
+(def-global (odd? n))
+(def-global (even? n))
+(def-global (max x x ...))
+(def-global (min x x ...))
+(def-global + (mark-argcheck ADD_Z_ETC +))
+(def-global * (mark-argcheck MUL_Z_ETC *))
+(def-global - (mark-argcheck SUB_Z_Z_ETC -))
+(def-global / (mark-argcheck DIV_Z_Z_ETC /))
+(def-global abs (mark-argcheck ABS_X abs))
+(def-global quotient (mark-argcheck QUO_N_N quotient))
+(def-global remainder (mark-argcheck REM_N_N remainder))
+(def-global modulo (mark-argcheck MLO_N_N modulo))
+(def-global gcd (mark-argcheck GCD_N_ETC gcd))
+(def-global lcm (mark-argcheck LCM_N_ETC lcm))
+(def-global (numerator q))
+(def-global (denominator q))
+(def-global (floor x))
+(def-global (ceiling x))
+(def-global (truncate x))
+(def-global (round x))
+(def-global (rationalize x x))
+(def-global (exp z))
+;(def-global (log z)) ; extended in r7rs: has (log z z) variant where second arg is base (defaults to e)
+(def-global (sin z))
+(def-global (cos z))
+(def-global (tan z))
+(def-global (asin z))
+(def-global (acos z))
+(def-global atan (mark-argcheck ARGCHECK_Z_OR_X_X atan))  ;(atan z) (atan x x)
+(def-global (sqrt z))
+(def-global expt (mark-argcheck EXPT_Z_Z expt))
+(def-global (make-rectangular x x))
+(def-global (make-polar x x))
+(def-global (real-part z))
+(def-global (imag-part z))
+(def-global (magnitude z))
+(def-global (angle z))
+(def-global (exact->inexact z)) ; r7rs name: inexact
+(def-global inexact->exact (mark-argcheck TOEXACT_Z inexact->exact)) ; r7rs name: exact
+
+; 6.2.6  Numerical input and output
+(def-global (number->string z radix ?))
+(def-global (string->number string radix ?))
+
+; 6.3.1  Booleans
+(def-global not (mark-argcheck NOT_OBJ not))
+(def-global (boolean? obj))
+
+; 6.3.2  Pairs and lists
+(def-global pair? (mark-argcheck ISPAIR_OBJ pair?))
+(def-global (cons obj obj))
+(def-global car (mark-argcheck CAR_PAIR car))
+(def-global cdr (mark-argcheck CDR_PAIR cdr))
+(def-global (set-car! pair obj))
+(def-global (set-cdr! pair obj))
+(def-global caar (mark-argcheck CAAR_PAIR caar))
+(def-global cadr (mark-argcheck CADR_PAIR cadr))
+(def-global cdar (mark-argcheck CDAR_PAIR cdar))
+(def-global cddr (mark-argcheck CDDR_PAIR cddr))
+;(def-global (caaar pair)) ; caaar & friends are implemented in init
+;(def-global (caadr pair))
+;(def-global (cadar pair))
+;(def-global (caddr pair))
+;(def-global (cdaar pair))
+;(def-global (cdadr pair))
+;(def-global (cddar pair))
+;(def-global (cdddr pair))
+;(def-global (caaaar pair))
+;(def-global (caaadr pair))
+;(def-global (caadar pair))
+;(def-global (caaddr pair))
+;(def-global (cadaar pair))
+;(def-global (cadadr pair))
+;(def-global (caddar pair))
+;(def-global (cadddr pair))
+;(def-global (cdaaar pair))
+;(def-global (cdaadr pair))
+;(def-global (cdadar pair))
+;(def-global (cdaddr pair))
+;(def-global (cddaar pair))
+;(def-global (cddadr pair))
+;(def-global (cdddar pair))
+;(def-global (cddddr pair))
+(def-global null? (mark-argcheck ISNULL_OBJ null?))
+(def-global (list? obj))
+(def-global (list obj ...))
+(def-global length (mark-argcheck LENGTH_LIST length))
+(def-global append (mark-argcheck ARGCHECK_LIST_ETC_OBJ_OPT
+   (argc-dispatch-lambda
+     (lambda () '()) (lambda (x) x) (lambda (x y) (append x y)) 
+     (lambda (x y z) (append x y z)) (lambda (x y z t) (append x y z t)) append)))
+(def-global (reverse list))
+;(def-global (list-tail list index)) ;implemented in init
+;(def-global (list-ref list index)) ;implemented in init
+(def-global (memq obj list))
+(def-global (memv obj list))
+;(def-global (member obj list)) ; extended in r7rs
+(def-global (assq obj alist))
+(def-global (assv obj alist))
+;(def-global (assoc obj alist)) ; extended in r7rs
+
+; 6.3.3  Symbols
+(def-global (symbol? obj))
+(def-global (symbol->string symbol))
+(def-global (string->symbol string))
+
+; 6.3.4  Characters
+(def-global (char? obj))
+;(def-global (char=? char char)) ; see extended versions in r7rs
+;(def-global (char<? char char))
+;(def-global (char>? char char))
+;(def-global (char<=? char char))
+;(def-global (char>=? char char))
+;(def-global (char-ci=? char char))
+;(def-global (char-ci<? char char))
+;(def-global (char-ci>? char char))
+;(def-global (char-ci<=? char char))
+;(def-global (char-ci>=? char char))
+(def-global (char-alphabetic? char))
+(def-global (char-numeric? char))
+(def-global (char-whitespace? char))
+(def-global (char-upper-case? char))
+(def-global (char-lower-case? char))
+(def-global (char->integer char))
+(def-global (integer->char n))
+(def-global (char-upcase char))
+(def-global (char-downcase char))
+
+; 6.3.5  Strings
+(def-global (string? obj))
+(def-global (make-string k char ?))
+(def-global (string char ...))
+(def-global string-length (mark-argcheck LENGTH_STRING string-length))
+(def-global string-ref (mark-argcheck REF_STRING_INDEX string-ref))
+(def-global string-set! (mark-argcheck SET_STRING_INDEX_CHAR string-set!))
+;(def-global (string=? string string)) ; see extended versions in r7rs
+;(def-global (string<? string string))
+;(def-global (string>? string string))
+;(def-global (string<=? string string))
+;(def-global (string>=? string string))
+;(def-global (string-ci=? string string))
+;(def-global (string-ci<? string string))
+;(def-global (string-ci>? string string))
+;(def-global (string-ci<=? string string))
+;(def-global (string-ci>=? string string))
+(def-global (substring string start end))
+(def-global (string-append string ...))
+;(def-global (string->list string)) ; extended version is in init 
+(def-global (list->string list))
+;(def-global (string-copy string)) ; extended version is in init
+;(def-global (string-fill! string char)) ; extended version is in init
+
+; 6.3.6  Vectors
+(def-global (vector? obj))
+(def-global (make-vector k obj ?))
+(def-global (vector obj ...))
+(def-global vector-length (mark-argcheck LENGTH_VECTOR vector-length))
+(def-global vector-ref (mark-argcheck REF_VECTOR_INDEX vector-ref))
+(def-global vector-set! (mark-argcheck SET_VECTOR_INDEX_OBJ vector-set!))
+;(def-global (vector->list vector)) ; extended version is in init
+(def-global (list->vector list))
+(def-global (vector-fill! vector obj))
+
+; 6.4  Control features
+(define *values-tag* (list 'values))
+;(def-global *values-tag* *values-tag*)
+(def-global (procedure? obj))
+(def-global apply (mark-argcheck ARGCHECK_PROC_OBJ_ETC_LIST
+  (argc-dispatch-lambda
+     #f #f (lambda (x l) (scheme-apply (length l) x l)) 
+     (lambda (x . a*l) (let ([l (splice-last-list a*l)]) (scheme-apply (length l) x l))))))
+;(def-global (map procn list list ...)) ; implemented in init
+;(def-global (for-each procn list list ...)) ; implemented in init
+(def-global (call/cc proc1cc)
+  (lambda (p) ;p is annotated, pre-checked as proc1cc
+    (call/cc (lambda (k) ;k is not annotated, so should be called directly (with 1 arg)
+                (p (scheme-lambda-rest 1 args (k (if (list1? args) (car args) (cons *values-tag* args)))))))))  
+(def-global call-with-current-continuation (get-global 'call/cc)) 
+(def-global (values obj ...)
+  (lambda args (if (list1? args) (car args) (cons *values-tag* args))))
+(def-global (call-with-values thunk proc)
+  (lambda (producer consumer)
+    (let ([v (producer)]) ;pre-checked as thunk
+      (if (and (pair? v) (eq? (car v) *values-tag*))
+         (scheme-apply (length (cdr v)) consumer (cdr v))
+         (scheme-call 1 consumer v)))))
+(def-global (dynamic-wind thunk thunk thunk))
+
+; 6.5  Eval
+;(eval expression environment-specifier)
+(def-global (eval obj environment ?)
+  (argc-dispatch-lambda #f 
+    (lambda (x) (scheme-eval x))
+    (lambda (x environment) (scheme-eval x environment))))
+; stubs for now, will sort out later
+(def-global (scheme-report-environment n) (lambda (version) *current-environment*))
+(def-global (null-environment n) (lambda (version) *current-environment*))
+(def-global (interaction-environment) (lambda () *current-environment*))
+
+; 6.6  Input and output
+; 6.6.1  Ports
+(def-global (call-with-input-file string proc1ip))
+(def-global (call-with-output-file string proc1op))
+(def-global (input-port? obj))
+(def-global (output-port? obj))
+(def-global (current-input-port iport ? boolean ?))  ; parameter, as in r7rs
+(def-global (current-output-port oport ? boolean ?)) ; parameter, as in r7rs
+(def-global (with-input-from-file string thunk))
+(def-global (with-output-to-file string thunk))
+(def-global (open-input-file string))
+(def-global (open-output-file string))
+(def-global (close-input-port iport))
+(def-global (close-output-port oport))
+
+; 6.6.2  Input
+(def-global (read iport ?))
+(def-global (read-char iport ?))
+(def-global (peek-char iport ?))
+(def-global (eof-object? obj))
+(def-global (char-ready? iport ?))
+
+; 6.6.3  Output
+(def-global (write obj oport ?))
+(def-global (display obj oport ?))
+(def-global (write-char char oport ?))
+(def-global (newline oport ?))
+
+; 6.6.4  System interface
+(def-global (load string)                          ; filename
+  (lambda (fn)
+    (call-with-input-file fn
+      (lambda (p)
+        (let loop ([x (read p)])
+          (if (eof-object? x)
+              #t
+              (begin
+                (scheme-eval x)
+                (loop (read p)))))))))
+;(transcript-on filename)
+;(transcript-off)
+
+
+;------------------------------------------------------------------------------
+
+; R7RS extras
+
+; 4.2.6. Dynamic bindings
+(def-global (make-parameter obj proc1 ?) ; macro is in init
+  (lambda args (make-annotated-procedure (apply make-parameter args) (range-argc->annotation 0 2))))
+
+; 4.2.9. Case-lambda
+(def-global (make-case-lambda obj ...) ; macro is in init
+  (lambda args (make-annotated-procedure (apply make-case-lambda args) (rest-argc->annotation 1))))
+
+; 6.2.6. Numerical operations
+(def-global exact (mark-argcheck TOEXACT_Z exact))   ; r5rs name: inexact->exact
+(def-global (inexact z)) ; r5rs name: exact->inexact
+(def-global (exact-integer? z))
+(def-global (nan? z))
+(def-global (finite? z))
+(def-global (infinite? z))
+(def-global floor-quotient (mark-argcheck MQU_N_N floor-quotient))
+(def-global floor-remainder (mark-argcheck MLO_N_N floor-remainder))
+;(floor/ n n) is in the init code
+(def-global truncate-quotient (mark-argcheck QUO_N_N truncate-quotient))
+(def-global truncate-remainder (mark-argcheck REM_N_N truncate-remainder))
+;(truncate/ n n) is in the init code
+(def-global (log z z ?))
+;(square z) is in the init code
+(def-global (exact-integer-sqrt k)
+  (lambda (x) (let ([r (fxsqrt x)]) (list *values-tag* r (- x (* r r)))))) 
+
+; 6.3. Booleans
+(def-global (boolean=? boolean boolean boolean ...))
+
+; 6.4. Pairs and lists
+(def-global (make-list k obj ?))
+(def-global (list-copy obj))
+;(def-global (list-set! list index obj)) ; implemented in init
+;(def-global (member obj list proc2 ?)) ; implemented in init
+;(def-global (assoc obj alist proc2 ?)) ; implemented in init
+
+
+; 6.5. Symbols
+(def-global (symbol=? symbol symbol symbol ...))
+
+; 6.6. Characters
+(def-global (char=? char char char ...))
+(def-global (char<? char char char ...))
+(def-global (char>? char char char ...))
+(def-global (char<=? char char char ...))
+(def-global (char>=? char char char ...))
+(def-global (char-ci=? char char char ...))
+(def-global (char-ci<? char char char ...))
+(def-global (char-ci>? char char char ...))
+(def-global (char-ci<=? char char char ...))
+(def-global (char-ci>=? char char char ...))
+(def-global (char-foldcase char))
+(def-global (digit-value char))
+
+; 6.7. Strings
+(def-global (string=? string string string ...))
+(def-global (string<? string string string ...))
+(def-global (string>? string string string ...))
+(def-global (string<=? string string string ...))
+(def-global (string>=? string string string ...))
+(def-global (string-ci=? string string string ...))
+(def-global (string-ci<? string string string ...))
+(def-global (string-ci>? string string string ...))
+(def-global (string-ci<=? string string string ...))
+(def-global (string-ci>=? string string string ...))
+(def-global (string-upcase string))
+(def-global (string-downcase string))
+(def-global (string-foldcase string))
+
+; 6.8. Vectors
+;(vector->string vector start ? end ?) ; implemented in init
+;(string->vector string start ? end ?) ; implemented in init
+;(vector-copy vector start ? end ?) ; implemented in init
+;(vector-copy! vector index vector start ? end ?) ; implemented in init
+(def-global (vector-append vector ...))
+
+; 6.9. Bytevectors
+(def-global (bytevector? obj))
+(def-global (make-bytevector k u8 ?))
+(def-global (bytevector u8 ...))
+(def-global (bytevector-length u8vector))
+(def-global (bytevector=? u8vector u8vector))
+(def-global (bytevector-u8-ref u8vector index))
+(def-global (bytevector-u8-set! u8vector index u8))
+;(def-global (bytevector->list u8vector start? end?)) ; not in r7rs, implemented in init
+(def-global (list->bytevector u8list)) ; not in r7rs
+;(bytevector-copy u8vector start ? end ?) ; implemented in init
+;(bytevector-copy! u8vector index u8vector start ? end ?) ; implemented in init
+(def-global (bytevector-append u8vector ...))
+
+; 6.10. Control features
+;(def-global (string-map proc string string ...)) ; implemented in init
+;(def-global (vector-map proc vector vector ...)) ; implemented in init
+;(def-global (string-for-each proc string string ...)) ; implemented in init
+;(def-global (vector-for-each proc vector vector ...)) ; implemented in init
+
+; 6.11. Exceptions
+(def-global (with-exception-handler proc1 thunk))
+(def-global (raise obj))
+(def-global (raise-continuable obj))
+(def-global (error string obj ...))
+(def-global (error-object? obj))
+(def-global (error-object-message record))   ;fixme: error-object
+(def-global (error-object-irritants record)) ;fixme: error-object
+(def-global (read-error? obj))
+(def-global (file-error? obj))
+
+; 6.12. Environments and evaluation
+(def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
+
+; 6.13.1. Ports
+(def-global (port? obj))
+(def-global (textual-port? port))
+(def-global (binary-port? port)) 
+(def-global (close-port port))
+(def-global (call-with-port port proc1p))
+(def-global (current-error-port oport ? boolean ?))  ; parameter
+(def-global (open-binary-input-file string))
+(def-global (open-input-string string))
+(def-global (open-input-bytevector u8vector))
+(def-global (open-binary-output-file string))
+(def-global (input-port-open? iport))
+(def-global (output-port-open? oport))
+(def-global (open-output-string))
+(def-global (get-output-string oport))
+(def-global (open-output-bytevector))
+(def-global (get-output-bytevector oport))
+
+; 6.13.2. Input
+(def-global (eof-object))
+(def-global (read-u8 iport ?))
+(def-global (peek-u8 iport ?))
+(def-global (u8-ready? iport ?))
+(def-global (read-line iport ?))
+(def-global (read-string k iport ?))
+(def-global (read-bytevector k iport ?))
+;(def-global (read-string! string port ? start ? end ?)) ; not in r7rs, implemented in init
+;(def-global (read-bytevector! bytevector port ? start ? end ?)) ; implemented in init
+
+; 6.13.3. Output
+(def-global (write-shared obj oport ?))
+(def-global (write-simple obj oport ?))
+(def-global (flush-output-port oport ?))
+;(def-global (write-string string oport ? start ? end ?)) ; implemented in init
+(def-global (write-u8 u8 oport ?))
+;(def-global (write-bytevector u8vector oport ? start ? end ?)) ; implemented in init
+
+; 6.14. System interface 
+(def-global (file-exists? string))    ; filename
+(def-global (delete-file string))     ; filename
+(def-global (command-line))
+(def-global (get-environment-variable string))
+(def-global (current-jiffy))
+(def-global (jiffies-per-second))
+(def-global (features)
+  (lambda () '(sharpf sharpf-interpreter sharpf-intl)))
+
+
+;------------------------------------------------------------------------------
+
+; #F extras
+
+(def-global (circular? obj))
+(def-global (byte? obj))
+(def-global (last-pair pair))
+(def-global (meml obj list))
+(def-global (assl obj alist))
+
+; sub{string,vector,bytevector,utf8} operations
+(def-global (substring->list string start end))
+(def-global (substring-copy! string index string start end))
+(def-global (substring-fill! string char start end))
+(def-global (substring->vector string start end))
+(def-global (subvector->list vector start end))
+(def-global (subvector->string vector start end))
+(def-global (subvector-copy! vector index vector start end))
+(def-global (subvector vector start end))
+(def-global (subvector-fill! vector obj start end))
+(def-global (subbytevector->list u8vector start end))
+(def-global (subbytevector-copy! u8vector index u8vector start end))
+(def-global (subbytevector u8vector start end))
+(def-global (subutf8->string u8vector start end))
+(def-global (substring->utf8 string start end))
+
+; record internals
+(def-global (record? obj obj ?))
+(def-global (make-record obj k))
+(def-global (record-type-descriptor record))
+(def-global (record-length record))
+(def-global (record-ref record index))
+(def-global (record-set! record index obj))
+(def-global (new-record-type obj list))
+
+; i/o
+(def-global (with-input-from-port iport thunk))
+(def-global (with-output-to-port oport thunk))
+(def-global (read-substring! string start end iport))
+(def-global (read-subbytevector! u8vector start end iport))
+(def-global (write-substring string start end oport))
+(def-global (write-subbytevector u8vector start end oport))
+
+; misc
+(def-global (void))
+(def-global (reverse! list)) ; used in init code
+(def-global (exit n ?))
+(def-global (system string))
+(def-global (print-procedure proc))
+(def-global (current-environment)  (lambda () *current-environment*))
+(def-global (set-current-environment! environment)  (lambda (e) (set! *current-environment* e)))
+(def-global (current-macro-store)  (lambda () *current-macro-store*))
+(def-global (current-value-store)  (lambda () *current-value-store*))
+(def-global (root-environment)     (lambda () root-environment))
+(def-global (initial-value-environment)  (lambda () *initial-value-environment*))
+(def-global (initial-macro-environment)  (lambda () *initial-macro-environment*))
+
+(def-global (expand obj environment ?)                             
+  (argc-dispatch-lambda #f 
+    (lambda (x) (cons *values-tag* (scheme-expand-to-list x)))
+    (lambda (x environment) (cons *values-tag* (scheme-expand-to-list x environment)))))
+
+
+; experiments
+
+(%definition "extern obj *cxa_lis3(obj *r, int l, obj *hp, obj ax, obj ay, obj az);")
+(%localdef "obj *cxa_lis3(obj *r, int l, obj *hp, obj ax, obj ay, obj az) {
+  obj d = mknull();
+  hreserve(hbsz(3)*3+1, l); /* l live regs */
+  *--hp = d;  
+  *--hp = az;  
+  *--hp = obj_from_size(PAIR_BTAG); 
+  d = (hendblk(3));
+  *--hp = d;  
+  *--hp = ay;  
+  *--hp = obj_from_size(PAIR_BTAG); 
+  d = (hendblk(3));
+  *--hp = d;  
+  *--hp = ax;  
+  *--hp = obj_from_size(PAIR_BTAG); 
+  d = hendblk(3);
+  *--hp = d;
+  return hp;
+}") 
+(def-global (lis3 obj obj obj)
+  (lambda (x y z) 
+    (%prim "obj((hp = cxa_lis3(r, $live, hp, obj_from_$arg, obj_from_$arg, obj_from_$arg), *hp++))" x y z))) 
+
+
+;------------------------------------------------------------------------------
+
+; Code to feed the interpreter at initialization time
+
+(%localdef #<<EOS
+/* initialization code */
+static char *ints_init_code =
+"(define-syntax let-syntax"
+"  (syntax-rules ()"
+"    [(_ ([kw init] ...))"
+"     (begin)]"
+"    [(_ ([kw init] ...) . body)"
+"     ((syntax-lambda (kw ...) . body)"
+"      init ...)]))"
+""
+"(define-syntax letrec-syntax"
+"  (let-syntax ([let-syntax let-syntax] [define-syntax define-syntax])"
+"    (syntax-rules ()"
+"      [(_ ([kw init] ...) . body)"
+"       (let-syntax ()"
+"         (define-syntax kw init) ... (let-syntax () . body))])))"
+""
+"(define-syntax lambda"
+"  (let-syntax ([old-lambda lambda])"
+"    (syntax-rules ()"
+"      [(_ args . body)"
+"       (old-lambda args (let-syntax () . body))])))"
+""
+"(define-syntax define"
+"  (let-syntax ([old-define define])"
+"    (letrec-syntax"
+"      ([new-define"
+"        (syntax-rules ()"
+"          [(_ exp) (old-define exp)]"
+"          [(_ (var-or-prototype . args) . body)"
+"           (new-define var-or-prototype (lambda args . body))]"
+"          [(_ . other) (old-define . other)])])"
+"     new-define)))"
+""
+"(define-syntax let"
+"  (syntax-rules ()"
+"    [(_ ([var init] ...) . body)"
+"     ((lambda (var ...) . body) init ...)]"
+"    [(_ name ([var init] ...) . body)"
+"     ((letrec ([name (lambda (var ...) . body)])"
+"        name)"
+"      init ...)]))"
+""
+"(define-syntax let*"
+"  (syntax-rules ()"
+"    [(_ () . body) (let () . body)]"
+"    [(_ ([var init] . bindings) . body)"
+"     (let ([var init]) (let* bindings . body))]))"
+""
+"(define-syntax letrec"
+"  (syntax-rules ()"
+"    [(_ ([var init] ...) . body)"
+"     (let () (define var init) ... (let () . body))]))"
+"     "
+"(define-syntax letrec*"
+"  (syntax-rules ()"
+"    [(_ ([var expr] ...) . body)"
+"     (let ([var #f] ...)"
+"       (set! var expr)"
+"       ..."
+"       (let () . body))]))"
+""
+"(define-syntax do"
+"  (let-syntax ([do-step (syntax-rules () [(_ x) x] [(_ x y) y])])"
+"    (syntax-rules ()"
+"      [(_ ([var init step ...] ...)"
+"         [test expr ...]"
+"          command ...)"
+"       (let loop ([var init] ...)"
+"         (if test"
+"             (begin (if #f #f) expr ...)"
+"             (let () "
+"               command ..."
+"               (loop (do-step var step ...) ...))))])))"
+""
+"(define-syntax cond"
+"  (syntax-rules (else =>)"
+"    [(_) (if #f #f)] #| undefined |#"
+"    [(_ [else . exps]) (let () . exps)]"
+"    [(_ [x] . rest) (or x (cond . rest))]"
+"    [(_ [x => proc] . rest)"
+"     (let ([tmp x]) (cond [tmp (proc tmp)] . rest))]"
+"    [(_ [x . exps] . rest)"
+"     (if x (let () . exps) (cond . rest))]))"
+""
+"(define-syntax case"
+"  (letrec-syntax"
+"    ([compare"
+"      (syntax-rules ()"
+"        [(_ key ()) #f]"
+"        [(_ key (#&(id? datum) . data))"
+"         (if (eq? key 'datum) #t (compare key data))]"
+"        [(_ key (datum . data))"
+"         (if (eqv? key 'datum) #t (compare key data))])]"
+"     [case"
+"      (syntax-rules (else =>)"
+"        [(case key) (if #f #f)]"
+"        [(case key (else => resproc))"
+"         (resproc key)]"
+"        [(case key (else result1 . results))"
+"         (begin result1 . results)]"
+"        [(case key ((datum ...) => resproc) . clauses)"
+"         (if (compare key (datum ...))"
+"             (resproc key)"
+"             (case key . clauses))]"
+"        [(case key ((datum ...) result1 . results) . clauses)"
+"         (if (compare key (datum ...))"
+"             (begin result1 . results)"
+"             (case key . clauses))])])"
+"     (syntax-rules ()"
+"       [(_ expr clause1 clause ...)"
+"        (let ([key expr]) (case key clause1 clause ...))])))"
+""
+"(define-syntax and"
+"  (syntax-rules ()"
+"    [(_) #t]"
+"    [(_ test) (let () test)]"
+"    [(_ test . tests) (if test (and . tests) #f)]))"
+""
+"(define-syntax or"
+"  (syntax-rules ()"
+"    [(_) #f]"
+"    [(_ test) (let () test)]"
+"    [(_ test . tests) (let ([x test]) (if x x (or . tests)))]))"
+""
+"(define-syntax quasiquote #| from eiod |#"
+"  (syntax-rules (unquote unquote-splicing quasiquote)"
+"    [(_ (unquote x)) x]"
+"    [(_ ((unquote-splicing x))) x] #| esl: allow `(,@improper-list) |#"
+"    [(_ ((unquote-splicing x) . y)) (append x (quasiquote y))]"
+"    [(_ (quasiquote x) . d) (cons 'quasiquote (quasiquote (x) d))]"
+"    [(_ (unquote x) d) (cons 'unquote (quasiquote (x) . d))]"
+"    [(_ (unquote-splicing x) d) (cons 'unquote-splicing (quasiquote (x) . d))]"
+"    [(_ (x . y) . d) (cons (quasiquote x . d) (quasiquote y . d))]"
+"    [(_ #(x ...) . d) (list->vector (quasiquote (x ...) . d))]"
+"    [(_ x . d) 'x]))"
+""
+"(define (fail-lambda . args) "
+"  (error 'case-lambda \"unexpected number of arguments\" args))"
+""
+"(define-syntax case-lambda"
+"  (letrec-syntax"
+"    ([min-accepted"
+"      (syntax-rules ()"
+"        [(_ () N) N] [(_ (a . d) N) (min-accepted d #&(+ 1 N))] [(_ ra N) N])]"
+"     [max-accepted"
+"      (syntax-rules ()"
+"        [(_ () N) N] [(_ (a . d) N) (max-accepted d #&(+ 1 N))] [(_ ra N) 999])]"
+"     [unroll-cases"
+"      (syntax-rules ()"
+"        [(_ () c ...) "
+"         (make-case-lambda c ... 0 999 fail-lambda)]"
+"        [(_ ([formals . body] . more) c ...)"
+"         (unroll-cases more c ... "
+"           (min-accepted formals 0) (max-accepted formals 0) (lambda formals . body))])])"
+"     (syntax-rules ()"
+"       [(_ [formals . body] ...)"
+"        (unroll-cases ([formals . body] ...))])))"
+""
+"(define make-promise"
+"  (lambda (proc)"
+"    ((lambda (result-ready? result)"
+"       (lambda ()"
+"         (if result-ready?"
+"             result"
+"             ((lambda (x)"
+"                (if result-ready?"
+"                    result"
+"                    (begin"
+"                      (set! result-ready? #t)"
+"                      (set! result x)"
+"                      result)))"
+"              (proc)))))"
+"     #f"
+"     #f)))"
+""
+"(define-syntax delay"
+"  (syntax-rules ()"
+"    [(delay exp)"
+"     (make-promise (lambda () exp))]))"
+""
+"(define (force promise) "
+"  (promise))"
+""
+"(set! call/cc"
+"  (let ([old-call/cc call/cc])"
+"     (lambda (p)"
+"        (old-call/cc"
+"          (lambda (k)"
+"            (p (lambda args"
+"                 (k (apply values args)))))))))"
+""
+"(set! call-with-current-continuation call/cc)"
+""
+""
+"(define (list-tail ls k)"
+"  (if (= k 0) ls (list-tail (cdr ls) (- k 1))))"
+""
+"(define (list-ref ls k) "
+"  (car (list-tail ls k)))"
+""
+"(define (list-set! ls k x)"
+"  (set-car! (list-tail ls k) x)) "
+""
+"(define (caaar x) (car (car (car x))))"
+"(define (caadr x) (car (car (cdr x))))"
+"(define (cadar x) (car (cdr (car x))))"
+"(define (caddr x) (car (cdr (cdr x))))"
+"(define (cdaar x) (cdr (car (car x))))"
+"(define (cdadr x) (cdr (car (cdr x))))"
+"(define (cddar x) (cdr (cdr (car x))))"
+"(define (cdddr x) (cdr (cdr (cdr x))))"
+"(define (caaaar x) (car (car (car (car x)))))"
+"(define (caaadr x) (car (car (car (cdr x)))))"
+"(define (caadar x) (car (car (cdr (car x)))))"
+"(define (caaddr x) (car (car (cdr (cdr x)))))"
+"(define (cadaar x) (car (cdr (car (car x)))))"
+"(define (cadadr x) (car (cdr (car (cdr x)))))"
+"(define (caddar x) (car (cdr (cdr (car x)))))"
+"(define (cadddr x) (car (cdr (cdr (cdr x)))))"
+"(define (cdaaar x) (cdr (car (car (car x)))))"
+"(define (cdaadr x) (cdr (car (car (cdr x)))))"
+"(define (cdadar x) (cdr (car (cdr (car x)))))"
+"(define (cdaddr x) (cdr (car (cdr (cdr x)))))"
+"(define (cddaar x) (cdr (cdr (car (car x)))))"
+"(define (cddadr x) (cdr (cdr (car (cdr x)))))"
+"(define (cdddar x) (cdr (cdr (cdr (car x)))))"
+"(define (cddddr x) (cdr (cdr (cdr (cdr x)))))"
+""
+"(define (%member obj l eq) "
+"  (and (pair? l) (if (eq obj (car l)) l (%member obj (cdr l) eq))))"
+""
+"(define member"
+"  (case-lambda"
+"    [(obj l) (meml obj l)]"
+"    [(obj l eq) (%member obj l eq)]))"
+""
+"(define (%assoc obj al eq) "
+"  (and (pair? al) (if (eq obj (caar al)) (car al) (%assoc obj (cdr al) eq))))"
+""
+"(define assoc"
+"  (case-lambda"
+"    [(obj al) (assl obj al)]"
+"    [(obj al eq) (%assoc obj al eq)]))"
+""
+"(define (map p l . l*)"
+"  (if (null? l*)"
+"      (let loop ([l l] [r '()])"
+"        (if (pair? l) (loop (cdr l) (cons (p (car l)) r)) (reverse! r)))"
+"      (let loop ([l* (cons l l*)] [r '()])"
+"        (if (let lp ([l* l*]) (or (null? l*) (and (pair? (car l*)) (lp (cdr l*)))))"
+"            (loop (map cdr l*) (cons (apply p (map car l*)) r))"
+"            (reverse! r)))))"
+""
+"(define (for-each p l . l*)"
+"  (if (null? l*)"
+"      (let loop ([l l]) (if (pair? l) (begin (p (car l)) (loop (cdr l)))))"
+"      (let loop ([l* (cons l l*)])"
+"        (if (let lp ([l* l*]) (or (null? l*) (and (pair? (car l*)) (lp (cdr l*)))))"
+"            (begin (apply p (map car l*)) (loop (map cdr l*)))))))"
+""
+"(define (string-map p s . s*)"
+"  (if (null? s*)"
+"      (let* ([len (string-length s)] [res (make-string len)])"
+"        (do ([i 0 (+ i 1)]) [(>= i len) res]"
+"           (string-set! res i (p (string-ref s i)))))"
+"      (list->string (apply map p (map string->list (cons s s*))))))"
+""
+"(define (vector-map p v . v*)"
+"  (if (null? v*)"
+"      (let* ([len (vector-length v)] [res (make-vector len)])"
+"        (do ([i 0 (+ i 1)]) [(>= i len) res]"
+"          (vector-set! res i (p (vector-ref v i)))))"
+"      (list->vector (apply map p (map vector->list (cons v v*))))))"
+""
+"(define (string-for-each p s . s*)"
+"  (if (null? s*)"
+"      (let ([len (string-length s)])"
+"        (do ([i 0 (+ i 1)]) [(>= i len)] (p (string-ref s i))))"
+"      (apply for-each p (map string->list (cons s s*)))))"
+""
+"(define (vector-for-each p v . v*)"
+"  (if (null? v*)"
+"      (let ([len (vector-length v)])"
+"        (do ([i 0 (+ i 1)]) [(>= i len)] (p (vector-ref v i))))"
+"      (apply for-each p (map vector->list (cons v v*)))))"
+""
+"(define-syntax when"
+"  (syntax-rules ()"
+"    [(_ test . body) (if test (let-syntax () . body))]))"
+""
+"(define-syntax unless"
+"  (syntax-rules ()"
+"    [(_ test . body) (if test (if #f #f) (let-syntax () . body))]))"
+""
+"(define-syntax define-record-type"
+"  (letrec-syntax"
+"    ([id-eq??"
+"      (syntax-rules ()"
+"        [(_ id b kt kf)"
+"         ((syntax-lambda (id ok) ((syntax-rules () [(_ b) (id)]) ok))"
+"          (syntax-rules () [(_) kf]) (syntax-rules () [(_) kt]))])]"
+"     [id-assq??"
+"      (syntax-rules ()"
+"        [(_ id () kt kf) kf]"
+"        [(_ id ([id0 . r0] . idr*) kt kf) (id-eq?? id id0 (kt . r0) (id-assq?? id idr* kt kf))])]"
+"     [init"
+"      (syntax-rules ()"
+"        [(_  r () fi* (x ...)) (begin x ... r)]"
+"        [(_  r (id0 . id*) fi* (x ...))"
+"         (id-assq?? id0 fi* "
+"           (syntax-rules () [(_ i0) (init r id* fi* (x ... (record-set! r i0 id0)))]) "
+"           (syntax-error \"id in define-record-type constructor is not a field:\" id0))])]"
+"     [unroll"
+"      (syntax-rules ()"
+"        [(_ rtn (consn id ...) predn () ([f i] ...) ([a ia] ...) ([m im] ...))"
+"         (begin"
+"            (define rtn (new-record-type 'rtn '(f ...)))"
+"            (define consn (lambda (id ...) (let ([r (make-record rtn #&(length (f ...)))]) (init r (id ...) ([f i] ...) ()))))"
+"            (define predn (lambda (obj) (record? obj rtn)))"
+"            (define a (lambda (obj) (record-ref obj ia))) ..."
+"            (define m (lambda (obj val) (record-set! obj im val))) ..."
+"            (define 'rtn))]"
+"        [(_ rtn cf* predn ([fn accn] fam ...) (fi ...) (ai ...) (mi ...))"
+"         (unroll rtn cf* predn (fam ...) "
+"           (fi ... [fn #&(length (fi ...))]) (ai ... [accn #&(length (fi ...))]) (mi ...))]"
+"        [(_  rtn cf* predn ([fn accn modn] fam ...) (fi ...) (ai ...) (mi ...))"
+"         (unroll rtn cf* predn (fam ...) "
+"           (fi ... [fn #&(length (fi ...))]) (ai ... [accn #&(length (fi ...))]) (mi ... [modn #&(length (fi ...))]))])])"
+"    (syntax-rules ()"
+"      [(_ rtn (consn id ...) predn (fn . am) ...)"
+"       (unroll rtn (consn id ...) predn ((fn . am) ...) () () ())])))"
+""
+"(define-syntax let*-values"
+"  (syntax-rules ()"
+"    [(_ () . body) (let () . body)]"
+"    [(_ ([(a) x] . b*) . body) (let ([a x]) (let*-values b* . body))]"
+"    [(_ ([aa x] . b*) . body) (call-with-values (lambda () x) (lambda aa (let*-values b* . body)))]))"
+""
+"(define-syntax let-values"
+"  (letrec-syntax"
+"    ([loop "
+"      (syntax-rules ()"
+"        [(_ (new-b ...) new-aa x map-b* () () . body)"
+"         (let*-values (new-b ... [new-aa x]) (let map-b* . body))]"
+"        [(_ (new-b ...) new-aa old-x map-b* () ([aa x] . b*) . body)"
+"         (loop (new-b ... [new-aa old-x]) () x map-b* aa b* . body)]"
+"        [(_ new-b* (new-a ...) x (map-b ...) (a . aa) b* . body)"
+"         (loop new-b* (new-a ... tmp-a) x (map-b ... [a tmp-a]) aa b* . body)]"
+"        [(_ new-b* (new-a ...) x (map-b ...) a b* . body) "
+"         (loop new-b* (new-a ... . tmp-a) x (map-b ... [a tmp-a]) () b* . body)])])"
+"    (syntax-rules ()"
+"      [(_ () . body) (let () . body)]"
+"      [(_ ([aa x] . b*) . body)"
+"       (loop () () x () aa b* . body)])))"
+""
+"(define-syntax define-values"
+"  (letrec-syntax"
+"    ([loop "
+"      (syntax-rules ()"
+"        [(_ new-aa ([a tmp-a] ...) () x)"
+"         (begin"
+"           (define a (void)) ..."
+"           (define (call-with-values (lambda () x) (lambda new-aa (set! a tmp-a) ...))))]"
+"        [(_ (new-a ...) (map-a ...) (a . aa) x) "
+"         (loop (new-a ... tmp-a) (map-a ... [a tmp-a]) aa x)]"
+"        [(_ (new-a ...) (map-a ...) a x) "
+"         (loop (new-a ... . tmp-a) (map-a ... [a tmp-a]) () x)])])"
+"    (syntax-rules ()"
+"      [(_ () x) (define x)]"
+"      [(_ aa x) (loop () () aa x)])))"
+""
+"(define-syntax parameterize"
+"  (letrec-syntax"
+"    ([loop "
+"      (syntax-rules ()"
+"        [(_ ([param value p old new] ...) () body)"
+"         (let ([p param] ...)"
+"           (let ([old (p)] ... [new (p value #f)] ...)"
+"             (dynamic-wind"
+"               (lambda () (p new #t) ...)"
+"               (lambda () . body)"
+"               (lambda () (p old #t) ...))))]"
+"        [(_ args ([param value] . rest) body)"
+"         (loop ([param value p old new] . args) rest body)])])"
+"    (syntax-rules ()"
+"      [(_ ([param value] ...) . body)"
+"       (loop () ([param value] ...) body)])))"
+""
+"(define-syntax guard"
+"  (letrec-syntax"
+"    ([guard-aux"
+"      (syntax-rules (else =>)"
+"        [(guard-aux reraise (else result1 result2 ...))"
+"        (begin result1 result2 ...)]"
+"        [(guard-aux reraise (test => result))"
+"        (let ([temp test]) (if temp (result temp) reraise))]"
+"        [(guard-aux reraise (test => result) clause1 clause2 ...)"
+"        (let ([temp test])"
+"          (if temp"
+"              (result temp)"
+"              (guard-aux reraise clause1 clause2 ...)))]"
+"        [(guard-aux reraise (test)) (or test reraise)]"
+"        [(guard-aux reraise (test) clause1 clause2 ...)"
+"        (let ([temp test])"
+"          (if temp temp (guard-aux reraise clause1 clause2 ...)))]"
+"        [(guard-aux reraise (test result1 result2 ...))"
+"        (if test (begin result1 result2 ...) reraise)]"
+"        [(guard-aux reraise (test result1 result2 ...) clause1 clause2 ...)"
+"        (if test"
+"            (begin result1 result2 ...)"
+"            (guard-aux reraise clause1 clause2 ...))])])"
+"    (syntax-rules ()"
+"      [(guard (var clause ...) e1 e2 ...)"
+"      ((call/cc"
+"        (lambda (guard-k)"
+"          (with-exception-handler"
+"            (lambda (condition)"
+"              ((call/cc"
+"                  (lambda (handler-k)"
+"                    (guard-k"
+"                      (lambda ()"
+"                        (let ([var condition])"
+"                          (guard-aux"
+"                            (handler-k"
+"                              (lambda ()"
+"                                (raise-continuable condition)))"
+"                            clause"
+"                            ...))))))))"
+"            (lambda ()"
+"              (call-with-values"
+"                (lambda () e1 e2 ...)"
+"                (lambda args"
+"                  (guard-k (lambda () (apply values args))))))))))])))"
+""
+"(define (floor/ x y) (values (floor-quotient x y) (floor-remainder x y)))"
+"(define (truncate/ x y) (values (truncate-quotient x y) (truncate-remainder x y)))"
+"(define (square x) (* x x))"
+""
+"(define string->list"
+"  (case-lambda"
+"     [(str) (substring->list str 0 (string-length str))]"
+"     [(str start) (substring->list str start (string-length str))]"
+"     [(str start end) (substring->list str start end)]))"
+""
+"(define string-copy"
+"  (case-lambda"
+"     [(str) (substring str 0 (string-length str))]"
+"     [(str start) (substring str start (string-length str))]"
+"     [(str start end) (substring str start end)]))"
+""
+"(define string-copy!"
+"  (case-lambda"
+"     [(to at from) (substring-copy! to at from 0 (string-length from))]"
+"     [(to at from start) (substring-copy! to at from start (string-length from))]"
+"     [(to at from start end) (substring-copy! to at from start end)]))"
+""
+"(define string-fill!"
+"  (case-lambda"
+"     [(str c) (substring-fill! str c 0 (string-length str))]"
+"     [(str c start) (substring-fill! str c start (string-length str))]"
+"     [(str c start end) (substring-fill! str c start end)]))"
+""
+"(define vector->list"
+"  (case-lambda"
+"     [(vec) (subvector->list vec 0 (vector-length vec))]"
+"     [(vec start) (subvector->list vec start (vector-length vec))]"
+"     [(vec start end) (subvector->list vec start end)]))"
+""
+"(define vector->string"
+"  (case-lambda"
+"     [(vec) (subvector->string vec 0 (vector-length vec))]"
+"     [(vec start) (subvector->string vec start (vector-length vec))]"
+"     [(vec start end) (subvector->string vec start end)]))"
+""
+"(define string->vector"
+"  (case-lambda"
+"     [(str) (substring->vector str 0 (string-length str))]"
+"     [(str start) (substring->vector str start (string-length str))]"
+"     [(str start end) (substring->vector str start end)]))"
+""
+"(define vector-copy!"
+"  (case-lambda"
+"     [(to at from) (subvector-copy! to at from 0 (vector-length from))]"
+"     [(to at from start) (subvector-copy! to at from start (vector-length from))]"
+"     [(to at from start end) (subvector-copy! to at from start end)]))"
+""
+"(define vector-copy"
+"  (case-lambda"
+"     [(vec) (subvector vec 0 (vector-length vec))]"
+"     [(vec start) (subvector vec start (vector-length vec))]"
+"     [(vec start end) (subvector vec start end)]))"
+""
+"(define vector-fill!"
+"  (case-lambda"
+"     [(vec x) (subvector-fill! vec x 0 (vector-length vec))]"
+"     [(vec x start) (subvector-fill! vec x start (vector-length vec))]"
+"     [(vec x start end) (subvector-fill! vec x start end)]))"
+""
+"(define bytevector->list"
+"  (case-lambda"
+"     [(vec) (subbytevector->list vec 0 (bytevector-length vec))]"
+"     [(vec start) (subbytevector->list vec start (bytevector-length vec))]"
+"     [(vec start end) (subbytevector->list vec start end)]))"
+""
+"(define bytevector-copy!"
+"  (case-lambda"
+"     [(to at from) (subbytevector-copy! to at from 0 (bytevector-length from))]"
+"     [(to at from start) (subbytevector-copy! to at from start (bytevector-length from))]"
+"     [(to at from start end) (subbytevector-copy! to at from start end)]))"
+""
+"(define bytevector-copy"
+"  (case-lambda"
+"     [(vec) (subbytevector vec 0 (bytevector-length vec))]"
+"     [(vec start) (subbytevector vec start (bytevector-length vec))]"
+"     [(vec start end) (subbytevector vec start end)]))"
+""
+"(define utf8->string"
+"  (case-lambda"
+"    [(vec) (subutf8->string vec 0 (bytevector-length vec))]"
+"    [(vec start) (subutf8->string vec start (bytevector-length vec))]"
+"    [(vec start end) (subutf8->string vec start end)]))"
+""
+"(define string->utf8"
+"  (case-lambda"
+"    [(str) (substring->utf8 str 0 (string-length str))]"
+"    [(str start) (substring->utf8 str start (string-length str))]"
+"    [(str start end) (substring->utf8 str start end)]))"
+""
+"(define read-string!"
+"  (case-lambda"
+"    [(str) (read-substring! str 0 (string-length str) (current-input-port))]"
+"    [(str p) (read-substring! str 0 (string-length str) p)]"
+"    [(str p start) (read-substring! str start (string-length str) p)]"
+"    [(str p start end) (read-substring! str start end p)]))"
+""
+"(define read-bytevector!"
+"  (case-lambda"
+"    [(vec) (read-subbytevector! vec 0 (bytevector-length vec) (current-input-port))]"
+"    [(vec p) (read-subbytevector! vec 0 (bytevector-length vec) p)]"
+"    [(vec p start) (read-subbytevector! vec start (bytevector-length vec) p)]"
+"    [(vec p start end) (read-subbytevector! vec start end p)]))"
+""
+"(define write-string"
+"  (case-lambda"
+"    [(str) (write-substring str 0 (string-length str) (current-output-port))]"
+"    [(str p) (write-substring str 0 (string-length str) p)]"
+"    [(str p start) (write-substring str start (string-length str) p)]"
+"    [(str p start end) (write-substring str start end p)]))"
+""
+"(define write-bytevector"
+"  (case-lambda"
+"    [(vec) (write-subbytevector vec 0 (bytevector-length vec) (current-output-port))]"
+"    [(vec p) (write-subbytevector vec 0 (bytevector-length vec) p)]"
+"    [(vec p start) (write-subbytevector vec start (bytevector-length vec) p)]"
+"    [(vec p start end) (write-subbytevector vec start end p)]))"
+;
+EOS
+)
+
+(let ([p (%prim*?! "obj(mkiport_string($live, sialloc(ints_init_code, NULL)))")])
+  (let loop ([x (read p)])
+    (unless (eof-object? x) 
+      ;(display x)(newline)
+      (scheme-eval x) (loop (read p)))))
+
+
+;------------------------------------------------------------------------------
+
+; post-initialization environments
+
+(define *initial-value-environment*
+  (let loop ([l *current-value-store*] [e '()])
+    (cond [(null? l) e]
+          [(symbol? (caar l)) (loop (cdr l) (cons (cons (caar l) (caar l)) e))]
+          [else (loop (cdr l) e)])))
+
+(define *initial-macro-environment*
+  (let loop ([l (car *current-macro-store*)] 
+             [e (append '((unquote . unquote) (unquote-splicing . unquote-splicing) (=> . =>) (else . else)) root-environment)])
+    (cond [(null? l) e]
+          [(symbol? (caar l)) (loop (cdr l) (cons (cons (caar l) (caar l)) e))]
+          [else (loop (cdr l) e)])))
+
+
+;------------------------------------------------------------------------------
+
+; REPL and main
+
+(define (fprintf* port fstr olst)
+  (let loop ([flst (string->list fstr)] [olst olst])
+    (cond [(null? flst) #t]
+          [(char=? (car flst) #\~)
+           (and (pair? (cdr flst))
+             (let ([c (cadr flst)])
+               (cond
+                 [(char=? c #\a)
+                  (unless (null? olst)
+                    (display (car olst) port)
+                    (loop (cddr flst) (cdr olst)))]
+                 [(char=? c #\s)
+                  (unless (null? olst)
+                    (write (car olst) port)
+                    (loop (cddr flst) (cdr olst)))]
+                 [(char=? c #\%) 
+                  (newline port) 
+                  (loop (cddr flst) olst)]
+                 [(char=? c #\~)
+                  (write-char #\~ port)
+                  (loop (cddr flst) olst)]
+                 [else #f])))] ; (error 'format "Unrecognized escape sequence")
+          [else
+           (write-char (car flst) port)
+           (loop (cdr flst) olst)])))
+
+(define-syntax fprintf
+  (syntax-rules ()
+    [(_ p f o ...) (fprintf* p f (list o ...))]))
+    
+(define-syntax printf
+  (syntax-rules ()
+    [(_ f o ...) (fprintf* (current-output-port) f (list o ...))]))
+
+
+; handle multiple values; todo: handle (void)
+(define (scheme-eval->list x)
+  (let ([v (scheme-eval x)])
+    (if (and (pair? v) (eq? (car v) *values-tag*))
+        (cdr v)
+        (list v))))
+
+; in the future, this one will pretty-print
+(define (int-pp x)
+  (write x)
+  (newline))
+
+(define (int-rep port)
+  (let ([x (read port)])
+    (if (eof-object? x)
+        #f
+        (let evloop ([results (scheme-eval->list x)])
+          (if (null? results)
+              #t
+              (let ([result (car results)])
+                (if (not (eq? result (void))) (int-pp result))
+                (evloop (cdr results))))))))
+
+(define *quiet* #f)
+(define *exit* #f)
+(define *greeting* #t)
+
+(define (greet-once)
+  (when *greeting*
+    (printf "IntL Scheme Interpreter 1.2~%")
+    (set! *greeting* #f)))
+
+(define (int-repl port)
+  (unless *quiet* (greet-once) (printf "~%"))
+  (let loop ()
+    (display "> ")
+    (if (call/cc
+          (lambda (return)
+            (set-reset-handler! 
+              (lambda () 
+                (printf "; returning to top level~%")
+                (return #t)))
+            (int-rep port)))
+        (loop))))
+
+(define (main argv)
+  (define (about)
+    (printf "intl 1.2~%")
+    (printf "Usage: intl [-qx] file ...~%")
+    (printf "-q  suppress greeting~%")
+    (printf "-x  exit after loading files on the command line~%"))
+  (let loop ([args (cdr (command-line))])
+    (cond ; #f result means OK, return status 0, #t is status 1 
+      [(null? args) (if *exit* #f (int-repl (current-input-port)))]  
+      [(string=? (car args) "-q") (set! *quiet* #t) (loop (cdr args))]
+      [(string=? (car args) "-x") (set! *exit* #t) (loop (cdr args))]
+      [(or (string=? (car args) "-h") (string=? (car args) "--help")) (about) #f]
+      [(not (file-exists? (car args))) (printf "cannot open input file ~a~%" (car args)) #t]
+      [else (unless *quiet* (greet-once) (printf "~%"))
+            (unless *quiet* (printf "; loading ~a...~%" (car args)))
+            ((get-global 'load) (car args))
+            (loop (cdr args))])))
