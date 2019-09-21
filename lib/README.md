@@ -61,7 +61,7 @@ R5RS feature set; most of the forms and procedures behave as expected. Compared 
   *  `read` and `string->symbol` are also case-sensitive
   *  no support for `s`, `f`, `d`, `l` exponent markers and `#` digit placeholders 
   *  there is no support for `eval` and environment functions
-  *  no dynamic `load` or dymamic macroexpansion/compilation
+  *  no dynamic `load` or dynamic macroexpansion/compilation
   *  fixnums are limited to 24 bits, flonums are doubles
   *  no support for bignums/rational/complex numbers
   *  `set!` to built-in bindings is not allowed
@@ -92,3 +92,35 @@ LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
   *  exceptions, errors, `guard` form
   *  current port access procedures are parameters
   *  additional R7RS math and port operations
+  
+
+## LibL (Large) Library
+
+LibL (see [libl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libl.sf)) targets
+R7RS-Small feature set; most of the forms and procedures behave as expected. Compared to a regular R7RS-Small
+system, a regular program compiled with LibL will have the following limitations:
+
+  *  there is no support for `eval` and environment functions
+  *  no dynamic `load` or dynamic macroexpansion/compilation
+  *  fixnums are limited to 24 bits, flonums are doubles
+  *  no support for bignums/rational/complex numbers
+  *  no support for Unicode; strings are 8-bit clean, use system locale
+  *  `set!` to built-in bindings is not allowed
+  *  vectors are not self-evaluating; need to be quoted as in R5RS
+  *  source code literals cannot be circular (R7RS allows this)
+  *  there is no support for libraries and import 
+  *  there is no REPL
+  
+Some features of the R7RS-Small standard are not yet implemented:
+
+  *  SFC reader and `read` procedure are case-sensitive
+  *  `#!fold-case` and `#!no-fold-case` directives are not supported
+  *  `include` and `include-ci` forms are not supported
+  *  `get-environment-variables` and `current-second` are missing
+  *  `current-jiffy` and `jiffies-per-second` return inexact integers
+  *  `exit` does not acept an argument, skips outstanding `dynamic-wind` procedures
+  *  macroexpander treats `_` as a regular identifier, not match-all pattern
+  *  macroexpander does not support `(... escaped)` pattern escapes
+  *  macroexpander does not support patterns with internal ellipsis and improper tail variable
+  
+  
