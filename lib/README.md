@@ -98,7 +98,7 @@ LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
 
 LibL (see [libl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/lib/libl.sf)) targets
 R7RS-Small feature set; most of the forms and procedures behave as expected. Compared to a regular R7RS-Small
-system, a regular program compiled with LibL will have the following limitations:
+system, a program compiled with LibL will have the following limitations:
 
   *  there is no support for `eval` and environment functions
   *  no dynamic `load` or dynamic macroexpansion/compilation
