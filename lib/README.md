@@ -111,7 +111,7 @@ system, a program compiled with LibL will have the following limitations:
   *  there is no support for libraries and import 
   *  there is no REPL
   
-Some features of the R7RS-Small standard are not yet implemented:
+Some features of the R7RS-Small standard are not yet implemented or implemented in a simplified or non-conforming way:
 
   *  SFC reader and `read` procedure are always case-sensitive
   *  `#!fold-case` and `#!no-fold-case` directives are not supported
