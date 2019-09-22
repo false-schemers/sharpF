@@ -119,7 +119,7 @@ Some features of the R7RS-Small standard are not yet implemented:
   *  `cond-expand` form is not implemented
   *  `get-environment-variable` is implemented, but `get-environment-variables` is not
   *  `current-jiffy` and `jiffies-per-second` return inexact integers
-  *  `current-second` just returns the output of C `time()` routine
+  *  `current-second` is defined as C `difftime(time(0), 0)+37`
   *  macroexpander treats `_` as a regular identifier, not match-all pattern
   *  macroexpander does not support `(... escaped)` pattern escapes
   *  macroexpander does not support patterns with internal ellipsis and improper tail variable
