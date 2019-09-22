@@ -4313,7 +4313,7 @@ void oportputshared(obj x, obj p, int disp) {
   (%prim* "flonum($live, CLOCKS_PER_SEC)"))
 
 (define-inline (current-second)
-  (%prim* "flonum($live, time(NULL))"))
+  (%prim* "flonum($live, difftime(time(NULL), 0))"))
 
 
 ; miscellaneous / system

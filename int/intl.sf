@@ -2131,7 +2131,7 @@
         break;
       case GCD_N_ETC:
         if (ac == 0) res = obj_from_fixnum(0); else { 
-          long a, i = 0; while (ac-- > 0) {
+          long a = 0, i = 0; while (ac-- > 0) {
             obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
             if (is_flonum_obj(o) && flisint(flonum_from_obj(o))) goto int_etc; /* our fl/mixed op won't overflow */
             if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
@@ -2142,7 +2142,7 @@
         } break;
       case LCM_N_ETC:
         if (ac == 0) res = obj_from_fixnum(1); else { 
-          long long x; long i = 0; while (ac-- > 0) {
+          long long x = 1; long i = 0; while (ac-- > 0) {
             obj o; if (l) { o = car(l); l = cdr(l); } else o = va_arg(args, obj);
             if (is_flonum_obj(o) && flisint(flonum_from_obj(o))) goto int_etc; /* our fl/mixed op won't overflow */
             if (!is_fixnum_obj(o)) { res = ACRES_BADTYPE; goto out; }
