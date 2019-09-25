@@ -91,6 +91,7 @@ LibM (see [libm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
   *  `let-values`, `let*-values`, `define-values`, `make-parameter`, `parameterize`
   *  exceptions, errors, `guard` form
   *  current port access procedures are parameters
+  *  fixnums are extended to 28 bits
   *  additional R7RS math and port operations
   
 
