@@ -261,30 +261,30 @@
 
 (%definition "/* basic object representation */")
 
-; immediate objects have 7-bit tag followed by at least 24 bits of data
+; immediate objects have 3-bit tag followed by at least 28 bits of data
 ; subtype bits follow lsb which is 1 in non-pointer objects 
 
-(%definition "#define isimm(o, t) (((o) & 0xff) == (((t) << 1) | 1))")
+(%definition "#define isimm(o, t) (((o) & 0xf) == (((t) << 1) | 1))")
 
 (%localdef "long getimmu(obj o, int t) {
   assert(isimm(o, t));
-  return (long)((o >> 8) & 0xffffff);
+  return (long)((o >> 4) & 0xfffffff);
 }")
 
 (%localdef "long getimms(obj o, int t) {
   assert(isimm(o, t));
-  return (long)((((o >> 8) & 0xffffff) ^ 0x800000) - 0x800000);
+  return (long)((((o >> 4) & 0xfffffff) ^ 0x8000000) - 0x8000000);
 }")
 
 (%definition "#ifdef NDEBUG
-  #define getimmu(o, t) (long)(((o) >> 8) & 0xffffff)
-  #define getimms(o, t) (long)(((((o) >> 8) & 0xffffff) ^ 0x800000) - 0x800000)
+  #define getimmu(o, t) (long)(((o) >> 4) & 0xfffffff)
+  #define getimms(o, t) (long)(((((o) >> 4) & 0xfffffff) ^ 0x8000000) - 0x8000000)
 #else
   extern long getimmu(obj o, int t);
   extern long getimms(obj o, int t);
 #endif")
 
-(%definition "#define mkimm(o, t) (obj)((((o) & 0xffffff) << 8) | ((t) << 1) | 1)")
+(%definition "#define mkimm(o, t) (obj)((((o) & 0xfffffff) << 4) | ((t) << 1) | 1)")
 
 
 
@@ -395,9 +395,9 @@ void *getnative(obj o, cxtype_t *tp) {
 ; numerical helpers
 
 (%definition "/* numbers */")
-(%definition "#define FIXNUM_BIT 24")
-(%definition "#define FIXNUM_MIN -8388608")
-(%definition "#define FIXNUM_MAX 8388607")
+(%definition "#define FIXNUM_BIT 28")
+(%definition "#define FIXNUM_MIN -134217728")
+(%definition "#define FIXNUM_MAX 134217727")
 (%definition "#ifdef NDEBUG
 #define fxneg(x) (-(x))
 #define fxabs(x) (labs(x))
@@ -2545,10 +2545,10 @@ default: /* inter-host call */
 
 ; eof
 
-; eof is immediate -1 with immediate tag 127 (compatible with C EOF)
+; eof is immediate -1 with immediate tag 7 (compatible with C EOF)
 
 (%definition "/* eof */")
-(%definition "#define EOF_ITAG 127")  
+(%definition "#define EOF_ITAG 7")  
 (%definition "#define mkeof() mkimm(-1, EOF_ITAG)")  
 (%definition "#define iseof(o) ((o) == mkimm(-1, EOF_ITAG))")  
 
@@ -2860,7 +2860,8 @@ default: /* inter-host call */
     obj o = obj_from_$arg; cxtype_oport_t *vt = ckoportvt(o); 
     if (vt != (cxtype_oport_t *)OPORT_STRING_NTAG &&
         vt != (cxtype_oport_t *)OPORT_BYTEVECTOR_NTAG) $return obj(mkeof());
-    else $return obj(hpushstr($live, newstring(cbdata(oportdata(o))))); }" p)) 
+    else { cbuf_t *pcb = oportdata(o);
+    $return obj(hpushstr($live, newstring(cbdata(pcb)))); } }" p))
 
 ; bytevector output ports 
 
