@@ -1158,7 +1158,7 @@
 };")
 
 ; special return values (magical immediates)
-(%definition "#define ARCRES_ITAG 126")
+(%definition "#define ARCRES_ITAG 6")
 (%localdef "#define ACRES_APPLY    mkimm(0, ARCRES_ITAG)")
 (%localdef "#define ACRES_BADPROC  mkimm(1, ARCRES_ITAG)")
 (%localdef "#define ACRES_BADARGC  mkimm(2, ARCRES_ITAG)")
@@ -2597,7 +2597,7 @@
   (lambda (rte) (code1 rte) (code2 rte)))
 
 (define (gen-when code1 code2)
-  (lambda (rte) (if (code1 rte) (code2 rte) '())))
+  (lambda (rte) (if (code1 rte) (code2 rte) (void))))
 
 (define (gen-if code1 code2 code3)
   (lambda (rte) (if (code1 rte) (code2 rte) (code3 rte))))
@@ -4084,7 +4084,7 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "IntL Scheme Interpreter 1.2~%")
+    (printf "IntL Scheme Interpreter 1.2.1~%")
     (set! *greeting* #f)))
 
 (define (int-repl port)
@@ -4102,7 +4102,7 @@ EOS
 
 (define (main argv)
   (define (about)
-    (printf "intl 1.2~%")
+    (printf "intl 1.2.1~%")
     (printf "Usage: intl [-qx] file ...~%")
     (printf "-q  suppress greeting~%")
     (printf "-x  exit after loading files on the command line~%"))

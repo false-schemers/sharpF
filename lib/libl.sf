@@ -261,30 +261,34 @@
 
 (%definition "/* basic object representation */")
 
-; immediate objects have 7-bit tag followed by at least 24 bits of data
-; subtype bits follow lsb which is 1 in non-pointer objects 
+; there are two types of immediate objects: those with 30 bits of payload data
+; and no secondary tag (lower two bits are 11), and those with 3-bit tag and 24 
+; bits of payload data (lower two bits are 01); in both cases lsb is 1
 
-(%definition "#define isimm(o, t) (((o) & 0xff) == (((t) << 1) | 1))")
-
-(%localdef "long getimmu(obj o, int t) {
-  assert(isimm(o, t));
-  return (long)((o >> 8) & 0xffffff);
-}")
-
-(%localdef "long getimms(obj o, int t) {
-  assert(isimm(o, t));
-  return (long)((((o >> 8) & 0xffffff) ^ 0x800000) - 0x800000);
-}")
+(%definition "#define isim0(o)    (((o) & 3) == 3)")
+(%definition "#define isimm(o, t) (((o) & 0xff) == (((t) << 2) | 1))")
 
 (%definition "#ifdef NDEBUG
+  #define getim0s(o) (long)((((o >> 2) & 0x3fffffff) ^ 0x20000000) - 0x20000000)
   #define getimmu(o, t) (long)(((o) >> 8) & 0xffffff)
-  #define getimms(o, t) (long)(((((o) >> 8) & 0xffffff) ^ 0x800000) - 0x800000)
 #else
+  extern long getim0s(obj o);
   extern long getimmu(obj o, int t);
-  extern long getimms(obj o, int t);
 #endif")
 
-(%definition "#define mkimm(o, t) (obj)((((o) & 0xffffff) << 8) | ((t) << 1) | 1)")
+(%localdef "#ifndef NDEBUG
+long getim0s(obj o) {
+  assert(isim0(o));
+  return (long)((((o >> 2) & 0x3fffffff) ^ 0x20000000) - 0x20000000);
+}
+long getimmu(obj o, int t) {
+  assert(isimm(o, t));
+  return (long)((o >> 8) & 0xffffff);
+}
+#endif")
+
+(%definition "#define mkim0(o) (obj)((((o) & 0x3fffffff) << 2) | 3)")
+(%definition "#define mkimm(o, t) (obj)((((o) & 0xffffff) << 8) | ((t) << 2) | 1)")
 
 
 
@@ -352,17 +356,6 @@ void *getnative(obj o, cxtype_t *tp) {
 
 
 
-; void 
-
-; this is the value to be used where it doesn't really matter what value
-; is used. Standard header supports void value, which is some immediate
-; which looks funny in the debugger; it might correspond to a useful value,
-; but we don't really care.
-
-(define-inline (void) (%prim "void(0)"))
-
-
-
 ; booleans
 
 ; #f is (obj)0, #t is immediate 0 with tag 0 (singular true object)
@@ -398,12 +391,29 @@ void *getnative(obj o, cxtype_t *tp) {
     [_ %residual-boolean=?]))
 
 
+
+; void 
+
+; void object redefined as immediate with payload 0 and immediate tag 1
+
+
+(%definition "/* void */")
+(%definition "#define VOID_ITAG 1")  
+(%definition "#define mkvoid() mkimm(0, VOID_ITAG)")  
+(%definition "#define isvoid(o) ((o) == mkimm(0, VOID_ITAG))")  
+(%definition "#undef obj_from_void")
+(%definition "#define obj_from_void(v) ((void)(v), mkimm(0, VOID_ITAG))")
+
+(define-inline (void) (%prim "void(0)"))
+
+
+
 ; numerical helpers
 
 (%definition "/* numbers */")
-(%definition "#define FIXNUM_BIT 24")
-(%definition "#define FIXNUM_MIN -8388608")
-(%definition "#define FIXNUM_MAX 8388607")
+(%definition "#define FIXNUM_BIT 30")
+(%definition "#define FIXNUM_MIN -536870912")
+(%definition "#define FIXNUM_MAX 536870911")
 (%definition "#ifdef NDEBUG
 #define fxneg(x) (-(x))
 #define fxabs(x) (labs(x))
@@ -634,21 +644,20 @@ long fxflo(double f) {
 
 ; fixnums
 
-; fixnums are immediate with immediate tag 1
+; fixnums are tag-less immediates with 30 bits of payload
 
 (%definition "/* fixnums */")
-(%definition "#define FIXNUM_ITAG 1")  
 (%definition "typedef long fixnum_t;")
-(%definition "#define is_fixnum_obj(o) (isimm(o, FIXNUM_ITAG))")
+(%definition "#define is_fixnum_obj(o) (isim0(o))")
 (%definition "#define is_fixnum_fixnum(i) ((void)(i), 1)")
 (%definition "#define is_bool_fixnum(i) ((void)(i), 0)")
 (%definition "#define is_fixnum_bool(i) ((void)(i), 0)")
-(%definition "#define fixnum_from_obj(o) (getimms(o, FIXNUM_ITAG))")
+(%definition "#define fixnum_from_obj(o) (getim0s(o))")
 (%definition "#define fixnum_from_fixnum(i) (i)")
 (%definition "#define fixnum_from_flonum(l,x) ((fixnum_t)(x))")
 (%definition "#define bool_from_fixnum(i) ((void)(i), 1)")
 (%definition "#define void_from_fixnum(i) (void)(i)")
-(%definition "#define obj_from_fixnum(i) mkimm((fixnum_t)(i), FIXNUM_ITAG)")
+(%definition "#define obj_from_fixnum(i) mkim0((fixnum_t)(i))")
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
@@ -1321,7 +1330,7 @@ long fxflo(double f) {
 
 (%include <ctype.h>)
 
-; characters are immediate with immediate tag 2
+; characters are 24-bit immediates with immediate tag 2
 
 (%definition "/* characters */")
 (%definition "#define CHAR_ITAG 2")  
@@ -1335,7 +1344,7 @@ long fxflo(double f) {
 (%definition "#define is_fixnum_char(i) ((void)(i), 0)")
 (%definition "#define is_char_flonum(i) ((void)(i), 0)")
 (%definition "#define is_flonum_char(i) ((void)(i), 0)")
-(%definition "#define char_from_obj(o) ((int)getimms(o, CHAR_ITAG))")
+(%definition "#define char_from_obj(o) ((int)getimmu(o, CHAR_ITAG))")
 (%definition "#define char_from_char(i) (i)")
 (%definition "#define bool_from_char(i) ((void)(i), 1)")
 (%definition "#define void_from_char(i) (void)(i)")
@@ -1475,6 +1484,13 @@ long fxflo(double f) {
   int l, *d; assert(s); l = (int)strlen(s); 
   d = cxm_cknull(malloc(sizeof(int)+l+1), \"malloc(string)\");
   *d = l; strcpy(sdatachars(d), s); return d;
+}")
+
+(%definition "extern int *newstringn(char *s, int n);")
+(%localdef "int *newstringn(char *s, int n) {
+  int *d; char *ns; assert(s); assert(n >= 0);
+  d = cxm_cknull(malloc(sizeof(int)+n+1), \"malloc(stringn)\");
+  *d = n; memcpy((ns = sdatachars(d)), s, n); ns[n] = 0; return d;
 }")
 
 (%definition "extern int *allocstring(int n, int c);")
@@ -1691,6 +1707,14 @@ long fxflo(double f) {
 (define-inline (vector? o)
   (%prim "bool(isvector(obj_from_$arg))" o))
 
+(define-inline (%new-vector n)
+  (%prim* "{ /* new-vector */
+    int c = fixnum_from_$arg;
+    hreserve(hbsz(c+1), $live); /* $live live regs */
+    hp -= c; memset(hp, 0, c * sizeof(obj));
+    *--hp = obj_from_size(VECTOR_BTAG);
+    $return obj(hendblk(c+1)); }" n))
+
 (define-inline (%make-vector n i)
   (%prim* "{ /* make-vector */
     obj o; int i = 0, c = fixnum_from_$arg;
@@ -1702,7 +1726,7 @@ long fxflo(double f) {
 
 (define-syntax make-vector
   (syntax-rules ()
-    [(_ n) (%make-vector n (void))]
+    [(_ n) (%new-vector n)]
     [(_ n i) (%make-vector n i)]
     [_ %residual-make-vector]))
 
@@ -1788,11 +1812,16 @@ long fxflo(double f) {
   d = mallocbvdata(n); *d = n; memcpy(bvdatabytes(d), s, n); return d;
 }")
 
-(%definition "extern int *allocbytevector(int n, int c);")
-(%localdef "int *allocbytevector(int n, int c) {
+(%definition "extern int *makebytevector(int n, int c);")
+(%localdef "int *makebytevector(int n, int c) {
   int *d; assert(n >= 0); 
   d = mallocbvdata(n); *d = n; memset(bvdatabytes(d), c, n);
   return d;
+}")
+
+(%definition "extern int *allocbytevector(int n);")
+(%localdef "int *allocbytevector(int n) {
+  int *d = mallocbvdata(n); *d = n; return d;
 }")
 
 (%definition "extern int *dupbytevector(int *d);")
@@ -1832,15 +1861,15 @@ long fxflo(double f) {
 
 (define-syntax make-bytevector
   (syntax-rules ()
-    [(_ k) (%prim* "obj(hpushu8v($live, allocbytevector(fixnum_from_$arg, 0)))" k)]
-    [(_ k c) (%prim* "obj(hpushu8v($live, allocbytevector(fixnum_from_$arg, byte_from_fixnum(fixnum_from_$arg))))" k c)]
+    [(_ k) (%prim* "obj(hpushu8v($live, allocbytevector(fixnum_from_$arg)))" k)]
+    [(_ k c) (%prim* "obj(hpushu8v($live, makebytevector(fixnum_from_$arg, byte_from_fixnum(fixnum_from_$arg))))" k c)]
     [_ %residual-make-bytevector]))
 
 (define-syntax bytevector
   (syntax-rules ()
     [(_ b ...)
      (%prim* "{ /* bytevector */
-    obj o = hpushu8v($live, allocbytevector($argc, 0));
+    obj o = hpushu8v($live, allocbytevector($argc));
     unsigned char *s = bytevectorbytes(o);
     ${*s++ = byte_from_fixnum(fixnum_from_$arg);
     $}$return obj(o); }" b ...)]
@@ -1907,7 +1936,7 @@ long fxflo(double f) {
 
 ; null
 
-; () is immediate 0 with immediate tag 3 (singular null object)
+; () is immediate with payload 0 and immediate tag 3 (singular null object)
 
 (%definition "/* null */")
 (%definition "#define NULL_ITAG 3")  
@@ -2135,7 +2164,7 @@ long fxflo(double f) {
 
 ; symbols
 
-; symbols are immediate with immediate tag 4
+; symbols are 24-bit immediates with immediate tag 4
 
 (%definition "/* symbols */")
 (%definition "#define SYMBOL_ITAG 4")  
@@ -2411,7 +2440,7 @@ long fxflo(double f) {
 (define (list->bytevector l)
   (%prim*? "{ /* list->bytevector */
     int i, c = fixnum_from_$arg; 
-    obj o = hpushu8v($live, allocbytevector(c, 0)); /* $live live regs */
+    obj o = hpushu8v($live, allocbytevector(c)); /* $live live regs */
     obj l = obj_from_$arg; /* gc-safe */
     unsigned char *s = bytevectorbytes(o);
     for (i = 0; i < c; ++i, l = cdr(l)) s[i] = byte_from_obj(car(l));
@@ -2420,6 +2449,7 @@ long fxflo(double f) {
 (define (subbytevector->list vec start end)
   (let loop ([i (fx- end 1)] [l '()])
     (if (fx<? i start) l (loop (fx- i 1) (cons (bytevector-u8-ref vec i) l)))))
+
 
 
 ; control
@@ -2681,12 +2711,12 @@ default: /* inter-host call */
 
 ; eof
 
-; eof is immediate -1 with immediate tag 127 (compatible with C EOF)
+; eof is tagged immediate with payload 0 and immediate tag 7 
 
 (%definition "/* eof */")
-(%definition "#define EOF_ITAG 127")  
-(%definition "#define mkeof() mkimm(-1, EOF_ITAG)")  
-(%definition "#define iseof(o) ((o) == mkimm(-1, EOF_ITAG))")  
+(%definition "#define EOF_ITAG 7")  
+(%definition "#define mkeof() mkimm(0, EOF_ITAG)")  
+(%definition "#define iseof(o) ((o) == mkimm(0, EOF_ITAG))")  
 
 (define-syntax %const
   (let-syntax ([old-%const %const])
@@ -2996,7 +3026,8 @@ default: /* inter-host call */
     obj o = obj_from_$arg; cxtype_oport_t *vt = ckoportvt(o); 
     if (vt != (cxtype_oport_t *)OPORT_STRING_NTAG &&
         vt != (cxtype_oport_t *)OPORT_BYTEVECTOR_NTAG) $return obj(mkeof());
-    else $return obj(hpushstr($live, newstring(cbdata(oportdata(o))))); }" p)) 
+    else { cbuf_t *pcb = oportdata(o); 
+    $return obj(hpushstr($live, newstring(cbdata(pcb)))); } }" p)) 
 
 ; bytevector output ports 
 
@@ -3350,17 +3381,17 @@ static int stabequal(obj x, obj y, stab_t *p) {
   for (i = 1; i < n-1; ++i) if (!stabequal(hblkref(x, i), hblkref(y, i), p)) return 0;
   if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 1; 
 }
-static int boundequal(obj x, obj y, int lim) {
-  obj h; int i, n, r; loop: if (x == y) return 1;
-  if (!x || !y || notaptr(x) || notaptr(y) || notobjptr(x) || notobjptr(y)) return 0;
-  if ((h = objptr_from_obj(x)[-1]) != objptr_from_obj(y)[-1]) return 0;
-  if (h == (obj)FLONUM_NTAG) return flonum_from_obj(x) == flonum_from_obj(y); 
-  if (h == (obj)STRING_NTAG) return strcmp(stringchars(x), stringchars(y)) == 0;
-  if (h == (obj)BYTEVECTOR_NTAG) return bytevectoreq(bytevectordata(x), bytevectordata(y)); 
-  if (isaptr(h) || !(n = size_from_obj(h)) || hblkref(x, 0) != hblkref(y, 0)) return 0;
-  if (--lim <= 0) return -1; /* decrease lim for tail calls too; stop if got too deep */
-  for (i = 1; i < n-1; ++i) if ((r = boundequal(hblkref(x, i), hblkref(y, i), lim)) <= 0) return r;
-  if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return 1; 
+static int boundequal(obj x, obj y, int fuel) { /* => remaining fuel or <0 on failure */
+  obj h; int i, n; loop: assert(fuel > 0); if (x == y) return fuel-1;
+  if (!x || !y || notaptr(x) || notaptr(y) || notobjptr(x) || notobjptr(y)) return -1;
+  if ((h = objptr_from_obj(x)[-1]) != objptr_from_obj(y)[-1]) return -1;
+  if (h == (obj)FLONUM_NTAG) return flonum_from_obj(x) == flonum_from_obj(y) ? fuel-1 : -1; 
+  if (h == (obj)STRING_NTAG) return strcmp(stringchars(x), stringchars(y)) == 0 ? fuel-1 : -1;
+  if (h == (obj)BYTEVECTOR_NTAG) return bytevectoreq(bytevectordata(x), bytevectordata(y)) ? fuel-1 : -1;
+  if (isaptr(h) || !(n = size_from_obj(h)) || hblkref(x, 0) != hblkref(y, 0)) return -1;
+  if (--fuel == 0) return 0; /* we must spend fuel while comparing objects themselves */
+  for (i = 1; i < n-1; ++i) if ((fuel = boundequal(hblkref(x, i), hblkref(y, i), fuel)) <= 0) return fuel;
+  if (i == n-1) { x = hblkref(x, i); y = hblkref(y, i); goto loop; } else return fuel;
 }")
 
 
@@ -3419,7 +3450,7 @@ static int boundequal(obj x, obj y, int lim) {
 (%definition "extern int isequal(obj x, obj y);")
 (%localdef "int isequal(obj x, obj y) {
   stab_t *p; obj *r; size_t i; int res = boundequal(x, y, 500);
-  if (res >= 0) return res; /* small/non-circular/easy */
+  if (res != 0) return res > 0; /* small/non-circular/easy */
   p = staballoc(); stabshared(x, p); stabshared(y, p);
   r = p->r = cxm_cknull(calloc(p->sz, sizeof(obj)), \"isequal\");
   for (i = 0; i < p->sz; ++i) if (p->v[i] & ~1) r[i] = -1; 
@@ -3686,6 +3717,8 @@ static void wrdatum(obj o, wenv_t *e) {
     wrc('>', e);
   } else if (isprocedure(o)) {
     char buf[60]; sprintf(buf, \"#<procedure @%p>\", objptr_from_obj(o)); wrs(buf, e);
+  } else if (isvoid(o)) {
+    wrs(\"#<void>\", e);
   } else {
     wrs(\"#<unknown>\", e);
   }
@@ -4511,7 +4544,9 @@ void oportputshared(obj x, obj p, int disp) {
 
 (define utf8->string
   (case-lambda
-    [(vec) (subutf8->string vec 0 (bytevector-length vec))]
+    [(vec) (%prim*? "{ /* bytevector->string */
+    int *d = bytevectordata(obj_from_$arg);
+    $return obj(hpushstr($live, newstringn((char *)bvdatabytes(d), *d))); }" vec)]
     [(vec start) (subutf8->string vec start (bytevector-length vec))]
     [(vec start end) (subutf8->string vec start end)]))
 
@@ -4523,7 +4558,9 @@ void oportputshared(obj x, obj p, int disp) {
 
 (define string->utf8
   (case-lambda
-    [(str) (substring->utf8 str 0 (string-length str))]
+    [(str) (%prim*? "{ /* string->bytevector */
+    int *d = stringdata(obj_from_$arg);
+    $return obj(hpushu8v($live, newbytevector((unsigned char *)sdatachars(d), *d))); }" str)]
     [(str start) (substring->utf8 str start (string-length str))]
     [(str start end) (substring->utf8 str start end)]))
 
