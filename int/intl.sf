@@ -41,6 +41,14 @@
 
 (load "libl.sf")
 
+
+;------------------------------------------------------------------------------
+
+; features provided by this interpreter
+
+(define (features) '(sharpf sharpf-interpreter sharpf-intl))
+
+
 ;------------------------------------------------------------------------------
 
 ; assorted utils
@@ -80,6 +88,9 @@
         [(null? (cdr lst)) (car lst)]
         [else (append (car lst) (append* (cdr lst)))]))
 
+(define (string-append* l) 
+  (apply string-append l))          
+
 (define (apply-map-list lst)
   (let loop ([lst lst] [res '()])
     (if (ormap null? lst)
@@ -93,10 +104,55 @@
         (and (pred? x (car r))
           (pairwise-andmap pred? r))))))
 
+(define (sexp-match? pat x)
+    (or (eq? pat '*)
+        (and (eq? pat '<symbol>) (symbol? x))
+        (and (eq? pat '<string>) (string? x))
+        (eq? x pat)
+        (and (pair? pat)
+             (cond [(and (eq? (car pat) '...)
+                         (pair? (cdr pat))
+                         (null? (cddr pat)))
+                    (eq? x (cadr pat))]
+                   [(and (pair? (cdr pat))
+                         (eq? (cadr pat) '...)
+                         (null? (cddr pat)))
+                    (let ([pat (car pat)])
+                      (if (eq? pat '*)
+                          (list? x)
+                          (let loop ([lst x])
+                            (or (null? lst)
+                                (and (pair? lst)
+                                     (sexp-match? pat (car lst))
+                                     (loop (cdr lst)))))))]
+                   [else
+                    (and (pair? x)
+                         (sexp-match? (car pat) (car x))
+                         (sexp-match? (cdr pat) (cdr x)))]))))
+
+(define-syntax sexp-case
+  (syntax-rules (else)
+    [(_ (key ...) clauses ...)
+     (let ([atom-key (key ...)])
+       (sexp-case atom-key clauses ...))]
+    [(_ key (else result1 result2 ...))
+     (begin result1 result2 ...)]
+    [(_ key (pat result1 result2 ...))
+     (if (sexp-match? 'pat key)
+         (begin result1 result2 ...))]
+    [(_ key (pat result1 result2 ...) clause clauses ...)
+     (if (sexp-match? 'pat key)
+         (begin result1 result2 ...)
+         (sexp-case key clause clauses ...))]))
+         
+(define (read/ci-flag port ci?)
+  ; for now, we will just use read with no support for circular structures
+  (read-simple port))
+
 
 ;------------------------------------------------------------------------------
 
-; errors
+; warnings and errors
 
 ; expansion-time
 (define-syntax x-error
@@ -106,6 +162,11 @@
 ; compile-time 
 (define-syntax c-error
   (syntax-rules () [(_ r a ...) (simple-error 'compiler r a ...)]))
+
+(define (c-warning . args)
+  (let ([ep (current-error-port)])
+    ;(newline ep)
+    (print-error-message "; warning" args ep)))
 
 ; run-time 
 (define (r-error msg . args)
@@ -117,6 +178,183 @@
                 (loop (cdr args) (cons (list name) (cons (car args) a*)))
                 (loop (cdr args) (cons (car args) a*))))]
           [else (loop (cdr args) (cons (car args) a*))])))
+
+
+;------------------------------------------------------------------------------
+
+; path and file name resolution
+
+(define (path-strip-directory filename)
+  (let loop ([l (reverse (string->list filename))] [r '()])
+    (cond [(null? l) (list->string r)]
+          [(memv (car l) '(#\\ #\/ #\:)) (list->string r)]
+          [else (loop (cdr l) (cons (car l) r))])))
+
+(define (path-directory filename)
+  (let loop ([l (reverse (string->list filename))])
+    (cond [(null? l) ""]
+          [(memv (car l) '(#\\ #\/ #\:)) (list->string (reverse l))]
+          [else (loop (cdr l))])))
+
+(define (path-strip-extension filename) ;; improved
+  (let loop ([l (reverse (string->list filename))])
+    (cond [(null? l) filename]
+          [(eqv? (car l) #\.) (list->string (reverse (cdr l)))]
+          [(memv (car l) '(#\\ #\/ #\:)) filename]
+          [else (loop (cdr l))])))
+
+#;(define (path-extension filename)
+  (let loop ([l (reverse (string->list filename))] [r '()])
+    (cond [(null? l) ""]
+          [(memv (car l) '(#\\ #\/ #\:)) ""]
+          [(eqv? (car l) #\.) (list->string (cons #\. r))]
+          [else (loop (cdr l) (cons (car l) r))])))
+
+(define (base-path-separator basepath)
+  (let ([l (reverse (string->list basepath))])
+    (cond [(null? l) #f]
+          [(memv (car l) '(#\\ #\/)) (car l)]
+          [else #f])))
+
+(define (path-relative? filename)
+  (let ([l (string->list filename)])
+    (cond [(null? l) #f]
+          [(memv (car l) '(#\\ #\/)) #f]
+          [(and (> (length l) 3) (char-alphabetic? (car l)) (eqv? (cadr l) #\:) (eqv? (caddr l) #\\)) #f]
+          [else #t])))
+
+(define (file-resolve-relative-to-base-path filename basepath)
+  (if (and (path-relative? filename) (base-path-separator basepath))
+      (string-append basepath filename) ; leading . and .. to be resolved by OS
+      filename))
+
+; hacks for relative file name resolution
+
+(define *current-file-stack* '())
+
+(define (push-current-file! filename)
+  (set! *current-file-stack* (cons filename *current-file-stack*)))
+
+(define (current-file) ;=> filename of #f
+  (and (pair? *current-file-stack*) (car *current-file-stack*)))
+
+(define (pop-current-file!)
+  (set! *current-file-stack* (cdr *current-file-stack*)))
+
+(define (file-resolve-relative-to-current filename) ; => resolved or original filename 
+  (if (path-relative? filename)
+      (let ([cf (current-file)])
+        (if cf (file-resolve-relative-to-base-path filename (path-directory cf)) filename))
+      filename))
+
+
+;------------------------------------------------------------------------------
+
+; library names and library file lookup
+
+(define (listname-segment->string s)
+  (cond [(symbol? s) (symbol->string s)]
+        [(number? s) (number->string s)]
+        [(string? s) s]
+        [else (c-error "invalid symbolic file name element" s)]))
+
+(define modname-separator "_")
+
+(define (listname->modname listname)
+  (define sep modname-separator)
+  (let loop ([l listname] [r '()])
+    (if (pair? l)
+        (loop (cdr l) 
+              (if (null? r) 
+                  (cons (listname-segment->string (car l)) r) 
+                  (cons (listname-segment->string (car l)) (cons sep r))))
+        (string-append* (reverse r)))))
+
+(define (listname->path listname basepath ext)
+  (define sep 
+    (let ([sc (base-path-separator basepath)])
+      (if sc (string sc) (c-error "library path does not end in separator" basepath))))
+  (let loop ([l listname] [r '()])
+    (if (pair? l)
+        (loop (cdr l) 
+              (if (null? r) 
+                  (cons (listname-segment->string (car l)) r) 
+                  (cons (listname-segment->string (car l)) (cons sep r))))
+        (file-resolve-relative-to-base-path (string-append* (reverse (cons ext r))) basepath))))
+
+
+; hacks for locating library files
+
+(define *library-path-list* '())
+
+(define (add-library-path! path)
+  (if (base-path-separator path)
+      (set! *library-path-list* (append *library-path-list* (list path)))
+      (c-error "library path should end in directory separator" path))) 
+
+(define (find-library-path libname) ;=> name of existing .sld file or #f
+  (let loop ([l *library-path-list*])
+    (if (null? l)
+        #f
+        (let ([p (listname->path libname (car l) ".sld")]) 
+          (if (and p (file-exists? p)) p (loop (cdr l)))))))
+
+(define (call-with-input-file/lib name proc) ;=> (proc filepath port), called while name is current-file
+  (define filepath
+    (if (string? name)
+        (file-resolve-relative-to-current name)
+        (find-library-path name)))
+  (if (not filepath)
+      (if (string? name)
+          (c-error "cannot resolve file name to a file:" name)
+          (c-error "cannot resolve library name to a file:" name 'in *library-path-list*)))
+  (if (not (file-exists? filepath)) 
+      (c-error "cannot resolve file or library name to an existing file:" name '=> filepath))
+  (let ([port (open-input-file filepath)])
+    (push-current-file! filepath)
+    (let ([v (proc filepath port)])
+      (pop-current-file!) ; interpreter fixme: need unwind-protect in case proc fails
+      (close-input-port port)
+      v)))
+
+(define (call-with-input-file/lib/stdin name proc) ;=> (proc filepath port), called while name is current-file
+  (if (and (string? name) (string=? name "-"))
+      (proc "-" (current-input-port))
+      (call-with-input-file/lib name proc)))
+
+(define (call-with-file/lib-sexps name ci? proc) ;=> (proc sexps), called while name is current-file
+  (call-with-input-file/lib name ;=>
+    (lambda (filepath port)
+      (let loop ([sexps '()])
+        (let ([s (read/ci-flag port ci?)])
+          (if (eof-object? s)
+              (proc (reverse sexps))
+              (loop (cons s sexps))))))))
+
+(define (for-each-file/lib-sexp proc name ci?) ; proc called while name is current-file
+  (call-with-input-file/lib name ;=>
+    (lambda (filepath port)
+      (let loop ()
+        (let ([s (read/ci-flag port ci?)])
+          (unless (eof-object? s) (proc s) (loop)))))))
+
+(define (file/lib->modname name)
+  (cond [(and (pair? name) (list? name)) (listname->modname name)]
+        [(string? name) (path-strip-extension (path-strip-directory name))]
+        [else (c-error "illegal file or library name:" name)]))
+  
+(define (file/lib/stdin->modname name)
+  (if (and (string? name) (string=? name "-"))
+      "stdin"
+      (file/lib->modname name)))
+
+; name manglers
+
+(define (fully-qualified-name modname id)
+  (string->symbol (string-append modname (string-append "." (symbol->string id)))))
+
+(define (fully-qualified-library-name lib id)
+  (fully-qualified-name (file/lib->modname lib) id))
 
 
 ;------------------------------------------------------------------------------
@@ -966,6 +1204,403 @@
   (expand-top-level-forms forms environment (car *current-macro-store*) (cdr *current-macro-store*)
     (lambda (outputs store loc-n)
       (set-car! *current-macro-store* store) (set-cdr! *current-macro-store* loc-n) outputs)))
+
+
+;------------------------------------------------------------------------------
+
+; main library processing code
+
+; used by commented-out code in adjoin-env
+#;(define (rassq k al)
+   (and (pair? al)
+        (let ([a (car al)])
+          (if (eq? k (cdr a)) a (rassq k (cdr al))))))
+
+(define (make-lib file/lib)
+  ; todo: make an object?
+  (cond [(string? file/lib) (file-resolve-relative-to-current file/lib)]
+        [(pair? file/lib) file/lib]
+        [else (c-error "invalid module:" file/lib)]))
+
+(define lib=? equal?)
+
+(define (lib-public? lib)
+  ; libraries referred to by list names have private internal definitions by default, string ones don't
+  (string? lib))
+
+; libs is a list of library names (both string-like and list-like)
+(define (adjoin-libs libs1 libs2) ;=> libs12, in original order w/o duplicates
+  (if (null? libs1) libs2
+      (let ([libs2 (adjoin-libs (cdr libs1) libs2)])
+         (cond [(member (car libs1) libs2) libs2]
+               [else (cons (car libs1) libs2)]))))
+
+(define (env-lookup i env full?) ;=> <macro-store-key> or #f
+  (let loop ([env env])
+    (cond [(null? env) #f]
+          [(procedure? env) (and full? (symbol? i) (env i))]
+          [(eqv? i (caar env)) (cdar env)]
+          [else (loop (cdr env))])))
+
+; env1 here is a proper alist of bindings ((<id> . <id-or-number>) ...)
+; <id-or-number> is either a unique global id or an integer store location used for built-ins;
+; both are keys (i.e. symbolic addresses) in current-macro-store. 
+; env2 is the same, but can also be an improper alist ending in a procedure which
+; serves as a default <id> => <macro-store-key> mapper for <id>s not mapped explicitly
+(define (adjoin-env env1 env2) ;=> env12
+  (if (null? env1) env2
+      (let ([env2 (adjoin-env (cdr env1) env2)])
+        (cond [(env-lookup (caar env1) env2 #f) => 
+               (lambda (a) ; a is not auto-mapped even when env2 supports it (i.e. is proc-terminated alist)
+                  (if (eq? (cdar env1) a)
+                      env2 ; repeat of same id with same binding is allowed
+                      (c-error "multiple identifier bindings on import:" (caar env1) (cdar env1) a)))]
+              ; uncommenting the check below won't allow call/cc and call-with-current-continuation to import the same binding
+              ;[(rassq (cdar env1) env2) => (lambda (db) (c-error "multiple identifier imports on import:" (car env1) db))]
+              [else (cons (car env1) env2)]))))
+
+; this variant is used in repl; it allows shadowing of old bindings with new ones
+; todo: remove duplicates e.g. (... (foo . lib1.foo) ... (foo . lib2.foo) ... (foo . lib1.foo) ...) by starting
+; with the env1 and appending non-duplicate parts of env2
+(define (adjoin-env/shadow env1 env2) ;=> env12
+  (if (null? env1) env2
+      (let ([env2 (adjoin-env/shadow (cdr env1) env2)])
+        (cond [(env-lookup (caar env1) env2 #f) => 
+               (lambda (a) ; a is not auto-mapped even when env2 supports it (i.e. is proc-terminated alist)
+                  (if (eq? (cdar env1) a)
+                      env2 ; repeat of same id with same binding is allowed
+                      (begin
+                        (c-warning "old identifier binding shadowed on import:" (caar env1) 'was: a 'now: (cdar env1))
+                        (cons (car env1) env2))))]
+              ; uncommenting the check below won't allow call/cc and call-with-current-continuation to import the same binding
+              ;[(rassq (cdar env1) env2) => (lambda (db) (c-error "multiple identifier imports on import:" (car env1) db))]
+              [else (cons (car env1) env2)]))))
+
+; esps is #f or a list of export specs, each spec is either <id> or (rename <id> <id>)
+; #f means all internal definitions are exported as-is; not used for libraries
+(define (adjoin-esps esps1 esps2) ;=> esps12
+  (cond [(not esps1) esps2]
+        [(not esps2) esps1]
+        [else (append esps1 esps2)]))
+
+; begs is a list of "begins", i.e. expression blocks, each "beg" is either (<path> . <ci-flag>) or (<path-or-false> <form> ...)
+; where <path> is the source path name string, <path-or-false> is either <path> or #f; in the (<path> . <ci-flag>) form,
+; forms should be read from the <path>
+; NB: pathname is needed in the second form for macroexpander to process relative includes correctly
+(define (adjoin-begs begs1 begs2) ;=> beg12
+  (append begs1 begs2))
+
+(define (preprocess-library lib return) ;=> (return this-and-used-libs export-env)
+  (get-library-info lib ;=> 
+    (lambda (used-libs import-env export-specs beg-forms)
+      (return 
+        (adjoin-libs used-libs (list lib)) ; init order: used-libs, then lib
+        (make-export-env export-specs lib import-env)))))
+
+(define (preprocess-import-set iset return) ;=> (return libs env)
+  (define (pp s return)
+    (sexp-case s
+      [(only * <symbol> ...)
+       (pp (cadr s) ;=>
+         (lambda (libs env) 
+           (return libs            
+             (let loop ([env env] [ids (cddr s)])
+               (cond [(null? env) env]
+                     [(memq (caar env) ids) (cons (car env) (loop (cdr env) ids))]
+                     [else (loop (cdr env) ids)])))))]
+      [(except * <symbol> ...)
+       (pp (cadr s) ;=>
+         (lambda (libs env) 
+           (return libs            
+             (let loop ([env env] [ids (cddr s)])
+               (cond [(null? env) env]
+                     [(memq (caar env) ids) (loop (cdr env) ids)]
+                     [else (cons (car env) (loop (cdr env) ids))])))))]
+      [(prefix * <symbol>)
+       (pp (cadr s) ;=>
+         (lambda (libs env) 
+           (return libs            
+             (let loop ([env env] [pfx (symbol->string (caddr s))])
+               (if (null? env) 
+                   env
+                   (let ([nn (string->symbol (string-append pfx (symbol->string (caar env))))])
+                     (cons (cons nn (cdar env)) (loop (cdr env) pfx))))))))]
+      [(rename * [<symbol> <symbol>] ...)
+       (pp (cadr s) ;=>
+         (lambda (libs env) 
+           (return libs            
+             (let loop ([env env] [idpairs (cddr s)])
+               (cond [(null? env) env]
+                     [(assq (caar env) idpairs) => 
+                      (lambda (idpair) (cons (cons (cadr idpair) (cdar env)) (loop (cdr env) idpairs)))]
+                     [else (cons (car env) (loop (cdr env) idpairs))])))))]
+      [(* * ...) 
+       (preprocess-library (make-lib s) return)]
+      [<string>
+       (preprocess-library (make-lib s) return)]
+      [#f ; #f is a predefined library for sharpf-null environment (compiler/interpreter)
+       (preprocess-library #f return)]
+      [else
+       (c-error "invalid import set in import:" s)]))
+  (pp iset return))
+
+(define (preprocess-import-sets isets return) ;=> (return requred-libs import-env)
+  (let loop ([isets isets] [libs '()] [env '()])
+    (if (null? isets)
+        (return libs env)
+        (preprocess-import-set (car isets) ;=>
+          (lambda (new-libs new-env)
+            (loop (cdr isets) 
+              (adjoin-libs libs new-libs)
+              (adjoin-env new-env env)))))))
+
+; local environment is made for expansion of thislib library's body forms
+; it is made of import environment followed by a default mapper to lib-specific locations 
+(define (make-local-env esps thislib import-env) ;=> env (if lib is private, ends with . private-id-gen-proc)
+  (let loop ([esps esps] [env import-env])
+    (if (null? esps)
+        (if (lib-public? thislib)
+            ; all non-exported definitions are public and in global namespace under their own names
+            env ; null-terminated env -- lookups fall back to identity mapper (id => id) 
+            ; otherwise they are in global namespace under mangled names
+            (append env (lambda (id) (fully-qualified-library-name thislib id))))
+        (loop (cdr esps)
+          (sexp-case (car esps) 
+            [<symbol> env]
+            [(rename <symbol> <symbol>) env]
+            [else (c-error "invalid export spec in export:" (car esps))])))))          
+
+; environment for import from thislib library into outside libs or programs
+(define (make-export-env esps thislib import-env) ;=> env
+  (define (extend-export lid eid env)
+    (cond [(assq eid env) (c-error "duplicate external id in export:" eid esps)]
+          [(assq lid import-env) => ; re-exported imported id, keep using imported binding under eid
+           (lambda (b) (cons (cons eid (cdr b)) env))] 
+          [else (cons (cons eid (fully-qualified-library-name thislib lid)) env)]))
+  (if (lib-public? thislib)
+      (if (or esps (pair? import-env))
+          (c-error "module cannot be imported:" thislib)
+          '())
+      (let loop ([esps esps] [env '()])
+        (if (null? esps)
+            env
+            (loop (cdr esps)
+              (sexp-case (car esps) 
+                [<symbol> (extend-export (car esps) (car esps) env)]
+                [(rename <symbol> <symbol>) (extend-export (cadr (car esps)) (caddr (car esps)) env)]
+                [else (c-error "invalid export spec in export:" (car esps))]))))))          
+        
+; processes special forms (not expressions / definitions) preceding expressions / definitions
+; a special case is a standalone (define-library * * ...) form (normally the file is an .sld file) 
+(define (process-header-forms curlib all-forms return) ;=> (return used-libs import-env export-specs beg-forms)
+  (let loop ([forms all-forms] [libs '()] [env '()])
+    (if (null? forms)
+        (return libs env #f (cons (current-file) forms)) ; #f esps means exports are implicit
+        (sexp-case (car forms)
+          #;[(load <string>) ; treated as simplified import form by sfc compiler: comment out for interpreter!
+           (preprocess-library (make-lib (cadr (car forms))) ;=> 
+             (lambda (new-libs new-env)
+               (loop (cdr forms)
+                 (adjoin-libs libs new-libs)
+                 (adjoin-env new-env env))))]
+          [(import * ...)
+           (preprocess-import-sets (cdr (car forms)) ;=> 
+             (lambda (new-libs new-env)
+               (loop (cdr forms)
+                 (adjoin-libs libs new-libs)
+                 (adjoin-env new-env env))))]
+          [(define-library * * ...)
+           (let ([thislib (make-lib (cadr (car forms)))])
+             (if (not (list1? all-forms)) 
+                 (c-error "define-library form not alone in the file:" (car forms)))
+             (if (and curlib (not (lib=? curlib thislib)))
+                 (c-error "define-library form located in the wrong file:" curlib '<=> thislib))
+             (process-define-library-decls thislib (cddr (car forms)) ;=>
+               return))]
+          [else ; other forms start body consisting of expressions / definitions only
+           (return libs env #f (cons (current-file) forms))])))) ; #f esps means exports are implicit
+
+; helper for processing include and include-ci forms in process-define-library-decl below
+(define (process-includes names ci? return) ;=> (return used-libs import-env export-specs beg-forms)
+  (let loop ([names names] [begs '()])
+    (if (null? names) 
+        (return '() '() '() begs)
+        ; since includes can't contain header forms, we can postpone reading them
+        (let ([path (call-with-input-file/lib (car names) (lambda (filepath port) filepath))])
+          (loop (cdr names) (adjoin-begs begs (list (cons path ci?))))))))
+
+; processor for define-library header form's single declaration
+(define (process-define-library-decl thislib d return) ;=> (return used-libs import-env export-specs beg-forms)
+  (sexp-case d
+    [(export * ...)
+     (return '() '() (cdr d) '())]
+    [(import * ...)
+     (preprocess-import-sets (cdr d) ;=>
+       (lambda (libs env) (return libs env '() '())))]
+    [(begin * ...)
+     (return '() '() '() (list (cons (current-file) (cdr d))))]
+    [(include * * ...)
+     (process-includes (cdr d) #f return)] ; no default case folding          
+    [(include-ci * * ...)
+     (process-includes (cdr d) #t return)] ; fold case by default
+    [(include-library-declarations * ...)
+     (let loop ([names (cdr d)] [libs '()] [env '()] [esps '()] [begs '()])
+       (if (null? names) 
+           (return libs env esps begs)
+           (let ([lesf (call-with-file/lib-sexps (car names) #f ; no case folding
+                         (lambda (sexps) ; called while (car names) is current file
+                           (process-define-library-decls thislib sexps list)))])
+             (loop (cdr names)
+               (adjoin-libs libs (car lesf))
+               (adjoin-env (cadr lesf) env)
+               (adjoin-esps (caddr lesf) esps)
+               (adjoin-begs begs (cadddr lesf))))))]
+    [(cond-expand * ...)
+     (let loop ([clauses (cdr d)])
+       (if (null? clauses)
+           (return '() '() '() '()) ; got nothing to contribute
+           (sexp-case (car clauses)
+             [(else * ...)
+              (if (null? (cdr clauses))
+                  (process-define-library-decls thislib (cdar clauses) return)
+                  (c-error "'else' clause in the middle of cond-expand:" d thislib))] 
+             [(* * ...) ; todo: process OR/AND/NOT tests
+              (if (memq (caar clauses) (features)) ; (features) returns list of supported features
+                  (process-define-library-decls thislib (cdar clauses) return)
+                  (loop (cdr clauses)))]
+             [else (c-error "invalid clause in define-library's cond-expand:" (car clauses) thislib)])))]
+    [else (c-error "unknown declaration in define-library:" d thislib)]))
+
+; processor for define-library header form's declaration list
+(define (process-define-library-decls thislib decls return) ;=> (return used-libs import-env export-specs beg-forms)
+  (let loop ([decls decls] [libs '()] [env '()] [esps '()] [begs '()])
+    (if (null? decls)
+        (return libs env esps begs)
+        (process-define-library-decl thislib (car decls) ;=>
+          (lambda (new-libs new-env new-esps new-begs)
+            (loop (cdr decls)
+              (adjoin-libs libs new-libs)
+              (adjoin-env new-env env)
+              (adjoin-esps new-esps esps)
+              (adjoin-begs begs new-begs)))))))
+
+; r7rs environment constructor
+(define environment
+  (let ([gensym-count 1]) ; gensym unique pseudo-library names for name mangling
+    (lambda isets
+      (let ([import-env (load-import-sets scheme-eval isets)] 
+            [ename (string-append "hidden_" (number->string gensym-count))])
+        ; return 'closed' environment with unknown ids mapped to unique private locations
+        (set! gensym-count (+ gensym-count 1))
+        (append import-env (lambda (id) (fully-qualified-name ename id)))))))              
+
+
+;------------------------------------------------------------------------------
+
+; library processing state 
+
+; we have to cache loaded libraries, so stores are not hit on repeat loads/visits
+; of/to the same library
+
+(define *library-info-cache* '())
+
+(define (make-library-info) (make-vector 4 #f)) ;; #(used-libs import-env export-specs beg-forms ...?)
+
+(define *root-library-info* ; used for special library #f
+  (vector '() root-environment (map car root-environment) '()))
+
+(define *base-library-info* #f) ; used for special library (sharpf base) -- interpreter-only! 
+(define (base-library-info) ; has to be delayed until initial envs are ready
+  (unless *base-library-info*
+    (let ([env (append *initial-macro-environment* *initial-value-environment*)])
+      (set! *base-library-info* (vector '() env (map car env) '()))))
+  *base-library-info*) 
+
+(define (lookup-library-info lib) ;=> li (possibly non-inited)
+  (cond [(eq? lib #f) *root-library-info*] ; available both to the interpreter and sfc compiler
+        [(equal? lib '(sharpf base)) (base-library-info)] ; available to the interpreter only
+        [(assoc lib *library-info-cache*) => cdr]
+        [else (let ([li (make-library-info)]) 
+                 (set! *library-info-cache* (cons (cons lib li) *library-info-cache*)) li)]))
+
+; main hub for library info -- called from preprocess-library
+(define (get-library-info lib return) ;=> (return used-libs import-env export-specs beg-forms)
+  (define li (lookup-library-info lib))
+  (define (update-li! used-libs import-env export-specs beg-forms)
+    (vector-set! li 0 used-libs)
+    (vector-set! li 1 import-env)
+    (vector-set! li 2 export-specs)
+    (vector-set! li 3 beg-forms))
+  (unless (vector-ref li 0) ; not inited?
+    (call-with-file/lib-sexps lib #f
+      (lambda (all-forms) ; need to split off header forms
+        (process-header-forms lib all-forms update-li!))))
+  (return (vector-ref li 0) 
+          (vector-ref li 1) 
+          (vector-ref li 2) 
+          (vector-ref li 3)))
+
+
+;------------------------------------------------------------------------------
+
+; interpreter-specific import handler
+
+(define *loaded-libraries* '()) ; keep separate from lookup-library-info for quick checks
+(define *libraries-being-loaded* '()) ; load-import-sets internal dependency loop check
+
+(define (check-export-specs-after-load lib esps import-env)
+  (define (undefined lid loc)
+    (c-warning "exported identifier not defined in" lib ': lid (list loc)))
+  (define (check lid)
+    (unless (assq lid import-env)
+      (let ([loc (fully-qualified-library-name lib lid)])
+        (cond [(assq loc (car *current-macro-store*))]
+              [(assq loc *current-value-store*) =>
+               (lambda (s&v) (when (eq? (car s&v) (cdr s&v)) (undefined lid loc)))]
+              [else (undefined lid loc)]))))
+  (unless (lib-public? lib)
+    (let loop ([esps esps])
+      (unless (null? esps)
+        (sexp-case (car esps) 
+          [<symbol> (check (car esps)) (loop (cdr esps))]
+          [(rename <symbol> <symbol>) (check (cadr (car esps))) (loop (cdr esps))]
+          [else (c-error "invalid export spec in export:" (car esps))])))))    
+
+; load-import-sets in the interpreter should be called with 'eval', sfc should use 'visit' that hits macro store only
+(define (load-import-sets eval-like isets) ;=> import-env to merge into the caller's one
+  (set! *libraries-being-loaded* '()) ; in case we had errors during previous interactive call
+  (preprocess-import-sets isets ;=>
+    (lambda (libs-to-load import-env-for-load)
+      (define (load-lib! lib) ; modifies store, loc-n parts of macro store, value store; may have side effects
+        (unless (member lib *loaded-libraries*)
+          (begin (display "; loading library: ") (write lib) (newline)) ; todo: remove this info message later
+          (if (member lib *libraries-being-loaded*)
+              (c-error "recursive library dependence involving" lib)    
+              (get-library-info lib ;=>
+                (lambda (used-libs import-env export-specs beg-forms)
+                  (set! *libraries-being-loaded* (cons lib *libraries-being-loaded*))
+                  (for-each load-lib! used-libs) 
+                  (set! *libraries-being-loaded* (cdr *libraries-being-loaded*))
+                  (let ([lib-local-env (make-local-env export-specs lib import-env)])
+                    (define (proc-expr! expr) (eval-like expr lib-local-env)) 
+                    (let loop ([begs beg-forms])
+                      (unless (null? begs)
+                        (sexp-case (car begs)
+                          [(<string> * ...) ; proper list of forms
+                           (push-current-file! (caar begs)) ; todo: unwind-protect in interpreter
+                           (for-each proc-expr! (cdar begs))
+                           (pop-current-file!)]
+                          [(#f * ...) ; proper list of forms, not from a file
+                           (for-each proc-expr! (cdar begs))]
+                          [(<string> . *) ; cdr is ci? flag
+                           (for-each-file/lib-sexp proc-expr! (caar begs) (cdar begs))]) 
+                        (loop (cdr begs)))))
+                  (check-export-specs-after-load lib export-specs import-env) 
+                  (set! *loaded-libraries* (cons lib *loaded-libraries*)))))))
+      ; may modify store, loc-n parts of (current-global-environment), value-store in the interpreter 
+      (for-each load-lib! libs-to-load)
+      ; NB: import-env-for-load is always a proper alist, so it can be prepended to any env
+      import-env-for-load)))
 
 
 ;------------------------------------------------------------------------------
@@ -2333,10 +2968,14 @@
 
 ;------------------------------------------------------------------------------
 
-; compiler (used on macroexpander output)
+; compiler (applied to macroexpander output)
 
 (define (variable x)
   (if (not (symbol? x)) (c-error "identifier expected" x)))
+
+(define (mutable-variable x ill)
+  (cond [(not (symbol? x)) (c-error "identifier expected" x)]
+        [(memq x ill) (c-warning "modifying imported location" x)]))  
 
 (define (shape+ form n) ;form must be proper list of n or more elements
   (let loop ([n n] [l form])
@@ -2371,7 +3010,7 @@
         (cons (cadr binding) (bindings->vals (cdr bindings))))
       '()))
 
-(define (scheme-compile expr cte)
+(define (scheme-compile expr cte ill)
   (define (cons-cte frame cte)
     (if (null? frame) cte (cons cte frame))) 
   (define (lookup name)
@@ -2389,13 +3028,13 @@
            (gen-cst expr)]
           [(eq? (car expr) 'quote) (shape expr 2) 
            (gen-cst (cadr expr))]
-          [(eq? (car expr) 'set!) (shape expr 3) (variable (cadr expr))
+          [(eq? (car expr) 'set!) (shape expr 3) (mutable-variable (cadr expr) ill)
            (gen-var-set (lookup (cadr expr)) (comp (caddr expr)))]
           [(eq? (car expr) 'lambda) (shape expr 3)
            (let ([parms (cadr expr)])
              (let ([frame (parms->frame parms)])
                (let ([nb-vars (length frame)]
-                     [code (scheme-compile (caddr expr) (cons-cte frame cte))])
+                     [code (scheme-compile (caddr expr) (cons-cte frame cte) ill)])
                  (if (list? parms)
                      (gen-lambda nb-vars code)
                      (gen-lambda-rest nb-vars code)))))]
@@ -2409,15 +3048,15 @@
              (let ([new-cte (cons-cte (bindings->vars bindings) cte)])
                (let loop ([vals (bindings->vals bindings)] [codes '()])
                  (if (null? vals)
-                     (gen-letrec (reverse codes) (scheme-compile (caddr expr) new-cte))
-                     (loop (cdr vals) (cons (scheme-compile (car vals) new-cte) codes))))))]
+                     (gen-letrec (reverse codes) (scheme-compile (caddr expr) new-cte ill))
+                     (loop (cdr vals) (cons (scheme-compile (car vals) new-cte ill) codes))))))]
           [(eq? (car expr) 'begin) (shape+ expr 2)
            (let loop ([expr0 (cadr expr)] [exprs (cddr expr)])
              (let ([code (comp expr0)])
                (if (null? exprs) 
                    code
                    (gen-sequence code (loop (car exprs) (cdr exprs))))))]
-          [(eq? (car expr) 'define) (shape expr 3) (variable (cadr expr))
+          [(eq? (car expr) 'define) (shape expr 3) (mutable-variable (cadr expr) ill)
            (gen-sequence ; returns symbol to simplify interactive debugging
              (gen-var-set (lookup (cadr expr)) (comp (caddr expr)))
              (gen-cst (cadr expr)))]
@@ -2711,15 +3350,20 @@
 
 ; evaluator
 
-(define (scheme-compile-run expr)
-  (let ([code (scheme-compile expr '())]) ;no locals on top level
+(define (scheme-compile-run expr environment)
+  ; immutable locations -- how to calculate from environment??
+  ; we should make sure that local-env does not contain any explicit
+  ; locations *from the library itself*, then pick cdrs of explicit env pairs!
+  ; for this, we should modify make-local-env to this effect
+  (define immlocs (let loop ([e environment] [ill '()]) (if (pair? e) (loop (cdr e) (cons (cdar e) ill)) ill)))
+  (let ([code (scheme-compile expr '() immlocs)]) ;no locals on top level
     (code #f))) ;no local frames at run time
 
 (define (scheme-expand-compile-run form environment)
   (let loop ([outs (expand-top-level-forms! (list form) environment)])
      (cond [(null? outs) (void)]
-           [(null? (cdr outs)) (scheme-compile-run (car outs))] ; tail call
-           [else (scheme-compile-run (car outs)) (loop (cdr outs))])))
+           [(null? (cdr outs)) (scheme-compile-run (car outs) environment)] ; tail call
+           [else (scheme-compile-run (car outs) environment) (loop (cdr outs))])))
 
 (define (scheme-expand-to-list expr . ?environment)
   (when (circular? expr) (c-error "circular input form:" expr))
@@ -3125,10 +3769,7 @@
   (argc-dispatch-lambda #f 
     (lambda (x) (scheme-eval x))
     (lambda (x environment) (scheme-eval x environment))))
-; stubs for now, will sort out later
-(def-global (scheme-report-environment n) (lambda (version) *current-environment*))
-(def-global (null-environment n) (lambda (version) *current-environment*))
-(def-global (interaction-environment) (lambda () *current-environment*))
+; R5RS environment procedures are defined below in R7RS section
 
 ; 6.6  Input and output
 ; 6.6.1  Ports
@@ -3159,16 +3800,7 @@
 (def-global (newline oport ?))
 
 ; 6.6.4  System interface
-(def-global (load string)                          ; filename
-  (lambda (fn)
-    (call-with-input-file fn
-      (lambda (p)
-        (let loop ([x (read p)])
-          (if (eof-object? x)
-              #t
-              (begin
-                (scheme-eval x)
-                (loop (read p)))))))))
+; R5RS load is defined below in R7RS section
 ;(transcript-on filename)
 ;(transcript-off)
 
@@ -3285,7 +3917,42 @@
 (def-global (file-error? obj))
 
 ; 6.12. Environments and evaluation
-(def-global (environment list ...)  (lambda () *current-environment*)) ; stub for now
+
+; r7rs 'environment' procedure
+; NB: r7rs requires the result to be immutable in all respects, but we don't care: making them
+; immutable would require (selectively) copying the stores and flagging them, which is a drag
+(def-global (environment list ...))
+
+; r5rs/r7rs (scheme-report-environment n)
+; note that the returned environment allows set! to imported locations like car
+; (which are re-exported from sharpf base); such set! s will change the definition of 'car' everywhere
+; because stores are not copied. Also, evaluating '(define foo ..) and other definitions like it will
+; keep the corresponding values in gensym-ed locations unique to this call to scheme-report-environment;
+; if another call to scheme-report-environment is made, it will produce a separate environment which
+; does not share store locations of newly defined variables/syntax with the first one. Which is OK
+; wrt standards because most of these details are either undefined or explicitly allowed in repl
+(def-global (scheme-report-environment n)
+  (lambda (n)
+    (case n
+      [(5) (environment '(scheme r5rs))]
+      [else (error "scheme-report-environment version not supported" n)])))
+
+; r5rs/r7rs (null-environment n)
+; todo: either filter out value bindings from (scheme-report-environment n)
+; or have separate (scheme r5rs-null) library for simplicity
+(def-global (null-environment n)
+  (lambda (n)
+    (case n
+      [(5) (environment '(scheme r5rs-null))]
+      [else (error "null-environment version not supported" n)])))
+
+; r5rs/r7rs (interaction-environment)
+; NB: (current-environment) would return a snapshot of the current env at the moment of the call; 
+; if current env is extended later (via import), the snapshot won't reflect it
+(def-global (interaction-environment)
+  (lambda ()
+    ; improper alist with nothin but a redirector of lookups to the actual current env
+    (lambda (id) (env-lookup id *current-environment* #t)))) 
 
 ; 6.13.1. Ports
 (def-global (port? obj))
@@ -3325,6 +3992,21 @@
 ;(def-global (write-bytevector u8vector oport ? start ? end ?)) ; implemented in init
 
 ; 6.14. System interface 
+
+; r7rs load with optional environment
+; resolves relative file names, barfs on header forms
+(def-global (load obj environment ?)
+  (lambda (name . ?environment)
+    (define ci? #f) ; case-sensitive by default
+    (let ([env (if (pair? environment) (car ?environment) *current-environment*)])
+      (for-each-file/lib-sexp
+        (lambda (sexp)
+          (sexp-case sexp
+            [(import . *) (error "unexpected form encountered by load in" name sexp)] ; r7rs does not allow it
+            [(define-library . *) (error "unexpected form encountered by load in" name sexp)] ; r7rs does not allow it
+            [else (scheme-eval sexp env)]))
+        name ci?))))
+
 (def-global (exit obj ?))
 (def-global (emergency-exit obj ?))
 (def-global (file-exists? string))
@@ -3334,8 +4016,7 @@
 (def-global (current-second))
 (def-global (current-jiffy))
 (def-global (jiffies-per-second))
-(def-global (features)
-  (lambda () '(sharpf sharpf-interpreter sharpf-intl)))
+(def-global (features))
 
 
 ;------------------------------------------------------------------------------
@@ -3393,6 +4074,7 @@
 (def-global (root-environment)     (lambda () root-environment))
 (def-global (initial-value-environment)  (lambda () *initial-value-environment*))
 (def-global (initial-macro-environment)  (lambda () *initial-macro-environment*))
+(def-global (library-info-cache)   (lambda () *library-info-cache*))
 
 (def-global (expand obj environment ?)                             
   (argc-dispatch-lambda #f 
@@ -4015,6 +4697,12 @@ EOS
           [(symbol? (caar l)) (loop (cdr l) (cons (cons (caar l) (caar l)) e))]
           [else (loop (cdr l) e)])))
 
+; actual repl cannot spoil global environment, so we have to make a special one that keeps its defines separate
+(define *repl-base-environment* ; contains interpreter's complete set of built-in bindings and syntax
+  (append *initial-macro-environment* ; all built-in syntax identifiers, including ... => else
+          *initial-value-environment* ; all built-in value identifiers, including additional procedures
+          (lambda (id) (fully-qualified-name ".repl" id)))) ; map other names to private ones in 'repl' namespace
+
 
 ;------------------------------------------------------------------------------
 
@@ -4068,15 +4756,43 @@ EOS
   (newline))
 
 (define (int-rep port)
-  (let ([x (read port)])
-    (if (eof-object? x)
+  (let ([sexp (read port)])
+    (if (eof-object? sexp)
         #f
-        (let evloop ([results (scheme-eval->list x)])
-          (if (null? results)
-              #t
-              (let ([result (car results)])
-                (if (not (eq? result (void))) (int-pp result))
-                (evloop (cdr results))))))))
+        (sexp-case sexp
+          [(import . *) ; yes, we can process it interactively!
+           (if (sexp-match? '((* ...) ...) (cdr sexp)) 
+               (let ([import-env (load-import-sets scheme-eval (cdr sexp))] [oce *current-environment*])
+                 ; now we have to use import-env to make some storage locations
+                 ; selectibly visible under imported names in the current environment
+                 (set! *current-environment* (adjoin-env/shadow import-env *current-environment*))
+                 ;(int-pp (mem-diff *current-environment* oce)) ; tmp hack for for debugging purposes
+                 #t)
+               (c-error "invalid import form in repl" sexp))]
+          [(define-library . *) ; yes, we can process it interactively!
+           (if (and (sexp-match? '(* * ...) (cdr sexp)) 
+                      (or (string? (cadr sexp)) (sexp-match? '(<symbol> <symbol> ...) (cadr sexp))))
+               (let ([lib (make-lib (cadr sexp))])
+                 (let ([li (lookup-library-info lib)]) 
+                   (if (not (vector-ref li 0)) ; not inited?
+                       (process-define-library-decls lib (cddr sexp) ;=>
+                         (lambda (used-libs import-env export-specs beg-forms)
+                           (vector-set! li 0 used-libs)
+                           (vector-set! li 1 import-env)
+                           (vector-set! li 2 export-specs)
+                           (vector-set! li 3 beg-forms)
+                           ;(int-pp (map car *library-info-cache*)) ; tmp hack for for debugging purposes
+                           #t))
+                       (c-error "library cannot be redefined in repl" lib))))
+               (c-error  "invalid define-library form in repl" sexp))]
+          [else
+           (let loop ([results (scheme-eval->list sexp)])
+             (if (null? results)
+                 #t
+                 (let ([result (car results)])
+                   (if (not (eq? result (void))) (int-pp result))
+                   (loop (cdr results)))))])))) 
+
 
 (define *quiet* #f)
 (define *exit* #f)
@@ -4104,13 +4820,19 @@ EOS
   (define (about)
     (printf "intl 1.2.1~%")
     (printf "Usage: intl [-qx] file ...~%")
-    (printf "-q  suppress greeting~%")
-    (printf "-x  exit after loading files on the command line~%"))
+    (printf "-q        suppress greeting~%")
+    (printf "-x        exit after loading files on the command line~%")
+    (printf "-L path   add path to library search path list~%"))
+  ; first, set up for loads and interaction
+  (set! *current-environment* *repl-base-environment*)
+  (add-library-path! "./") ; default lib search path
+  ; process command line, maybe end in REPL
   (let loop ([args (cdr (command-line))])
     (cond ; #f result means OK, return status 0, #t is status 1 
       [(null? args) (if *exit* #f (int-repl (current-input-port)))]  
       [(string=? (car args) "-q") (set! *quiet* #t) (loop (cdr args))]
       [(string=? (car args) "-x") (set! *exit* #t) (loop (cdr args))]
+      [(and (string=? (car args) "-L") (pair? (cdr args))) (add-library-path! (cadr args)) (loop (cddr args))]
       [(or (string=? (car args) "-h") (string=? (car args) "--help")) (about) #f]
       [(not (file-exists? (car args))) (printf "cannot open input file ~a~%" (car args)) #t]
       [else (unless *quiet* (greet-once) (printf "~%"))
