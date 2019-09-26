@@ -46,7 +46,7 @@
 
 ; features provided by this interpreter
 
-(define (features) '(sharpf sharpf-interpreter sharpf-intl))
+(define (features) '(r7rs exact-closed sharpf sharpf-interpreter sharpf-intl))
 
 
 ;------------------------------------------------------------------------------
@@ -158,6 +158,10 @@
 (define-syntax x-error
   (syntax-rules () [(_ r a ...) 
     (simple-error 'macroexpander r (unwrap-vecs a) ...)]))
+
+(define-syntax x-error*
+  (syntax-rules () [(_ r args) 
+    (apply simple-error 'macroexpander r (map unwrap-vecs args))]))
 
 ; compile-time 
 (define-syntax c-error
@@ -796,16 +800,26 @@
 (define (pattern-sbox? b)
   (and (box? b) (list2? (unbox b))
     (memq (car (unbox b))
-      '(number? string? id?))))
+      '(char? number? string? id? feature? library?))))
 
 (define (pattern-sbox->test b)
   (case (car (unbox b))
-    [(number?)
+    [(char?)    
+     (lambda (sexp env) (char? sexp))]
+    [(number?)  
      (lambda (sexp env) (number? sexp))]
-    [(string?)
+    [(string?)  
      (lambda (sexp env) (string? sexp))]
-    [(id?)
-     (lambda (sexp env) (sid? sexp))]))
+    [(id?)      
+     (lambda (sexp env) (sid? sexp))]
+    [(feature?) 
+     (lambda (sexp env) (and (sid? sexp) (memq (sid-name sexp) (features))))]
+    [(library?) 
+     (lambda (sexp env) 
+       (cond [(string? sexp) (library-available? sexp)]
+             [(and (pair? sexp) (list? sexp) (andmap (lambda (x) (or (sid? x) (number? x))) sexp)) 
+              (library-available? (map (lambda (x) (if (sid? x) (sid-name x) x)) sexp))]
+             [else #f]))]))
 
 (define (template-sbox->sexp b) (cdr (unbox b)))
 
@@ -813,6 +827,7 @@
   (and (box? b) (pair? (unbox b))
     (let ([l (unbox b)])
       (case (car l)
+        [(error) (and (pair? (cdr l))) (list? (cdr l))] 
         [(number->string) (list1? (cdr l))]
         [(string->number) (list1? (cdr l))]
         [(list->string) (list1? (cdr l))]
@@ -826,6 +841,11 @@
 
 (define (template-sbox->conv b)
   (case (car (unbox b))
+    [(error)
+     (lambda (sexps env)
+       (if (and (pair? sexps) (string? (car sexps)))
+           (x-error* (car sexps) (cdr sexps))
+           (x-error* " " sexps)))]
     [(number->string)
      (lambda (sexps env)
        (let ([sexp (car sexps)])
@@ -1515,6 +1535,14 @@
     (let ([env (append *initial-macro-environment* *initial-value-environment*)])
       (set! *base-library-info* (vector '() env (map car env) '()))))
   *base-library-info*) 
+
+(define (library-available? lib)
+  (cond [(eq? lib #f) #t]
+        [(equal? lib '(sharpf base)) #t]
+        [(assoc lib *library-info-cache*) #t]
+        [(string? lib) (file-resolve-relative-to-current lib)]
+        [(and (pair? lib) (list? lib)) (find-library-path lib)]
+        [else #f]))
 
 (define (lookup-library-info lib) ;=> li (possibly non-inited)
   (cond [(eq? lib #f) *root-library-info*] ; available both to the interpreter and sfc compiler
@@ -4115,6 +4143,10 @@
 (%localdef #<<EOS
 /* initialization code */
 static char *ints_init_code =
+"(define-syntax syntax-error"
+"  (syntax-rules ()"
+"    [(_ #&(string? msg) arg ...) #&(error msg arg ...)]))"
+""
 "(define-syntax let-syntax"
 "  (syntax-rules ()"
 "    [(_ ([kw init] ...))"
@@ -4237,6 +4269,31 @@ static char *ints_init_code =
 "    [(_) #f]"
 "    [(_ test) (let () test)]"
 "    [(_ test . tests) (let ([x test]) (if x x (or . tests)))]))"
+""
+"(define-syntax cond-expand"
+"  (letrec-syntax"
+"    ([if-expand"
+"      (syntax-rules (and or not library)"
+"        [(_ (and) con alt) con]"
+"        [(_ (and r) con alt) (if-expand r con alt)]"
+"        [(_ (and r . r*) con alt) (if-expand r (if-expand (and . r*) con alt) alt)]"
+"        [(_ (or) con alt) alt]"
+"        [(_ (or r) con alt) (if-expand r con alt)]"
+"        [(_ (or r . r*) con alt) (if-expand r con (if-expand (or . r*) con alt))]"
+"        [(_ (not r) con alt) (if-expand r alt con)]"
+"        [(_ (library #&(library? x)) con alt) con]"
+"        [(_ (library x) con alt) alt]"
+"        [(_ #&(feature? x) con alt) con]"
+"        [(_ #&(id? x) con alt) alt]"
+"        [(_ x con alt) (syntax-error \"unrecognized cond-expand feature requirement:\" x)])])"
+"    (syntax-rules (else)"
+"      [(_) (void)]"
+"      [(_ [else . exps])"
+"       (begin . exps)]"
+"      [(_ [x] . rest)"
+"       (if-expand x (void) (cond-expand . rest))]"
+"      [(_ [x . exps] . rest)"
+"       (if-expand x (begin . exps) (cond-expand . rest))])))"
 ""
 "(define-syntax quasiquote #| from eiod |#"
 "  (syntax-rules (unquote unquote-splicing quasiquote)"
@@ -4800,7 +4857,7 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "IntL Scheme Interpreter 1.2.1~%")
+    (printf "IntL Scheme Interpreter 1.2.2~%")
     (set! *greeting* #f)))
 
 (define (int-repl port)
@@ -4818,7 +4875,7 @@ EOS
 
 (define (main argv)
   (define (about)
-    (printf "intl 1.2.1~%")
+    (printf "intl 1.2.2~%")
     (printf "Usage: intl [-qx] file ...~%")
     (printf "-q        suppress greeting~%")
     (printf "-x        exit after loading files on the command line~%")
