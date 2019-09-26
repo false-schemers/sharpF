@@ -67,4 +67,5 @@ Here is the list of IntL additions and things that behave differently between In
   *  command-line file arguments are dynamically loaded 
   *  there is a traditional REPL (read-eval-print loop)
   *  both `import` and `define-library` forms can be entered interactively into REPL
+  *  `features` procedure returns `(sharpf sharpf-interpreter sharpf-intl)`
   
