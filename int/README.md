@@ -47,7 +47,7 @@ IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
 
 ## IntL, an Interpreter for LibL (Large) Library
 
-IntL (see [intl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intl.sf)) allows interactive calling of LibL functions and use of LibL syntax forms. It provides full argument checking, `eval`, `load`, and interactive REPL.
+IntL (see [intl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intl.sf)) allows interactive calling of LibL functions and use of LibL syntax forms. In addition, provides full argument checking, `eval`, `load`, support for R7RS libraries, and interactive REPL.
 
 There are some differences in the functionality available in IntL, compared to the #F code compiled with LibL:
 
@@ -59,9 +59,12 @@ There are some differences in the functionality available in IntL, compared to t
 
 Here is the list of IntL additions and things that behave differently between IntL and LibL:
 
+  *  vectors are self-evaluating and don't need to be quoted
   *  single-argument `eval` is available (macroexpands, compiles, and executes the argument)
   *  single-argument `expand` is available (macroexpands the argument)
   *  `load` is a procedure that dynamically loads and interprets Scheme code via `eval`
+  *  support for R7RS libraries; IntL forms are available in the built-in `(sharpf base)` library
   *  command-line file arguments are dynamically loaded 
   *  there is a traditional REPL (read-eval-print loop)
-  *  vectors are self-evaluating and don't need to be quoted
+  *  both `import` and `define-library` forms can be entered interactively into REPL
+  
