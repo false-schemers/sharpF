@@ -103,7 +103,7 @@ system, a program compiled with LibL will have the following limitations:
 
   *  there is no support for `eval` and environment functions
   *  no dynamic `load` or dynamic macroexpansion/compilation
-  *  fixnums are limited to 24 bits, flonums are doubles
+  *  fixnums are 30 bit long, flonums are doubles
   *  no support for bignums/rational/complex numbers
   *  no support for Unicode; strings are 8-bit clean, use system locale
   *  `set!` to built-in bindings is not allowed
