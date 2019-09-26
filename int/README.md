@@ -62,8 +62,9 @@ Here is the list of IntL additions and things that behave differently between In
   *  vectors are self-evaluating and don't need to be quoted
   *  `syntax-error` reports the actual error, not the 'undefined identifier' error
   *  support for R7RS libraries; IntL forms are available in the built-in `(sharpf base)` library
+  *  `-L` command-line option extends library search path; initial path is `./`
   *  `cond-expand` is supported (checks against `(features)` and available libraries)
-  *  `environment` is supported; use `-L` command-line option to point to the libraries directory
+  *  `environment` is supported; dynamically fetches library definitions from `.sld` files
   *  `eval` is available (macroexpands, compiles, and executes the argument)
   *  non-standard `expand` is available (macroexpands the argument)
   *  `load` is a procedure that dynamically loads and interprets Scheme code via `eval`
