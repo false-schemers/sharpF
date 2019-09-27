@@ -317,8 +317,10 @@ void *getnative(obj o, cxtype_t *tp) {
 
 
 ; tagged blocks are heap blocks with runtime int tag as 0th element
-; (disjoint from closures which have a pointer as 0th element)
+; (disjoint from closures which have a foreign pointer as 0th element
+; and from typed blocks which have scheme heap pointer as 0th element)
 
+(%definition "extern int istagged(obj o, int t);")
 (%localdef "int istagged(obj o, int t) {
   if (!isobjptr(o)) return 0;
   else { obj h = objptr_from_obj(o)[-1];
@@ -326,24 +328,6 @@ void *getnative(obj o, cxtype_t *tp) {
       && hblkref(o, 0) == obj_from_size(t); }
 }")
 
-(%localdef "obj cktagged(obj o, int t) {
-  assert(istagged(o, t));
-  return o;
-}")
-
-(%localdef "int taggedlen(obj o, int t) {
-  assert(istagged(o, t));
-  return hblklen(o) - 1;
-}")
-
-(%localdef "obj* taggedref(obj o, int t, int i) {
-  int len; assert(istagged(o, t));
-  len = hblklen(o);
-  assert(i >= 0 && i < len-1);  
-  return &hblkref(o, i+1);
-}")
-
-(%definition "extern int istagged(obj o, int t);")
 (%definition "#ifdef NDEBUG
   #define cktagged(o, t) (o)
   #define taggedlen(o, t) (hblklen(o)-1) 
@@ -352,6 +336,67 @@ void *getnative(obj o, cxtype_t *tp) {
   extern obj cktagged(obj o, int t);
   extern int taggedlen(obj o, int t);
   extern obj* taggedref(obj o, int t, int i); 
+#endif")
+(%localdef "#ifndef NDEBUG
+obj cktagged(obj o, int t) {
+  assert(istagged(o, t));
+  return o;
+}
+int taggedlen(obj o, int t) {
+  assert(istagged(o, t));
+  return hblklen(o) - 1;
+}
+obj* taggedref(obj o, int t, int i) {
+  int len; assert(istagged(o, t));
+  len = hblklen(o);
+  assert(i >= 0 && i < len-1);  
+  return &hblkref(o, i+1);
+}
+#endif")
+
+
+
+; typed blocks have non-immediate scheme tag as 0th element
+; (disjoint from closures and native/tagged blocks)
+
+(%definition "extern int istyped(obj o);")
+(%localdef "int istyped(obj o) {
+  if (!isobjptr(o)) return 0;
+  else { obj h = objptr_from_obj(o)[-1];
+    return notaptr(h) && size_from_obj(h) >= 1 
+      && isobjptr(hblkref(o, 0)); }
+}")
+
+(%definition "#ifdef NDEBUG
+  #define cktyped(o, t) (o)
+  #define typedtype(o) (&hblkref(o, 0))
+  #define typedlen(o) (hblklen(o)-1) 
+  #define typedref(o, i) (&hblkref(o, (i)+1))
+#else
+  extern obj cktyped(obj o);
+  extern obj* typedtype(obj o); 
+  extern int typedlen(obj o);
+  extern obj* typedref(obj o, int i); 
+#endif")
+(%localdef "#ifndef NDEBUG
+obj cktyped(obj o) {
+  assert(istyped(o));
+  return o;
+}
+obj* typedtype(obj o) {
+  assert(istyped(o));
+  return &hblkref(o, 0);
+}
+int typedlen(obj o) {
+  assert(istyped(o));
+  return hblklen(o) - 1;
+}
+obj* typedref(obj o, int i) {
+  int len; assert(istyped(o));
+  len = hblklen(o);
+  assert(i >= 0 && i < len-1);  
+  return &hblkref(o, i+1);
+}
 #endif")
 
 
@@ -2162,6 +2207,7 @@ long fxflo(double f) {
     [_ %residual-for-each]))
 
 
+
 ; symbols
 
 ; symbols are 24-bit immediates with immediate tag 4
@@ -2237,14 +2283,16 @@ long fxflo(double f) {
     [_ %residual-symbol=?]))
 
 
+
 ; records
 
+; records are typed blocks with rtd (non-immediate object) as type
+
 (%definition "/* records */")
-(%definition "#define RECORD_BTAG 4")  
-(%definition "#define isrecord(o) istagged(o, RECORD_BTAG)")  
-(%definition "#define recordrtd(r) *taggedref(r, RECORD_BTAG, 0)")  
-(%definition "#define recordref(r, i) *taggedref(r, RECORD_BTAG, (i)+1)")  
-(%definition "#define recordlen(r) (taggedlen(r, RECORD_BTAG)-1)")  
+(%definition "#define isrecord(o) istyped(o)")  
+(%definition "#define recordrtd(r) *typedtype(r)")  
+(%definition "#define recordlen(r) typedlen(r)")  
+(%definition "#define recordref(r, i) *typedref(r, i)")  
 
 (define-syntax record?
   (syntax-rules ()
@@ -2257,12 +2305,11 @@ long fxflo(double f) {
 
 (define-inline (make-record rtd n)
   (%prim* "{ /* make-record */
-    int i = 0, c = fixnum_from_$arg;
-    hreserve(hbsz(c+2), $live); /* $live live regs */
-    while (i++ < c) *--hp = obj_from_bool(0);
-    *--hp = obj_from_$arg; /* gc-safe */
-    *--hp = obj_from_size(RECORD_BTAG);
-    $return obj(hendblk(c+2)); }" n rtd))
+    int c = fixnum_from_$arg;
+    hreserve(hbsz(c+1), $live); /* $live live regs */
+    hp -= c; memset(hp, 0, c * sizeof(obj));
+    *--hp = obj_from_$arg; assert(isobjptr(*hp));
+    $return obj(hendblk(c+1)); }" n rtd))
 
 (define-inline (record-type-descriptor r)
   (%prim "obj(recordrtd(obj_from_$arg))" r))
@@ -2316,6 +2363,7 @@ long fxflo(double f) {
     (syntax-rules ()
       [(_ rtn (consn id ...) predn (fn . am) ...)
        (unroll rtn (consn id ...) predn ((fn . am) ...) () () ())])))
+
 
 
 ; conversions
@@ -2463,9 +2511,9 @@ long fxflo(double f) {
   if (!o) return 0;
   else if (isaptr(o) && !isobjptr(o)) return 1;
   else if (!isobjptr(o)) return 0;
-  else { obj h = objptr_from_obj(o)[-1];
+  else { obj h = objptr_from_obj(o)[-1], t;
     return notaptr(h) && size_from_obj(h) >= 1 
-      && isaptr(hblkref(o, 0)); }
+      && isaptr(t = hblkref(o, 0)) && t && notobjptr(t); }
 }")
 
 (%localdef "int procedurelen(obj o) {
@@ -2769,6 +2817,13 @@ default: /* inter-host call */
 
 (define-inline (input-port? x)
   (%prim "bool(isiport(obj_from_$arg))" x))
+
+(define-inline (port-fold-case? ip) ;stub
+  (%prim? "bool(((void)ckiportvt(obj_from_$arg), 0))" ip))
+
+(define-inline (set-port-fold-case! ip b) ;stub
+  (%prim?! "void(ckiportvt(obj_from_$arg))" ip))
+
 
 ; closed input ports 
 

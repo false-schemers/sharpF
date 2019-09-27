@@ -145,7 +145,7 @@
          (begin result1 result2 ...)
          (sexp-case key clause clauses ...))]))
          
-(define (read/ci-flag port ci?)
+(define (read-code-sexp port)
   ; for now, we will just use read with no support for circular structures
   (read-simple port))
 
@@ -303,7 +303,7 @@
         (let ([p (listname->path libname (car l) ".sld")]) 
           (if (and p (file-exists? p)) p (loop (cdr l)))))))
 
-(define (call-with-input-file/lib name proc) ;=> (proc filepath port), called while name is current-file
+(define (resolve-input-file/lib-name name) ;=> path (or error is signalled)
   (define filepath
     (if (string? name)
         (file-resolve-relative-to-current name)
@@ -314,30 +314,31 @@
           (c-error "cannot resolve library name to a file:" name 'in *library-path-list*)))
   (if (not (file-exists? filepath)) 
       (c-error "cannot resolve file or library name to an existing file:" name '=> filepath))
-  (with-current-file filepath
-    (lambda ()
-      (call-with-input-file filepath
-         (lambda (port) (proc filepath port))))))
+  filepath)
 
-(define (call-with-input-file/lib/stdin name proc) ;=> (proc filepath port), called while name is current-file
-  (if (and (string? name) (string=? name "-"))
-      (proc "-" (current-input-port))
-      (call-with-input-file/lib name proc)))
+(define (call-with-input-file/lib name ci? proc) ;=> (proc filepath port), called while name is current-file
+  (let ([filepath (resolve-input-file/lib-name name)])
+    (with-current-file filepath
+      (lambda ()
+        (call-with-input-file filepath
+          (lambda (port) 
+            (when ci? (set-port-fold-case! port #t))
+            (proc filepath port)))))))
 
 (define (call-with-file/lib-sexps name ci? proc) ;=> (proc sexps), called while name is current-file
-  (call-with-input-file/lib name ;=>
+  (call-with-input-file/lib name ci? ;=>
     (lambda (filepath port)
       (let loop ([sexps '()])
-        (let ([s (read/ci-flag port ci?)])
+        (let ([s (read-code-sexp port)])
           (if (eof-object? s)
-              (proc (reverse sexps))
+              (proc (reverse! sexps))
               (loop (cons s sexps))))))))
 
 (define (for-each-file/lib-sexp proc name ci?) ; proc called while name is current-file
-  (call-with-input-file/lib name ;=>
+  (call-with-input-file/lib name ci? ;=>
     (lambda (filepath port)
       (let loop ()
-        (let ([s (read/ci-flag port ci?)])
+        (let ([s (read-code-sexp port)])
           (unless (eof-object? s) (proc s) (loop)))))))
 
 (define (file/lib->modname name)
@@ -1442,7 +1443,7 @@
     (if (null? names) 
         (return '() '() '() begs)
         ; since includes can't contain header forms, we can postpone reading them
-        (let ([path (call-with-input-file/lib (car names) (lambda (filepath port) filepath))])
+        (let ([path (resolve-input-file/lib-name (car names))])
           (loop (cdr names) (adjoin-begs begs (list (cons path ci?))))))))
 
 ; processor for define-library header form's single declaration
