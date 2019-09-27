@@ -236,14 +236,14 @@
 
 (define *current-file-stack* '())
 
-(define (push-current-file! filename)
-  (set! *current-file-stack* (cons filename *current-file-stack*)))
-
 (define (current-file) ;=> filename of #f
   (and (pair? *current-file-stack*) (car *current-file-stack*)))
 
-(define (pop-current-file!)
-  (set! *current-file-stack* (cdr *current-file-stack*)))
+(define (with-current-file filename thunk)
+  (dynamic-wind
+    (lambda () (set! *current-file-stack* (cons filename *current-file-stack*)))
+    thunk
+    (lambda () (set! *current-file-stack* (cdr *current-file-stack*)))))
 
 (define (file-resolve-relative-to-current filename) ; => resolved or original filename 
   (if (path-relative? filename)
@@ -314,12 +314,10 @@
           (c-error "cannot resolve library name to a file:" name 'in *library-path-list*)))
   (if (not (file-exists? filepath)) 
       (c-error "cannot resolve file or library name to an existing file:" name '=> filepath))
-  (let ([port (open-input-file filepath)])
-    (push-current-file! filepath)
-    (let ([v (proc filepath port)])
-      (pop-current-file!) ; interpreter fixme: need unwind-protect in case proc fails
-      (close-input-port port)
-      v)))
+  (with-current-file filepath
+    (lambda ()
+      (call-with-input-file filepath
+         (lambda (port) (proc filepath port))))))
 
 (define (call-with-input-file/lib/stdin name proc) ;=> (proc filepath port), called while name is current-file
   (if (and (string? name) (string=? name "-"))
@@ -443,7 +441,6 @@
 (define (extend-env env id location) (acons id location env))
 (define (extend-store store loc val) (acons loc val store))
 
-#;(define substitute-in-store extend-store) ;** preserve all store history verbatim
 (define (substitute-in-store store loc val)
   (let ([store
          (if (assv loc store)
@@ -508,7 +505,7 @@
                    [vars (if dotted? (dot-flattened vars) vars)])
               (list vars (expand-expr expr id-n env store loc-n))))))))
 
-(define (expand-letcc formal expr id-n env store loc-n)
+#;(define (expand-letcc formal expr id-n env store loc-n)
   (if (sid? formal)
       (let* ([var (intloc->var loc-n formal)]
              [env (extend-env env (sid-id formal) loc-n)]
@@ -911,7 +908,6 @@
                (let ([location (cond [(assv id env) => cdr] [else id])])
                  (make-sid id id location)))
              (x-error "string->id: not a string: " sexp))))]))
-
 
 (define (compile-syntax-rules synrules env)
   (define ellipsis-id
@@ -1615,9 +1611,8 @@
                       (unless (null? begs)
                         (sexp-case (car begs)
                           [(<string> * ...) ; proper list of forms
-                           (push-current-file! (caar begs)) ; todo: unwind-protect in interpreter
-                           (for-each proc-expr! (cdar begs))
-                           (pop-current-file!)]
+                           (with-current-file (caar begs)
+                             (lambda () (for-each proc-expr! (cdar begs))))]
                           [(#f * ...) ; proper list of forms, not from a file
                            (for-each proc-expr! (cdar begs))]
                           [(<string> . *) ; cdr is ci? flag
@@ -1704,6 +1699,7 @@
   ARGCHECK_Z_RADIX_OPT,
   ARGCHECK_K_CHAR_OPT,
   ARGCHECK_K_OBJ_OPT,
+  ARGCHECK_BOX,
   ARGCHECK_PAIR,
   ARGCHECK_PAIR_OBJ,
   ARGCHECK_LIST,
@@ -2022,6 +2018,7 @@
     case ARGCHECK_Z_RADIX_OPT:
     case ARGCHECK_K_CHAR_OPT:
     case ARGCHECK_K_OBJ_OPT:
+    case ARGCHECK_BOX:
     case ARGCHECK_PAIR:
     case ARGCHECK_LIST:
     case ARGCHECK_LIST_ETC:
@@ -2167,6 +2164,11 @@
           if (!is_fixnum_obj(o) || fixnum_from_obj(o) < 0) res = ACRES_BADTYPE; 
         } else res = ACRES_BADARGC; 
         break;
+      case ARGCHECK_BOX:
+        if (ac != 1) res = ACRES_BADARGC; else { 
+          obj o; if (l) o = car(l); else o = va_arg(args, obj); 
+          if (!isbox(o)) res = ACRES_BADTYPE; 
+        } break;
       case ARGCHECK_PAIR:
         if (ac != 1) res = ACRES_BADARGC; else { 
           obj o; if (l) o = car(l); else o = va_arg(args, obj); 
@@ -3496,6 +3498,7 @@
                                               #f #f (lambda (x y) (* x y)) (lambda (x y z) (* x y z)) (lambda (x y z t) (* x y z t)) *)))
 (def-arg-checker (* z radix ?)           (mark-argcheck ARGCHECK_Z_RADIX_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
 (def-arg-checker (* string radix ?)      (mark-argcheck ARGCHECK_STRING_RADIX_OPT (argc-dispatch-lambda #f (lambda (x) (* x)) (lambda (x y) (* x y)) #f)))
+(def-arg-checker (* box)                 (mark-argcheck ARGCHECK_BOX *))
 (def-arg-checker (* pair)                (mark-argcheck ARGCHECK_PAIR *))
 (def-arg-checker (* pair obj)            (mark-argcheck ARGCHECK_PAIR_OBJ *))
 (def-arg-checker (* list)                (mark-argcheck ARGCHECK_LIST *))
@@ -3836,6 +3839,12 @@
 ;------------------------------------------------------------------------------
 
 ; R7RS extras
+
+; 4.2.5. Delayed evaluation
+(def-global (promise? obj))
+(def-global (make-promise obj))
+(def-global (make-lazy-promise obj))
+(def-global (force box))
 
 ; 4.2.6. Dynamic bindings
 (def-global (make-parameter obj proc1 ?) ; macro is in init
@@ -4329,41 +4338,13 @@ static char *ints_init_code =
 "       [(_ [formals . body] ...)"
 "        (unroll-cases ([formals . body] ...))])))"
 ""
-"(define make-promise"
-"  (lambda (proc)"
-"    ((lambda (result-ready? result)"
-"       (lambda ()"
-"         (if result-ready?"
-"             result"
-"             ((lambda (x)"
-"                (if result-ready?"
-"                    result"
-"                    (begin"
-"                      (set! result-ready? #t)"
-"                      (set! result x)"
-"                      result)))"
-"              (proc)))))"
-"     #f"
-"     #f)))"
+"(define-syntax delay-force"
+"  (syntax-rules () [(_ x) (make-lazy-promise (lambda () x))]))"
 ""
 "(define-syntax delay"
-"  (syntax-rules ()"
-"    [(delay exp)"
-"     (make-promise (lambda () exp))]))"
-""
-"(define (force promise) "
-"  (promise))"
-""
-"(set! call/cc"
-"  (let ([old-call/cc call/cc])"
-"     (lambda (p)"
-"        (old-call/cc"
-"          (lambda (k)"
-"            (p (lambda args"
-"                 (k (apply values args)))))))))"
+"  (syntax-rules () [(_ x) (delay-force (make-promise x))]))"
 ""
 "(set! call-with-current-continuation call/cc)"
-""
 ""
 "(define (list-tail ls k)"
 "  (if (= k 0) ls (list-tail (cdr ls) (- k 1))))"
