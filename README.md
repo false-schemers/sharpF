@@ -101,7 +101,7 @@ manner:
 
 ```
 $ sfc libs.sf myprog.sf     # sfc produces 2 C files
-$ gcc -lm libs.c myprog.c   # gcc produces a.out (libs refers to math functions, so -lm may be needed)
+$ gcc libs.c myprog.c -lm   # gcc produces a.out (libs refers to math functions, so -lm may be needed)
 ```
 
 To dress an existing pre-R6RS Scheme source file as a #F program that
@@ -310,7 +310,7 @@ You may also learn some #F basics by looking at the examples:
 They can be compiled in the following manner:
 
 ```
-./sfc tak.sf   # produces tak.c 
+sfc tak.sf   # produces tak.c 
 gcc -o tak -Wall -O3 -DNDEBUG tak.c
 ```
 
