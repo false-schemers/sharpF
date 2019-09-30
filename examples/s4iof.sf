@@ -1,9 +1,42 @@
-;;;
-;;; SIOF Scheme Interpreter 1.0 -- esl
-;;;
 
-;;; interpreter code is based on
-;;; SCHEME -- A Scheme interpreter written by Marc Feeley.
+;  S4IOF Scheme Interpreter 1.0.1 -- esl
+
+
+;  parts of the code are derived from the following sources:
+
+;  1) SCHEME -- A Scheme interpreter written by Marc Feeley.
+;  2) alexpander.scm v1.65 2007/11/05 02:50:34 (see license below)
+ 
+;  Copyright 2002-2004,2006,2007 Al Petrofsky <alexpander@petrofsky.org>
+;
+;  Redistribution and use in source and binary forms, with or without
+;  modification, are permitted provided that the following conditions
+;  are met:
+;  
+;    Redistributions of source code must retain the above copyright
+;      notice, this list of conditions and the following disclaimer.
+;  
+;    Redistributions in binary form must reproduce the above copyright
+;      notice, this list of conditions and the following disclaimer in
+;      the documentation and/or other materials provided with the
+;      distribution.
+;  
+;    Neither the name of the author nor the names of its contributors
+;      may be used to endorse or promote products derived from this
+;      software without specific prior written permission.
+;  
+;  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+;  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+;  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+;  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+;  HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+;  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+;  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+;  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+;  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+;  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+;  WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+;  POSSIBILITY OF SUCH DAMAGE.
 
 ;  #F's predefined forms: 
 ;
@@ -1078,15 +1111,19 @@ long fxflo(double f) {
 (define-syntax max
   (syntax-rules ()
     [(_ x) x]
-    [(_ x y) (let ([a x] [b y]) (if (> a b) a b))]
-    [(_ x y z ...) (max (max x y) z ...)]
+    [(_ x y) 
+     (let ([a x] [b y]) 
+       (if (and (fixnum? a) (fixnum? b)) (if (fx>? a b) a b) (%residual-max/2 a b)))]
+    [(_ x y z ...) (%residual-max x y z ...)]
     [_ %residual-max]))
 
 (define-syntax min
   (syntax-rules ()
     [(_ x) x]
-    [(_ x y) (let ([a x] [b y]) (if (> a b) b a))]
-    [(_ x y z ...) (min (min x y) z ...)]
+    [(_ x y)
+     (let ([a x] [b y]) 
+       (if (and (fixnum? a) (fixnum? b)) (if (fx<? a b) a b) (%residual-min/2 a b)))]
+    [(_ x y z ...) (%residual-min x y z ...)]
     [_ %residual-min]))
 
 (define-syntax +
@@ -1765,10 +1802,21 @@ long fxflo(double f) {
 (%definition "#define getsymbol(o) getimmu(o, SYMBOL_ITAG)")
 
 (%localdef "static struct { char **a; char ***v; size_t sz; size_t u; size_t maxu; } symt;")
-(%localdef "static unsigned long hashs(char *s) {
+(%localdef "static unsigned long hashs(char *s, int fc) {
   unsigned long i = 0, l = (unsigned long)strlen(s), h = l;
-  while (i < l) h = (h << 4) ^ (h >> 28) ^ s[i++];
+  if (!fc) while (i < l) { h = (h << 4) ^ (h >> 28) ^ s[i++]; }
+  else while (i < l) { int c = s[i++] & 0xff; h = (h << 4) ^ (h >> 28) ^ (c < 128 ? tolower(c) : c); }
   return h ^ (h  >> 10) ^ (h >> 20);
+}")
+(%localdef "static int symnameeq(char *s1, char *s2, int fc) {
+  if (fc) {
+    while (*s1 && *s2) { 
+      int c1 = *s1++ & 0xff, c2 = *s2++ & 0xff; if (c1 == c2) continue;
+      if (c1 > 127 || c2 > 127 || tolower(c1) != tolower(c2)) return 0;
+    }
+    return !*s1 && !*s2;
+  }
+  return (strcmp(s1, s2) == 0); 
 }")
 
 (%definition "extern char *symbolname(int sym);")
@@ -1777,25 +1825,25 @@ long fxflo(double f) {
   return symt.a[sym];
 }")
 
-(%definition "extern int internsym(char *name);")
-(%localdef "int internsym(char *name) {
+(%definition "extern int internsym(char *name, int fc);")
+(%localdef "int internsym(char *name, int fc) {
   size_t i, j; /* based on a code (C) 1998, 1999 by James Clark. */
   if (symt.sz == 0) { /* init */
     symt.a = cxm_cknull(calloc(64, sizeof(char*)), \"symtab[0]\");
     symt.v = cxm_cknull(calloc(64, sizeof(char**)), \"symtab[1]\");
     symt.sz = 64, symt.maxu = 64 / 2;
-    i = hashs(name) & (symt.sz-1);
+    i = hashs(name, fc) & (symt.sz-1);
   } else {
-    unsigned long h = hashs(name);
+    unsigned long h = hashs(name, fc);
     for (i = h & (symt.sz-1); symt.v[i]; i = (i-1) & (symt.sz-1))
-      if (strcmp(name, *symt.v[i]) == 0) return (int)(symt.v[i] - symt.a);
+      if (symnameeq(name, *symt.v[i], fc)) return (int)(symt.v[i] - symt.a);
     if (symt.u == symt.maxu) { /* rehash */
       size_t nsz = symt.sz * 2;
       char **na = cxm_cknull(calloc(nsz, sizeof(char*)), \"symtab[2]\");
       char ***nv = cxm_cknull(calloc(nsz, sizeof(char**)), \"symtab[3]\");
       for (i = 0; i < symt.sz; i++)
         if (symt.v[i]) {
-          for (j = hashs(*symt.v[i]) & (nsz-1); nv[j]; j = (j-1) & (nsz-1)) ;
+          for (j = hashs(*symt.v[i], fc) & (nsz-1); nv[j]; j = (j-1) & (nsz-1)) ;
           nv[j] = symt.v[i] - symt.a + na;
         }
       free(symt.v); symt.v = nv; symt.sz = nsz; symt.maxu = nsz / 2;
@@ -1803,8 +1851,14 @@ long fxflo(double f) {
       for (i = h & (symt.sz-1); symt.v[i]; i = (i-1) & (symt.sz-1)) ;
     }
   }
-  *(symt.v[i] = symt.a + symt.u) = 
+  if (fc) {
+    char *s = name, *d = cxm_cknull(malloc(strlen(name)+1), \"symtab[4]\");
+    *(symt.v[i] = symt.a + symt.u) = d;
+    while (*s) { int c = *s++ & 0xff; *d++ = (c < 128 ? tolower(c) : c); } *d = *s;
+  } else { 
+    *(symt.v[i] = symt.a + symt.u) =  
     strcpy(cxm_cknull(malloc(strlen(name)+1), \"symtab[4]\"), name);
+  }
   return (int)((symt.u)++);
 }")
 
@@ -1813,10 +1867,10 @@ long fxflo(double f) {
     (syntax-rules (symbol)
       ; wrap code in #() to force constant lifting
       [(_ symbol s)
-       (%prim #("obj(mksymbol(internsym(\"" s "\")))"))]
+       (%prim #("obj(mksymbol(internsym(\"" s "\", 1)))"))]
       [(_ symbol 8 c ...)
        (%prim #("{ static obj o = 0; static char s[] = { " (c ", ") ... "0 };\n"
-               "    $return obj(o ? o : (o = mksymbol(internsym(s)))); }"))]
+               "    $return obj(o ? o : (o = mksymbol(internsym(s, 1)))); }"))]
       [(_ arg ...) (old-%const arg ...)]))) 
 
 (define-inline (symbol? x)
@@ -1830,7 +1884,10 @@ long fxflo(double f) {
   (%prim* "obj(hpushstr($live, newstring(symbolname(getsymbol(obj_from_$arg)))))" s))
 
 (define-inline (string->symbol s)
-  (%prim? "obj(mksymbol(internsym(stringchars(obj_from_$arg))))" s))
+  (%prim? "obj(mksymbol(internsym(stringchars(obj_from_$arg), 0)))" s))
+
+(define-inline (string->symbol/cf s)
+  (%prim? "obj(mksymbol(internsym(stringchars(obj_from_$arg), 1)))" s))
 
 (define (fixnum->string n r)
   (%prim* "{ /* fixnum->string */
@@ -2372,7 +2429,7 @@ default: /* inter-host call */
   (syntax-rules ()
     [(_ n) (display-input-port n (current-output-port))]
     [(_ n p) (%prim! "void(fprintf(oportdata(obj_from_$arg), \"#<%s>\", ((cxtype_iport_t*)cxm_cknull(iportvt(obj_from_$arg), \"iportvt\"))->tname))" p n)]
-    [_ %residual-display-procedure])) 
+    [_ %residual-display-input-port])) 
 
 
 ; equivalence and case
@@ -2906,15 +2963,15 @@ default: /* inter-host call */
                        (char=? c #\+) (char=? c #\-) (char=? c #\.))   
                      (cond [(string=? s ".") dot]
                            [(or (string=? s "+") (string=? s "-") (string=? s "..."))
-                            (string->symbol s)]
+                            (string->symbol/cf s)]
                            [(and (not hash?) 
                               (>= (string-length s) 2)
                               (char=? (string-ref s 0) #\-)
                               (char=? (string-ref s 1) #\>))
-                            (string->symbol s)]
+                            (string->symbol/cf s)]
                            [(string->number s)]
                            [else (r-error p "unsupported number syntax" s)])
-                     (string->symbol s)))]
+                     (string->symbol/cf s)))]
               [(char=? c #\#)
                (read-char p) 
                (loop (peek-char p) (cons c l) #t)]
@@ -3121,8 +3178,26 @@ default: /* inter-host call */
 (define %residual-fxmin (minmax-reducer fxmin))
 (define %residual-flmax (minmax-reducer flmax))
 (define %residual-flmin (minmax-reducer flmin))
-(define %residual-max (minmax-reducer max))
-(define %residual-min (minmax-reducer min))
+
+(define (%residual-max/2 a b)
+  (if (fixnum? a)
+      (if (fixnum? b)
+          (if (fx>? a b) a b)
+          (let ([a (fixnum->flonum a)]) (if (fl>? a b) a b)))
+      (if (fixnum? b)
+          (let ([b (fixnum->flonum b)]) (if (fl>? a b) a b))
+          (if (fl>? a b) a b))))
+(define %residual-max (minmax-reducer %residual-max/2))
+
+(define (%residual-min/2 a b)
+  (if (fixnum? a)
+      (if (fixnum? b)
+          (if (fx<? a b) a b)
+          (let ([a (fixnum->flonum a)]) (if (fl<? a b) a b)))
+      (if (fixnum? b)
+          (let ([b (fixnum->flonum b)]) (if (fl<? a b) a b))
+          (if (fl<? a b) a b))))
+(define %residual-min (minmax-reducer %residual-min/2))
   
 (define-syntax addmul-reducer
   (syntax-rules ()
@@ -3243,6 +3318,7 @@ default: /* inter-host call */
 (define %residual-display-fixnum (unary-binary-adaptor display-fixnum))
 (define %residual-display-flonum (unary-binary-adaptor display-flonum))
 (define %residual-display-procedure (unary-binary-adaptor display-procedure))
+(define %residual-display-input-port (unary-binary-adaptor display-input-port))
 
 (define %residual-write-char (unary-binary-adaptor write-char))
 (define %residual-write-string (unary-binary-adaptor write-string))
@@ -4850,7 +4926,7 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "SIOF Scheme Interpreter 1.0~%")
+    (printf "S4IOF Scheme Interpreter 1.0.1~%")
     (set! *greeting* #f)))
 
 (define (sfi-repl port)
@@ -4867,8 +4943,8 @@ EOS
 
 (define (main argv)
   (define (about)
-    (printf "siof 1.0~%")
-    (printf "Usage: siof [-qx] file ...~%")
+    (printf "s4iof 1.0.1~%")
+    (printf "Usage: s4iof [-qx] file ...~%")
     (printf "-q  suppress greeting~%")
     (printf "-x  exit after loading files on the command line~%"))
   (let loop ([args (cdr (command-line))])
