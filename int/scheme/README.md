@@ -1,6 +1,6 @@
 # Scheme Library Definitions
                          
-This directory contains Scheme Library Definition (SLD) files to be used with LibL and SIOF interpreters.
+This directory contains Scheme Library Definition (SLD) files to be used with IntL and SIOF interpreters.
 None of the files contain any Scheme code; all of them import and then re-export the necessary bindings from
 the built-in `(sharpf base)` library providing all supported R7RS-small procedures and syntax forms.
 
