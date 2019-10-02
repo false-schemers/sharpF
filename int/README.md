@@ -32,7 +32,7 @@ Here is the list of IntS additions and things that behave differently between In
 
 ## IntM, an Interpreter for LibM (Medium) Library
 
-IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intm.sf)) is an extended version of IntS, based on LibM. It has the following additional functionality from R7RS small:
+IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intm.sf)) is an extended version of IntS, based on LibM. It has the following additional functionality from R7RS-small:
 
   *  support for bytevectors, with basic set of operations
   *  support for `define-record-type` records
@@ -47,7 +47,7 @@ IntM (see [intm.sf](https://raw.githubusercontent.com/false-schemers/sharpF/mast
 
 ## IntL, an Interpreter for LibL (Large) Library
 
-IntL (see [intl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intl.sf)) allows interactive calling of LibL functions and use of LibL syntax forms. In addition, provides full argument checking, `eval`, `load`, support for R7RS libraries, and interactive REPL.
+IntL (see [intl.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/int/intl.sf)) allows interactive calling of LibL functions and use of LibL syntax forms. In addition, provides full argument checking, `eval`, `load`, support for R7RS-small libraries, and interactive REPL.
 
 There are some differences in the functionality available in IntL, compared to the #F code compiled with LibL:
 
@@ -74,3 +74,4 @@ Here is the list of IntL additions and things that behave differently between In
   *  both `import` and `define-library` forms can be entered interactively into REPL
   *  `features` procedure returns `(r7rs exact-closed sharpf sharpf-interpreter sharpf-intl)`
   
+Please note that IntL's interaction environment exposes bindings for all supported R7RS-small procedures and syntax forms directly, so there is no need to use `import`. In order to use `import` forms and `environment` procedure with R7RS-small libraries, you will need to copy the `scheme` folder with .sld files for the libraries to your system and make sure IntL can locate it (its library search path contains current directory by default and can be extended with the help of `-L` command line option). 
