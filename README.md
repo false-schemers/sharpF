@@ -16,7 +16,7 @@ use. If one's code does not use lists or strings, they do not need to be impleme
 
 The starting point is the obligatory "Hello, World!" example: [hello.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/hello.sf)
 
-It can be compiled and executed as follows:
+It can be compiled and executed as follows (you may use clang, cl, or any other C compiler):
 
 ```
 $ sfc hello.sf             # sfc produces hello.c (273 lines, ~8K in size)
@@ -67,7 +67,7 @@ The files can be seen here:
 [tfun.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/compiled/tfun.c)
 [tmain.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/compiled/tmain.c)
 
-There's no need to compile all .sf files in a single run. Doing it one file
+There's no need to compile all .sf files in a single run; doing it one file
 at a time is just as good. Dependent units (files) are scanned for macros during
 compilation of a unit, so they should be present and in a good shape. Dependencies
 are declared via `(load "foo.sf")` special form (or its syntactic shortcut `#fload "foo.sf"`), 
@@ -314,11 +314,13 @@ sfc tak.sf   # produces tak.c
 gcc -o tak -Wall -O3 -DNDEBUG tak.c
 ```
 
-As a demonstration of how far you can go, here is a full-scale R5RS interpreter in a single #F file:
+As a demonstration of how far you can go, here is a full-scale R7RS interpreter in a single #F file:
 
 [siof.sf](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/siof.sf)
 
 (please see [SIOF](https://github.com/false-schemers/siof) repository for details)
+
+And yes, SFC is also written in #F and compiles itself into C files in the `fixpoint` directory.
 
 
 ## Historical note
