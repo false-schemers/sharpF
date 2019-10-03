@@ -324,4 +324,5 @@ As a demonstration of how far you can go, here is a full-scale R5RS interpreter 
 ## Historical note
 
 SFC is based on ideas from Marc Feeley's "90 minute Scheme to C compiler" presented 
-at the Montreal Scheme/Lisp User Group on October 20, 2004.
+at the Montreal Scheme/Lisp User Group on October 20, 2004. SFC's hygienic macroexpander is derived from 
+Al Petrofsky's alexpander v1.65 (please see the 2.sf source file for the original copyright notice).
