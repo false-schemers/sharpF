@@ -4996,7 +4996,7 @@ void oportputshared(obj x, obj p, int disp) {
 
 ; features provided by this interpreter
 
-(define (features) '(r7rs exact-closed siof siof-1.0.1))
+(define (features) '(r7rs exact-closed siof siof-1.0.2))
 
 
 ;------------------------------------------------------------------------------
@@ -9789,7 +9789,7 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "SIOF Scheme Interpreter 1.0.1~%")
+    (printf "SIOF Scheme Interpreter 1.0.2~%")
     (set! *greeting* #f)))
 
 (define (int-repl port)
