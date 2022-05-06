@@ -2829,7 +2829,7 @@ default: /* inter-host call */
 
 (%definition "/* closed input ports */")
 (%localdef "static void cifree(void *p) {}")
-(%localdef "static void ciclose(void *p) {}")
+(%localdef "static int ciclose(void *p) { return 0; }")
 (%localdef "static int cigetch(void *p) { return EOF; }")
 (%localdef "static int ciungetch(int c) { return c; }")
 (%localdef "static cxtype_iport_t cxt_iport_closed = {
@@ -2886,8 +2886,8 @@ default: /* inter-host call */
 (%definition "extern sifile_t *sialloc(char *p, void *base);")
 (%localdef "static void sifree(sifile_t *fp) { 
   assert(fp); if (fp->base) free(fp->base); free(fp); }")
-(%localdef "static void siclose(sifile_t *fp) { 
-  assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = \"\"; }")
+(%localdef "static int siclose(sifile_t *fp) { 
+  assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = \"\"; return 0; }")
 (%localdef "static int sigetch(sifile_t *fp) {
   int c; assert(fp && fp->p); if (!(c = *(fp->p))) return EOF; ++(fp->p); return c; }")
 (%localdef "static int siungetch(int c, sifile_t *fp) {
@@ -2913,8 +2913,9 @@ default: /* inter-host call */
 (%definition "extern bvifile_t *bvialloc(unsigned char *p, unsigned char *e, void *base);")
 (%localdef "static void bvifree(bvifile_t *fp) { 
   assert(fp); if (fp->base) free(fp->base); free(fp); }")
-(%localdef "static void bviclose(bvifile_t *fp) { 
-  assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = fp->e = (unsigned char *)\"\"; }")
+(%localdef "static int bviclose(bvifile_t *fp) { 
+  assert(fp); if (fp->base) free(fp->base); fp->base = NULL; 
+  fp->p = fp->e = (unsigned char *)\"\"; return 0; }")
 (%localdef "static int bvigetch(bvifile_t *fp) {
   assert(fp && fp->p && fp->e); return (fp->p >= fp->e) ? EOF : (0xff & *(fp->p)++); }")
 (%localdef "static int bviungetch(int c, bvifile_t *fp) {
@@ -2980,7 +2981,7 @@ default: /* inter-host call */
 
 (%definition "/* closed output ports */")
 (%localdef "static void cofree(void *p) {}")
-(%localdef "static void coclose(void *p) {}")
+(%localdef "static int coclose(void *p) { return 0; }")
 (%localdef "static int coputch(int c, void *p) { return EOF; }")
 (%localdef "static int coflush(void *p) { return EOF; }")
 (%localdef "static cxtype_oport_t cxt_oport_closed = {

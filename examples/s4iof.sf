@@ -1,5 +1,5 @@
 
-;  S4IOF Scheme Interpreter 1.0.1 -- esl
+;  S4IOF Scheme Interpreter 1.0.2 -- esl
 
 
 ;  parts of the code are derived from the following sources:
@@ -4926,13 +4926,14 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "S4IOF Scheme Interpreter 1.0.1~%")
+    (printf "S4IOF Scheme Interpreter 1.0.2~%")
     (set! *greeting* #f)))
 
-(define (sfi-repl port)
+(define (siof-repl port)
   (unless *quiet* (greet-once) (printf "~%"))
   (let loop ()
     (display "> ")
+    (flush-output-port (current-output-port))
     (if (letcc return
           (set-reset-handler! 
             (lambda () 
@@ -4943,13 +4944,13 @@ EOS
 
 (define (main argv)
   (define (about)
-    (printf "s4iof 1.0.1~%")
+    (printf "s4iof 1.0.2~%")
     (printf "Usage: s4iof [-qx] file ...~%")
     (printf "-q  suppress greeting~%")
     (printf "-x  exit after loading files on the command line~%"))
   (let loop ([args (cdr (command-line))])
     (cond ; #f result means OK, return status 0, #t is status 1 
-      [(null? args) (if *exit* #f (sfi-repl (current-input-port)))]  
+      [(null? args) (if *exit* #f (siof-repl (current-input-port)))]  
       [(string=? (car args) "-q") (set! *quiet* #t) (loop (cdr args))]
       [(string=? (car args) "-x") (set! *exit* #t) (loop (cdr args))]
       [(or (string=? (car args) "-h") (string=? (car args) "--help")) (about) #f]

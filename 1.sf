@@ -19,7 +19,7 @@
 ; char->integer is expected to return nonnegative values in some Unicode subrange 
 ; [0..N] where N >= 127   
 
-; todo: support #N' syntax for (function (? ...) ...)
+; todo: support R7RS syntax for symbols
 ; todo: datum->rhe-sexp should convert some doubles
 
 #fload "0.sf"
@@ -77,12 +77,12 @@
            (not (= cp bksl)) (not (= cp apos))
            (not (= cp quot)) (not (= cp dollar))))))
 
-(define (fold-max base lst)
+(define (fold-max/big base lst)
   (if (null? lst) base
       (let ([next (car lst)])
         (if (not (integer? next)) ;'big
             next
-            (fold-max (and base next (max base next))
+            (fold-max/big (and base next (max base next))
               (cdr lst))))))
 
 
@@ -301,14 +301,14 @@
 
 (define (char-list->string-datum lst)
   (let* ([cpl (map char->integer lst)]
-         [bits (fold-max 8 (map codepoint-byte-width cpl))])
+         [bits (fold-max/big 8 (map codepoint-byte-width cpl))])
     (if (and (eqv? bits 8) (andmap string-safe-codepoint? cpl))
       (datum 'string (list->string lst))
       (make-datum 'string (cons bits cpl)))))
 
 (define (char-list->symbol-datum lst)
   (let* ([cpl (map char->integer lst)]
-         [bits (fold-max 8 (map codepoint-byte-width cpl))])
+         [bits (fold-max/big 8 (map codepoint-byte-width cpl))])
     (if (and (eqv? bits 8) (andmap string-safe-codepoint? cpl))
       (datum 'symbol (list->string lst))
       (make-datum 'symbol (cons bits cpl)))))
@@ -564,6 +564,7 @@
       (let ([c (icar i)] [i (icdr i)])
         (cond [(char=? c #\\) (return (char->integer #\\) i)]  
               [(char=? c #\") (return (char->integer #\") i)]  
+              [(char=? c #\|) (return (char->integer #\|) i)] ;r7rs
               [(char=? c #\a) (return 7 i)]
               [(char=? c #\b) (return 8 i)]
               [(char=? c #\t) (return 9 i)]
@@ -607,7 +608,7 @@
                         (let ([name (list->string (reverse lst))])
                           (cond [(string=? name "") 
                                  (r-error i "invalid char syntax (missing delimiter?)")]
-                                [(string=? name "space")     (return (datum 'char " ") i)]
+                                [(string=? name "null")      (return (datum 'char 8 0) i)]
                                 [(string=? name "alarm")     (return (datum 'char 8 7) i)]
                                 [(string=? name "backspace") (return (datum 'char 8 8) i)]
                                 [(string=? name "tab")       (return (datum 'char 8 9) i)]
@@ -616,7 +617,9 @@
                                 [(string=? name "vtab")      (return (datum 'char 8 11) i)]
                                 [(string=? name "page")      (return (datum 'char 8 12) i)]
                                 [(string=? name "return")    (return (datum 'char 8 13) i)]
-                                ; todo: support R^6RS #\xunicode syntax???
+                                [(string=? name "escape")    (return (datum 'char 8 27) i)]
+                                [(string=? name "space")     (return (datum 'char " ") i)]
+                                [(string=? name "delete")    (return (datum 'char 8 127) i)]
                                 [else (r-error i "invalid char syntax #\\~a" name)]))) 
                   (loop (icdr i) (cons (icar i) lst))))))))
     

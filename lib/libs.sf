@@ -2279,8 +2279,8 @@ default: /* inter-host call */
 (%definition "extern sifile_t *sialloc(char *p, void *base);")
 (%localdef "static void sifree(sifile_t *fp) { 
   assert(fp); if (fp->base) free(fp->base); free(fp); }")
-(%localdef "static void siclose(sifile_t *fp) { 
-  assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = \"\"; }")
+(%localdef "static int siclose(sifile_t *fp) { 
+  assert(fp); if (fp->base) free(fp->base); fp->base = NULL; fp->p = \"\"; return 0; }")
 (%localdef "static int sigetch(sifile_t *fp) {
   int c; assert(fp && fp->p); if (!(c = *(fp->p))) return EOF; ++(fp->p); return c; }")
 (%localdef "static int siungetch(int c, sifile_t *fp) {

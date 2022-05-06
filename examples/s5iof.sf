@@ -1,5 +1,5 @@
 
-;  S5IOF Scheme Interpreter 1.0.1 -- esl
+;  S5IOF Scheme Interpreter 1.0.2 -- esl
 
 
 ;  parts of the code are derived from the following sources:
@@ -6294,13 +6294,14 @@ EOS
 
 (define (greet-once)
   (when *greeting*
-    (printf "S5IOF Scheme Interpreter 1.0.1~%")
+    (printf "S5IOF Scheme Interpreter 1.0.2~%")
     (set! *greeting* #f)))
 
 (define (siof-repl port)
   (unless *quiet* (greet-once) (printf "~%"))
   (let loop ()
     (display "> ")
+    (flush-output-port (current-output-port))
     (if (letcc return
           (set-reset-handler! 
             (lambda () 
@@ -6311,7 +6312,7 @@ EOS
 
 (define (main argv)
   (define (about)
-    (printf "s5iof 1.0.1~%")
+    (printf "s5iof 1.0.2~%")
     (printf "Usage: s5iof [-qx] file ...~%")
     (printf "-q  suppress greeting~%")
     (printf "-x  exit after loading files on the command line~%"))
