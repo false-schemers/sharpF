@@ -27,9 +27,9 @@ Hello, World!
 You can see the compiled C program here: [hello.c](https://raw.githubusercontent.com/false-schemers/sharpF/master/examples/compiled/hello.c). As it defines no data types or functions, the whole file
 is basically just startup/shutdown/gc code.
 
-Please note that some compilers may issue annoying warnings; we recommend to add `-Wno-parentheses-equality` for
-Clang and `-D_CRT_SECURE_NO_WARNINGS` for Windows headers (unless you want to hear that `fopen` is no longer a reasonable 
-way to open files). 
+> Please note that some C compilers may issue annoying warnings; we recommend to add
+> `-Wno-parentheses-equality` for Clang and `-D_CRT_SECURE_NO_WARNINGS` for Windows headers 
+> (unless you want to hear that `fopen` is no longer a reasonable way to open files etc.) 
 
 Here is an example of what a bigger #F "Scheme" program might look like and what
 happens when it is compiled and executed:
